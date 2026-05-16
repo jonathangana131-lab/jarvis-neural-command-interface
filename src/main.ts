@@ -477,6 +477,7 @@ async function boot() {
   void scanLocalModels(false);
   void refreshCodexStatus();
   await loadMemories(true);
+  void loadSemanticEdges();
   await loadTasks();
   try {
     await loadDiagnostics();
@@ -485,6 +486,39 @@ async function boot() {
   }
   renderCommandChat();
   connectEvents();
+}
+
+// Debounced fetcher for the semantic-edge endpoint. The backend emits
+// memory.edges.updated whenever the embedding graph changes; this is the
+// listener that turns those notifications into visible orb structure.
+let edgeFetchTimer: number | null = null;
+let edgeFetchInFlight = false;
+
+async function loadSemanticEdges() {
+  if (edgeFetchInFlight) return;
+  edgeFetchInFlight = true;
+  try {
+    const data = await fetchJson<{
+      edges?: Array<{ from: number; to: number; weight: number }>;
+      threshold?: number;
+      totalCandidates?: number;
+    }>('/api/memory/edges?limit=600');
+    memoryAnimator.applySemanticEdges(data.edges ?? []);
+  } catch (error) {
+    console.warn('[orb] failed to load semantic edges', error);
+  } finally {
+    edgeFetchInFlight = false;
+  }
+}
+
+function scheduleSemanticEdgeRefresh(delay = 500) {
+  if (edgeFetchTimer !== null) {
+    window.clearTimeout(edgeFetchTimer);
+  }
+  edgeFetchTimer = window.setTimeout(() => {
+    edgeFetchTimer = null;
+    void loadSemanticEdges();
+  }, delay);
 }
 
 function connectEvents() {
@@ -508,7 +542,26 @@ function connectEvents() {
     animatedMemoryIds.clear();
     selectedMemoryId = null;
     scene.setSelectedMemory(null);
+    memoryAnimator.applySemanticEdges([]);
     void loadMemories(true);
+    scheduleSemanticEdgeRefresh(900);
+  });
+  events.addEventListener('memory.recalled', (event) => {
+    try {
+      const payload = JSON.parse((event as MessageEvent).data) as {
+        ids?: number[];
+        mode?: 'semantic' | 'keyword' | 'manual';
+        prompt?: string;
+      };
+      const ids = Array.isArray(payload.ids) ? payload.ids.filter((id) => Number.isFinite(id)) : [];
+      if (ids.length === 0) return;
+      memoryAnimator.recall(ids, payload.mode ?? 'semantic');
+    } catch (error) {
+      console.warn('[orb] malformed memory.recalled payload', error);
+    }
+  });
+  events.addEventListener('memory.edges.updated', () => {
+    scheduleSemanticEdgeRefresh(350);
   });
   events.addEventListener('task.started', (event) => {
     const task = JSON.parse((event as MessageEvent).data) as TaskRecord;

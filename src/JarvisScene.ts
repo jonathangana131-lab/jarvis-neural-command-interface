@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { NeuralSphere } from './NeuralSphere';
+import type { RecallMode, SemanticEdge } from './NeuralSphere';
 import type { AssistantMode, MemoryRecord } from './types';
 
 type JarvisSceneOptions = {
@@ -129,6 +130,21 @@ export class JarvisScene {
 
   setMemoryPickHandler(handler: ((memoryId: number) => void) | null) {
     this.memoryPickHandler = handler;
+  }
+
+  /** Bind real semantic edges to the orb. Pass [] to revert to legacy layout. */
+  setSemanticEdges(edges: SemanticEdge[]) {
+    this.neuralSphere.setSemanticEdges(edges);
+  }
+
+  /** Flash a set of memories that were just recalled (semantic or keyword). */
+  flashRecall(memoryIds: Iterable<number>, mode: RecallMode = 'semantic') {
+    this.neuralSphere.flashRecall(memoryIds, mode);
+  }
+
+  /** Diagnostics: { active, count, recalled }. */
+  getEdgeStats() {
+    return this.neuralSphere.getEdgeStats();
   }
 
   start() {

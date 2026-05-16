@@ -163,17 +163,19 @@ export class CodexTaskRunner {
     if (!queued) {
       return;
     }
-    this.#runQueuedTask(queued);
+    Promise.resolve(this.#runQueuedTask(queued)).catch((error) => {
+      console.error('[codexTaskRunner] queued task failed:', error?.message ?? error);
+    });
   }
 
-  #runQueuedTask(queued) {
+  async #runQueuedTask(queued) {
     const provider = this.config.localModel?.provider;
-    
+
     if (provider === 'opencode') {
       return this.#runOpenCodeApiTask(queued);
     }
-    
-    const relevantMemories = this.memoryStore.relevantFor({ prompt: queued.prompt, workspace: queued.workspace, limit: 6 });
+
+    const relevantMemories = await this.memoryStore.relevantForAsync({ prompt: queued.prompt, workspace: queued.workspace, limit: 6 });
     const executionPrompt = buildPromptWithMemories(queued.prompt, relevantMemories);
     const outputMessagePath = this.#outputMessagePath(queued.id);
     const task = {
@@ -329,7 +331,7 @@ export class CodexTaskRunner {
   }
 
   async #runOpenCodeApiTask(queued) {
-    const relevantMemories = this.memoryStore.relevantFor({ prompt: queued.prompt, workspace: queued.workspace, limit: 6 });
+    const relevantMemories = await this.memoryStore.relevantForAsync({ prompt: queued.prompt, workspace: queued.workspace, limit: 6 });
     const executionPrompt = buildPromptWithMemories(queued.prompt, relevantMemories, { materializeArtifacts: true });
     const task = {
       ...queued,

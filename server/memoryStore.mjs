@@ -1,12 +1,24 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { Embedder } from './embeddings.mjs';
+
+const EMBED_DEBOUNCE_MS = 750;
+const DEFAULT_EDGE_THRESHOLD = 0.62;
+const DEFAULT_DUPLICATE_THRESHOLD = 0.93;
 
 export class MemoryStore {
-  constructor(databasePath, eventBus) {
+  /**
+   * @param {string} databasePath
+   * @param {{ emit?: Function }} [eventBus]
+   * @param {{ embedder?: Embedder, edgeThreshold?: number }} [options]
+   */
+  constructor(databasePath, eventBus, options = {}) {
     fs.mkdirSync(path.dirname(databasePath), { recursive: true });
     this.db = new DatabaseSync(databasePath);
     this.eventBus = eventBus ?? { emit() {} };
+    this.embedder = options.embedder ?? null;
+    this.edgeThreshold = options.edgeThreshold ?? DEFAULT_EDGE_THRESHOLD;
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS memories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,9 +53,26 @@ export class MemoryStore {
     this.#ensureColumn('scope', "TEXT NOT NULL DEFAULT 'project'");
     this.#ensureColumn('workspace', 'TEXT');
     this.#ensureColumn('last_seen_source', 'TEXT');
+    this.#ensureColumn('embedding', 'BLOB');
+    this.#ensureColumn('embedding_model', 'TEXT');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_memories_normalized_content ON memories(normalized_content);');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_memories_lookup_key ON memories(lookup_key);');
     this.#backfillLookupKeys();
+
+    // Caches keyed by memory id so we don't reparse BLOBs on every search.
+    /** @type {Map<number, Float32Array>} */
+    this.embeddingCache = new Map();
+    /** @type {NodeJS.Timeout | null} */
+    this.edgeEmitTimer = null;
+    /** @type {boolean} */
+    this.backfillInProgress = false;
+
+    if (this.embedder) {
+      // Fire-and-forget backfill so cold starts don't block server boot.
+      void this.#backfillEmbeddings().catch((error) => {
+        console.warn(`[memoryStore] embedding backfill failed: ${error?.message ?? error}`);
+      });
+    }
   }
 
   list({ limit = 80, query = '', scope = '', workspace = '' } = {}) {
@@ -94,7 +123,9 @@ export class MemoryStore {
       .prepare(`${selectMemoryRows()} WHERE lookup_key = ? OR normalized_content = ? OR (kind = ? AND title = ? AND content = ?) ORDER BY id DESC LIMIT 1`)
       .get(row.lookupKey, row.normalizedContent, row.kind, row.title, row.content);
     if (existing) {
-      return this.#merge(existing, row);
+      const merged = this.#merge(existing, row);
+      this.#queueEmbedding(merged);
+      return merged;
     }
     const result = this.db
       .prepare(`
@@ -108,6 +139,7 @@ export class MemoryStore {
       .prepare(`${selectMemoryRows()} WHERE id = ?`)
       .get(result.lastInsertRowid);
     this.eventBus.emit('memory.created', inserted);
+    this.#queueEmbedding(inserted);
     return inserted;
   }
 
@@ -119,7 +151,9 @@ export class MemoryStore {
       return null;
     }
     this.db.prepare('DELETE FROM memories WHERE id = ?').run(id);
+    this.embeddingCache.delete(Number(id));
     this.eventBus.emit('memory.deleted', { id: Number(id) });
+    this.#scheduleEdgeEmit();
     return existing;
   }
 
@@ -145,6 +179,7 @@ export class MemoryStore {
     const workspace = updates.workspace === undefined
       ? existing.workspace ?? ''
       : (updates.workspace ? path.resolve(updates.workspace) : '');
+    const contentChanged = title !== existing.title || content !== existing.content || kind !== existing.kind;
     this.db
       .prepare(`
         UPDATE memories
@@ -164,15 +199,27 @@ export class MemoryStore {
       `)
       .run(kind, title, content, importance, confidence, normalizeMemoryContent(content || title), lookupKey(kind, title, content), pinned, archived, scope, workspace, id);
     const updated = this.db.prepare(`${selectMemoryRows()} WHERE id = ?`).get(id);
+    if (contentChanged) {
+      this.#clearStoredEmbedding(id);
+      this.#queueEmbedding(updated);
+    }
     this.eventBus.emit('memory.updated', updated);
     return updated;
   }
 
   resetVisible() {
+    const ids = this.db
+      .prepare("SELECT id FROM memories WHERE kind NOT IN ('demo', 'manual') AND source NOT IN ('ui-demo', 'manual')")
+      .all()
+      .map((row) => row.id);
     const deleted = this.db
       .prepare("DELETE FROM memories WHERE kind NOT IN ('demo', 'manual') AND source NOT IN ('ui-demo', 'manual')")
       .run();
+    for (const id of ids) {
+      this.embeddingCache.delete(Number(id));
+    }
     this.eventBus.emit('memory.reset', { deleted: deleted.changes ?? 0 });
+    this.#scheduleEdgeEmit();
     return deleted.changes ?? 0;
   }
 
@@ -186,7 +233,37 @@ export class MemoryStore {
     this.db.close();
   }
 
-  relevantFor({ prompt, workspace, limit = 6 }) {
+  /**
+   * Recall API used by the codex task runner.
+   *
+   * `relevantFor` stays synchronous for callers that can't await — it uses
+   * the keyword scorer and still emits `memory.recalled` so the orb reacts.
+   * Newer call sites should prefer `relevantForAsync`, which tries the
+   * semantic path first and only falls back to keyword recall if no
+   * embedded memories meet the threshold or the embedder isn't ready.
+   */
+  relevantFor({ prompt, workspace, limit = 6, emit = true } = {}) {
+    return this.relevantForKeyword({ prompt, workspace, limit, emit });
+  }
+
+  async relevantForAsync({ prompt, workspace, limit = 6, emit = true } = {}) {
+    const semantic = await this.relevantForSemantic({ prompt, workspace, limit, emit: false });
+    if (semantic && semantic.length > 0) {
+      if (emit) {
+        this.eventBus.emit('memory.recalled', {
+          prompt: String(prompt ?? '').slice(0, 240),
+          workspace: workspace ?? null,
+          mode: 'semantic',
+          ids: semantic.map((memory) => memory.id),
+          memories: semantic.map(toRecalledShape)
+        });
+      }
+      return semantic;
+    }
+    return this.relevantForKeyword({ prompt, workspace, limit, emit });
+  }
+
+  relevantForKeyword({ prompt, workspace, limit = 6, emit = true }) {
     const promptTokens = tokenize(`${prompt ?? ''} ${workspace ?? ''}`);
     if (promptTokens.size === 0) {
       return [];
@@ -206,8 +283,207 @@ export class MemoryStore {
       for (const memory of scored) {
         update.run(now, memory.id);
       }
+      if (emit) {
+        this.eventBus.emit('memory.recalled', {
+          prompt: String(prompt ?? '').slice(0, 240),
+          workspace: workspace ?? null,
+          mode: 'keyword',
+          ids: scored.map((memory) => memory.id),
+          memories: scored.map(toRecalledShape)
+        });
+      }
     }
     return scored;
+  }
+
+  /**
+   * Semantic recall. Returns null (not []) if the embedder isn't ready or
+   * there are no embedded memories yet — callers should treat that as
+   * "fall back to keyword".
+   */
+  async relevantForSemantic({ prompt, workspace, limit = 6, threshold = 0.42, emit = true } = {}) {
+    if (!this.embedder || this.embedder.disabled) return null;
+    const cleanPrompt = String(prompt ?? '').replace(/\s+/g, ' ').trim();
+    if (!cleanPrompt) return null;
+
+    let queryVector;
+    try {
+      queryVector = await this.embedder.embed(cleanPrompt);
+    } catch (error) {
+      return null;
+    }
+    if (!queryVector) return null;
+
+    const candidates = this.db
+      .prepare(`SELECT id, embedding FROM memories WHERE archived = 0 AND kind NOT IN ('demo', 'manual') AND source NOT IN ('ui-demo', 'manual') AND embedding IS NOT NULL AND (scope = 'global' OR workspace IS NULL OR workspace = '' OR LOWER(workspace) = LOWER(?))`)
+      .all(workspace ?? '');
+    if (candidates.length === 0) return null;
+
+    const scored = [];
+    for (const candidate of candidates) {
+      const vector = this.#getCachedVector(candidate.id, candidate.embedding);
+      if (!vector) continue;
+      const similarity = Embedder.cosine(queryVector, vector);
+      if (similarity >= threshold) {
+        scored.push({ id: candidate.id, similarity });
+      }
+    }
+    if (scored.length === 0) return null;
+    scored.sort((a, b) => b.similarity - a.similarity);
+    const topIds = scored.slice(0, limit).map((row) => row.id);
+    const memoryRows = this.db
+      .prepare(`${selectMemoryRows()} WHERE id IN (${topIds.map(() => '?').join(',')})`)
+      .all(...topIds);
+    const byId = new Map(memoryRows.map((row) => [row.id, row]));
+    const enriched = topIds
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map((memory, index) => ({
+        ...memory,
+        relevanceScore: scored[index].similarity,
+        similarity: scored[index].similarity
+      }));
+
+    if (enriched.length > 0) {
+      const now = new Date().toISOString();
+      const update = this.db.prepare('UPDATE memories SET last_used_at = ?, use_count = use_count + 1 WHERE id = ?');
+      for (const memory of enriched) {
+        update.run(now, memory.id);
+      }
+      if (emit) {
+        this.eventBus.emit('memory.recalled', {
+          prompt: cleanPrompt.slice(0, 240),
+          workspace: workspace ?? null,
+          mode: 'semantic',
+          ids: enriched.map((memory) => memory.id),
+          memories: enriched.map(toRecalledShape)
+        });
+      }
+    }
+    return enriched;
+  }
+
+  /**
+   * Free-form semantic search exposed to the UI. Embeds the query,
+   * returns top-K with similarity scores. Empty array if disabled.
+   */
+  async semanticSearch({ query, limit = 20, scope = '', workspace = '', threshold = 0.32 } = {}) {
+    if (!this.embedder || this.embedder.disabled) return [];
+    const cleanQuery = String(query ?? '').replace(/\s+/g, ' ').trim();
+    if (!cleanQuery) return [];
+    const queryVector = await this.embedder.embed(cleanQuery);
+    if (!queryVector) return [];
+
+    const conditions = [
+      'archived = 0',
+      "kind NOT IN ('demo', 'manual')",
+      "source NOT IN ('ui-demo', 'manual')",
+      'embedding IS NOT NULL'
+    ];
+    const params = [];
+    if (scope === 'global' || scope === 'project') {
+      conditions.push('scope = ?');
+      params.push(scope);
+    }
+    if (workspace) {
+      conditions.push("(scope = 'global' OR workspace IS NULL OR workspace = '' OR LOWER(workspace) = LOWER(?))");
+      params.push(workspace);
+    }
+    const rows = this.db
+      .prepare(`SELECT id, embedding FROM memories WHERE ${conditions.join(' AND ')}`)
+      .all(...params);
+    const scored = [];
+    for (const row of rows) {
+      const vector = this.#getCachedVector(row.id, row.embedding);
+      if (!vector) continue;
+      const similarity = Embedder.cosine(queryVector, vector);
+      if (similarity >= threshold) {
+        scored.push({ id: row.id, similarity });
+      }
+    }
+    scored.sort((a, b) => b.similarity - a.similarity);
+    const topIds = scored.slice(0, limit).map((row) => row.id);
+    if (topIds.length === 0) return [];
+    const memoryRows = this.db
+      .prepare(`${selectMemoryRows()} WHERE id IN (${topIds.map(() => '?').join(',')})`)
+      .all(...topIds);
+    const byId = new Map(memoryRows.map((row) => [row.id, row]));
+    return topIds.map((id, index) => ({
+      ...(byId.get(id) ?? {}),
+      similarity: scored[index].similarity
+    })).filter((row) => row.id);
+  }
+
+  /**
+   * Returns symmetric semantic edges between memories whose cosine
+   * similarity exceeds the threshold. Capped at `limit` to keep the
+   * payload small for the renderer.
+   */
+  similarityEdges({ threshold = this.edgeThreshold, limit = 480, maxPerNode = 6 } = {}) {
+    if (!this.embedder || this.embedder.disabled) {
+      return { edges: [], threshold, totalCandidates: 0, dim: 0 };
+    }
+    const rows = this.db
+      .prepare(`SELECT id, embedding FROM memories WHERE archived = 0 AND kind NOT IN ('demo', 'manual') AND source NOT IN ('ui-demo', 'manual') AND embedding IS NOT NULL`)
+      .all();
+    const vectors = [];
+    for (const row of rows) {
+      const vector = this.#getCachedVector(row.id, row.embedding);
+      if (vector) vectors.push({ id: row.id, vector });
+    }
+    const edgeList = [];
+    for (let i = 0; i < vectors.length; i += 1) {
+      for (let j = i + 1; j < vectors.length; j += 1) {
+        const similarity = Embedder.cosine(vectors[i].vector, vectors[j].vector);
+        if (similarity >= threshold) {
+          edgeList.push({ from: vectors[i].id, to: vectors[j].id, weight: similarity });
+        }
+      }
+    }
+    edgeList.sort((a, b) => b.weight - a.weight);
+
+    // Cap per-node so dense clusters don't dominate.
+    const seenPerNode = new Map();
+    const kept = [];
+    for (const edge of edgeList) {
+      const fromCount = seenPerNode.get(edge.from) ?? 0;
+      const toCount = seenPerNode.get(edge.to) ?? 0;
+      if (fromCount >= maxPerNode || toCount >= maxPerNode) continue;
+      seenPerNode.set(edge.from, fromCount + 1);
+      seenPerNode.set(edge.to, toCount + 1);
+      kept.push(edge);
+      if (kept.length >= limit) break;
+    }
+    return { edges: kept, threshold, totalCandidates: vectors.length, dim: this.embedder.dim };
+  }
+
+  /** Returns near-duplicate candidate pairs ranked by similarity. */
+  nearDuplicates({ threshold = DEFAULT_DUPLICATE_THRESHOLD, limit = 50 } = {}) {
+    const result = this.similarityEdges({ threshold, limit: limit * 4, maxPerNode: 4 });
+    return {
+      pairs: result.edges.slice(0, limit),
+      threshold
+    };
+  }
+
+  embeddingsReady() {
+    if (!this.embedder || this.embedder.disabled) {
+      return { available: false, model: null, embedded: 0, total: 0, dim: 0 };
+    }
+    const totalRow = this.db
+      .prepare("SELECT COUNT(*) AS count FROM memories WHERE archived = 0 AND kind NOT IN ('demo', 'manual') AND source NOT IN ('ui-demo', 'manual')")
+      .get();
+    const embeddedRow = this.db
+      .prepare("SELECT COUNT(*) AS count FROM memories WHERE archived = 0 AND kind NOT IN ('demo', 'manual') AND source NOT IN ('ui-demo', 'manual') AND embedding IS NOT NULL")
+      .get();
+    return {
+      available: true,
+      model: this.embedder.lastError ? `disabled (${this.embedder.lastError})` : 'minilm-l6-v2',
+      embedded: embeddedRow.count,
+      total: totalRow.count,
+      dim: this.embedder.dim,
+      backfilling: this.backfillInProgress
+    };
   }
 
   #ensureColumn(name, definition) {
@@ -223,6 +499,23 @@ export class MemoryStore {
     for (const row of rows) {
       update.run(lookupKey(row.kind, row.title, row.content), normalizeMemoryContent(row.content ?? row.title ?? ''), row.id);
     }
+  }
+
+  async #backfillEmbeddings() {
+    if (!this.embedder) return;
+    const rows = this.db
+      .prepare("SELECT id, kind, title, content FROM memories WHERE archived = 0 AND embedding IS NULL AND kind NOT IN ('demo', 'manual') AND source NOT IN ('ui-demo', 'manual') ORDER BY id ASC LIMIT 2000")
+      .all();
+    if (rows.length === 0) return;
+    this.backfillInProgress = true;
+    for (const row of rows) {
+      const text = `${row.title}\n${row.content}`;
+      const vector = await this.embedder.embed(text);
+      if (!vector) continue;
+      this.#writeEmbedding(row.id, vector);
+    }
+    this.backfillInProgress = false;
+    this.#scheduleEdgeEmit(60);
   }
 
   #merge(existing, row) {
@@ -246,8 +539,68 @@ export class MemoryStore {
         WHERE id = ?
       `)
       .run(nextTitle, nextContent, row.importance, row.confidence, row.normalizedContent, row.lookupKey, row.pinned, row.scope, row.workspace, row.source, existing.id);
+    if (nextContent !== existing.content || nextTitle !== existing.title) {
+      this.#clearStoredEmbedding(existing.id);
+    }
     return this.db.prepare(`${selectMemoryRows()} WHERE id = ?`).get(existing.id);
   }
+
+  #queueEmbedding(row) {
+    if (!this.embedder || this.embedder.disabled || !row || !row.id) return;
+    const text = `${row.title}\n${row.content}`;
+    void this.embedder.embed(text)
+      .then((vector) => {
+        if (!vector) return;
+        this.#writeEmbedding(row.id, vector);
+        this.#scheduleEdgeEmit();
+      })
+      .catch((error) => {
+        console.warn(`[memoryStore] embedding failed for memory ${row.id}: ${error?.message ?? error}`);
+      });
+  }
+
+  #writeEmbedding(id, vector) {
+    const blob = Embedder.toBlob(vector);
+    if (!blob) return;
+    this.db
+      .prepare('UPDATE memories SET embedding = ?, embedding_model = ? WHERE id = ?')
+      .run(blob, 'minilm-l6-v2', id);
+    this.embeddingCache.set(Number(id), vector);
+  }
+
+  #clearStoredEmbedding(id) {
+    this.db.prepare('UPDATE memories SET embedding = NULL, embedding_model = NULL WHERE id = ?').run(id);
+    this.embeddingCache.delete(Number(id));
+  }
+
+  #getCachedVector(id, blob) {
+    const cached = this.embeddingCache.get(Number(id));
+    if (cached) return cached;
+    const vector = Embedder.fromBlob(blob);
+    if (vector) this.embeddingCache.set(Number(id), vector);
+    return vector;
+  }
+
+  #scheduleEdgeEmit(delay = EMBED_DEBOUNCE_MS) {
+    if (this.edgeEmitTimer) {
+      clearTimeout(this.edgeEmitTimer);
+    }
+    this.edgeEmitTimer = setTimeout(() => {
+      this.edgeEmitTimer = null;
+      try {
+        const summary = this.similarityEdges();
+        this.eventBus.emit('memory.edges.updated', {
+          count: summary.edges.length,
+          threshold: summary.threshold,
+          totalCandidates: summary.totalCandidates
+        });
+      } catch (error) {
+        console.warn(`[memoryStore] edge emit failed: ${error?.message ?? error}`);
+      }
+    }, delay);
+    this.edgeEmitTimer.unref?.();
+  }
+
 }
 
 export function normalizeMemoryContent(value) {
@@ -322,6 +675,20 @@ function scoreMemory(memory, promptTokens, workspace) {
   const confidence = Number(memory.confidence ?? 0) * 0.9;
   const usePenalty = Math.min(Number(memory.useCount ?? 0), 12) * 0.015;
   return overlap * 0.85 + workspaceBonus + kindBonus + pinnedBonus + importance + confidence - usePenalty;
+}
+
+function toRecalledShape(memory) {
+  return {
+    id: memory.id,
+    kind: memory.kind,
+    title: memory.title,
+    importance: Number(memory.importance ?? 0),
+    confidence: Number(memory.confidence ?? 0),
+    pinned: Number(memory.pinned ?? 0),
+    scope: memory.scope,
+    similarity: memory.similarity ?? null,
+    relevanceScore: memory.relevanceScore ?? null
+  };
 }
 
 const stopWords = new Set([

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { isPathAllowed, loadConfig, publicConfig } from './config.mjs';
 import { EventBus } from './eventBus.mjs';
+import { Embedder } from './embeddings.mjs';
 import { MemoryExtractor } from './memoryExtractor.mjs';
 import { MemoryStore } from './memoryStore.mjs';
 import { CodexTaskRunner } from './codexTaskRunner.mjs';
@@ -13,7 +14,10 @@ const app = express();
 const config = loadConfig();
 const eventBus = new EventBus();
 const memoryExtractor = new MemoryExtractor(config.memory);
-const memoryStore = new MemoryStore(config.memory.databasePath, eventBus);
+const embedder = new Embedder({
+  cacheDir: path.resolve(config.dataDir, 'transformers-cache')
+});
+const memoryStore = new MemoryStore(config.memory.databasePath, eventBus, { embedder });
 const taskStore = new TaskStore(config.memory.databasePath);
 const taskRunner = new CodexTaskRunner(config, eventBus, memoryStore, memoryExtractor, taskStore);
 const localModelStatePath = path.resolve(config.dataDir, 'local-model.json');
@@ -199,6 +203,55 @@ app.delete('/api/memories/:id', (req, res) => {
 app.post('/api/memories/reset', (_req, res) => {
   const deleted = memoryStore.resetVisible();
   res.json({ deleted, count: memoryStore.count() });
+});
+
+app.get('/api/memory/edges', (req, res, next) => {
+  try {
+    const threshold = req.query.threshold === undefined ? undefined : Number(req.query.threshold);
+    const limit = req.query.limit === undefined ? undefined : Math.max(0, Math.min(2000, Number(req.query.limit)));
+    const summary = memoryStore.similarityEdges({
+      ...(Number.isFinite(threshold) ? { threshold } : {}),
+      ...(Number.isFinite(limit) ? { limit } : {})
+    });
+    res.json(summary);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/memory/search', async (req, res, next) => {
+  try {
+    const limit = req.query.limit === undefined ? 20 : Math.max(1, Math.min(100, Number(req.query.limit)));
+    const threshold = req.query.threshold === undefined ? undefined : Number(req.query.threshold);
+    const results = await memoryStore.semanticSearch({
+      query: req.query.q,
+      scope: req.query.scope,
+      workspace: req.query.workspace,
+      limit,
+      ...(Number.isFinite(threshold) ? { threshold } : {})
+    });
+    res.json({ results, count: results.length, available: results.length > 0 || !embedder.disabled });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/memory/duplicates', (req, res, next) => {
+  try {
+    const threshold = req.query.threshold === undefined ? undefined : Number(req.query.threshold);
+    const limit = req.query.limit === undefined ? undefined : Math.max(1, Math.min(200, Number(req.query.limit)));
+    const summary = memoryStore.nearDuplicates({
+      ...(Number.isFinite(threshold) ? { threshold } : {}),
+      ...(Number.isFinite(limit) ? { limit } : {})
+    });
+    res.json(summary);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/memory/embeddings/status', (_req, res) => {
+  res.json(memoryStore.embeddingsReady());
 });
 
 app.post('/api/remember', async (req, res, next) => {

@@ -41,6 +41,10 @@ interface MemoryPath {
   phase: number;
   build: number;
   color: THREE.Color;
+  /** When the path is a semantic edge, the id of the OTHER endpoint. */
+  otherMemoryId?: number;
+  /** Cosine-similarity weight (0..1) for semantic edges. */
+  weight?: number;
 }
 
 interface RecallPulse {
@@ -49,6 +53,14 @@ interface RecallPulse {
   speed: number;
   age: number;
 }
+
+export type SemanticEdge = {
+  from: number;
+  to: number;
+  weight: number;
+};
+
+export type RecallMode = 'semantic' | 'keyword' | 'manual';
 
 const NODE_CAPACITY = 3000;
 const PATH_SEGMENT_CAPACITY = 9000;
@@ -140,6 +152,31 @@ function makeCurvePoints(
   return points;
 }
 
+function makeSemanticCurve(
+  from: THREE.Vector3,
+  to: THREE.Vector3,
+  weight: number
+): THREE.Vector3[] {
+  // Pull weak edges towards the core so the strong ones read as more direct.
+  const distance = from.distanceTo(to);
+  const corePull = THREE.MathUtils.lerp(0.42, 0.12, THREE.MathUtils.clamp(weight, 0, 1));
+  const mid = from.clone().lerp(to, 0.5);
+  const corewards = mid.clone().normalize().multiplyScalar(-corePull * distance);
+  const control = mid.add(corewards);
+  const points: THREE.Vector3[] = [];
+  const segments = 16;
+  for (let i = 0; i <= segments; i += 1) {
+    const t = i / segments;
+    const mt = 1 - t;
+    points.push(
+      from.clone().multiplyScalar(mt * mt)
+        .add(control.clone().multiplyScalar(2 * mt * t))
+        .add(to.clone().multiplyScalar(t * t))
+    );
+  }
+  return points;
+}
+
 function samplePath(path: MemoryPath, progress: number): THREE.Vector3 {
   if (path.points.length < 2) {
     return new THREE.Vector3();
@@ -225,6 +262,15 @@ export class NeuralSphere {
   private pathGeometryDirty = true;
   private pathUpdateAccumulator = 0;
   private lastPathFocusKey = '';
+
+  // Semantic edge state. When the backend provides real cosine-similarity
+  // edges these replace the legacy "nearest neighbour by hash" connections
+  // generated in connectRelatedMemories.
+  private semanticEdges: SemanticEdge[] = [];
+  private semanticEdgesActive = false;
+  private recalledMemoryIds: Set<number> = new Set();
+  private recallEmphasis = 0;
+  private recallEmphasisMode: RecallMode = 'semantic';
 
   constructor() {
     this.group.name = 'NeuralSphere';
@@ -478,7 +524,12 @@ export class NeuralSphere {
     this.pathGeometryDirty = true;
     this.pathIndicesByMemory.set(memory.id, [pathIndex]);
 
-    this.connectRelatedMemories(neuronIndex, cluster, rng);
+    // Skip the legacy decorative cluster wiring once the backend has
+    // supplied real semantic edges — the rebuildSemanticPaths pass owns
+    // cross-memory connections from that point forward.
+    if (!this.semanticEdgesActive) {
+      this.connectRelatedMemories(neuronIndex, cluster, rng);
+    }
 
     if (animate) {
       this.learningPulse = 1;
@@ -490,6 +541,163 @@ export class NeuralSphere {
     this.rebuildGeometry();
   }
 
+  /**
+   * Replace decorative edges with real cosine-similarity edges from the
+   * backend. Call with [] to fall back to the legacy hash-based layout.
+   */
+  setSemanticEdges(edges: SemanticEdge[]): void {
+    this.semanticEdges = Array.isArray(edges) ? edges.slice() : [];
+    this.semanticEdgesActive = this.semanticEdges.length > 0;
+    this.rebuildSemanticPaths();
+  }
+
+  /**
+   * Briefly highlight a set of memories that were just recalled — boosts
+   * their activation, lights up paths between them, and spawns travelling
+   * pulses along the connecting edges. The mode tag colours the response
+   * differently for semantic vs keyword recall.
+   */
+  flashRecall(memoryIds: Iterable<number>, mode: RecallMode = 'semantic'): void {
+    const ids = Array.from(memoryIds ?? []).map((id) => Number(id)).filter((id) => Number.isFinite(id));
+    if (ids.length === 0) {
+      this.recalledMemoryIds.clear();
+      this.recallEmphasis = 0;
+      return;
+    }
+    this.recalledMemoryIds = new Set(ids);
+    this.recallEmphasisMode = mode;
+    this.recallEmphasis = Math.min(1.4, 0.7 + ids.length * 0.08);
+    this.responsePulse = Math.max(this.responsePulse, 0.95);
+    this.learningPulse = Math.max(this.learningPulse, mode === 'semantic' ? 0.85 : 0.55);
+    this.pathGeometryDirty = true;
+
+    // Boost each recalled neuron's glow.
+    for (const id of ids) {
+      this.activateMemory(id, 1.25);
+    }
+
+    // Spawn pulses along every path that connects two recalled memories.
+    const idSet = this.recalledMemoryIds;
+    for (let i = 0; i < this.paths.length; i += 1) {
+      const path = this.paths[i];
+      const otherId = path.otherMemoryId;
+      if (otherId !== undefined && idSet.has(path.memoryId) && idSet.has(otherId)) {
+        this.spawnPulse(i, 0, 1.4);
+      }
+    }
+  }
+
+  /** Clear the recalled-memory highlight after a UI-driven dismiss. */
+  clearRecallEmphasis(): void {
+    this.recalledMemoryIds.clear();
+    this.recallEmphasis = 0;
+    this.pathGeometryDirty = true;
+  }
+
+  /** Returns a small status object used by diagnostics. */
+  getEdgeStats(): { active: boolean; count: number; recalled: number } {
+    return {
+      active: this.semanticEdgesActive,
+      count: this.semanticEdges.length,
+      recalled: this.recalledMemoryIds.size
+    };
+  }
+
+  /**
+   * Wipe and rebuild every cross-memory path based on the currently stored
+   * semantic edges. Growth paths from spawnMemory are preserved when they
+   * still match an existing neuron, so the orb keeps the spawn-in animation.
+   */
+  private rebuildSemanticPaths(): void {
+    this.paths.length = 0;
+    this.pathIndicesByMemory.clear();
+    this.pulses.length = 0;
+
+    if (!this.semanticEdgesActive) {
+      // Re-emit the legacy decorative wiring so the orb still has structure
+      // when the embedding backfill is incomplete or disabled.
+      for (let neuronIndex = 0; neuronIndex < this.neurons.length; neuronIndex += 1) {
+        const neuron = this.neurons[neuronIndex];
+        const cluster = this.clusters.get(neuron.clusterKey);
+        if (!cluster) continue;
+        const parent = this.nearestClusterNeuron(neuron.basePosition, cluster);
+        const path = this.createMemoryPath(neuron, cluster, parent);
+        const pathIndex = this.paths.length;
+        this.paths.push(path);
+        const indices = this.pathIndicesByMemory.get(neuron.memoryId) ?? [];
+        indices.push(pathIndex);
+        this.pathIndicesByMemory.set(neuron.memoryId, indices);
+        this.connectRelatedMemories(neuronIndex, cluster, seededRandom(`${neuron.memoryId}:rebuild`));
+      }
+      this.pathGeometryDirty = true;
+      return;
+    }
+
+    // Add a short growth path from each neuron toward its cluster centre so
+    // newly-spawned memories still animate inward — this is independent of
+    // the semantic structure and stays consistent if edges shift.
+    for (const neuron of this.neurons) {
+      const cluster = this.clusters.get(neuron.clusterKey);
+      if (!cluster) continue;
+      const root = cluster.direction.clone().multiplyScalar(0.42);
+      const path: MemoryPath = {
+        memoryId: neuron.memoryId,
+        memoryKind: neuron.memoryKind,
+        points: makeCurvePoints(root, neuron.basePosition, cluster.direction, cluster.tangent, neuron.clusterOrder, neuron.importance),
+        thickness: 0.014 + neuron.importance * 0.004,
+        strength: 0.48 + neuron.confidence * 0.18,
+        phase: neuron.phase,
+        build: 1,
+        color: cluster.color.clone().lerp(CORE_HOT, 0.18)
+      };
+      const pathIndex = this.paths.length;
+      this.paths.push(path);
+      const indices = this.pathIndicesByMemory.get(neuron.memoryId) ?? [];
+      indices.push(pathIndex);
+      this.pathIndicesByMemory.set(neuron.memoryId, indices);
+    }
+
+    // Now wire in the semantic edges. Each one is tagged with otherMemoryId
+    // so updatePaths / flashRecall can treat both endpoints equally.
+    for (const edge of this.semanticEdges) {
+      const fromIdx = this.memoryNodeById.get(edge.from);
+      const toIdx = this.memoryNodeById.get(edge.to);
+      if (fromIdx === undefined || toIdx === undefined) continue;
+      const from = this.neurons[fromIdx];
+      const to = this.neurons[toIdx];
+      if (!from || !to) continue;
+      const fromCluster = this.clusters.get(from.clusterKey);
+      const toCluster = this.clusters.get(to.clusterKey);
+      const baseColor = (fromCluster?.color ?? CORE_COLOR).clone()
+        .lerp(toCluster?.color ?? CORE_COLOR, 0.5)
+        .lerp(CORE_HOT, edge.weight * 0.18);
+      const points = makeSemanticCurve(from.basePosition, to.basePosition, edge.weight);
+      const path: MemoryPath = {
+        memoryId: from.memoryId,
+        memoryKind: from.memoryKind,
+        points,
+        thickness: 0.012 + edge.weight * 0.022,
+        strength: 0.5 + edge.weight * 0.42,
+        phase: (from.phase + to.phase) * 0.5,
+        build: 0.18,
+        color: baseColor,
+        otherMemoryId: to.memoryId,
+        weight: edge.weight
+      };
+      const pathIndex = this.paths.length;
+      this.paths.push(path);
+      const fromIndices = this.pathIndicesByMemory.get(from.memoryId) ?? [];
+      fromIndices.push(pathIndex);
+      this.pathIndicesByMemory.set(from.memoryId, fromIndices);
+      const toIndices = this.pathIndicesByMemory.get(to.memoryId) ?? [];
+      toIndices.push(pathIndex);
+      this.pathIndicesByMemory.set(to.memoryId, toIndices);
+    }
+
+    this.pathGeometryDirty = true;
+    this.memoryGrowthPulse = Math.max(this.memoryGrowthPulse, 0.7);
+  }
+
   replaceMemories(memories: MemoryRecord[]): void {
     this.neurons.length = 0;
     this.paths.length = 0;
@@ -497,10 +705,17 @@ export class NeuralSphere {
     this.clusters.clear();
     this.memoryNodeById.clear();
     this.pathIndicesByMemory.clear();
+    this.recalledMemoryIds.clear();
+    this.recallEmphasis = 0;
     this.pathGeometryDirty = true;
 
     for (const memory of memories.slice().reverse()) {
       this.spawnMemory(memory, false);
+    }
+
+    // If semantic edges arrived before the memory list, re-apply them.
+    if (this.semanticEdgesActive) {
+      this.rebuildSemanticPaths();
     }
 
     this.rebuildGeometry();
@@ -526,6 +741,14 @@ export class NeuralSphere {
     this.learningPulse = Math.max(0, this.learningPulse - delta * 0.82);
     this.responsePulse = Math.max(0, this.responsePulse - delta * 1.12);
     this.memoryGrowthPulse = Math.max(0, this.memoryGrowthPulse - delta * 0.58);
+    // Recall emphasis fades over ~6s so the orb returns to baseline after a
+    // task pulls context. It re-fires every time flashRecall is called.
+    const previousRecallEmphasis = this.recallEmphasis;
+    this.recallEmphasis = Math.max(0, this.recallEmphasis - delta * 0.18);
+    if (previousRecallEmphasis > 0.05 && this.recallEmphasis <= 0.05 && this.recalledMemoryIds.size > 0) {
+      this.recalledMemoryIds.clear();
+      this.pathGeometryDirty = true;
+    }
 
     const isThinking = this.mode === 'thinking' || this.mode === 'executing';
     const isLearning = this.mode === 'learning';
@@ -786,6 +1009,7 @@ export class NeuralSphere {
       const selected = this.selectedMemoryId === neuron.memoryId;
       const hovered = this.hoveredMemoryId === neuron.memoryId;
       const related = selectedKind !== null && neuron.clusterKey === selectedKind;
+      const recalled = this.recalledMemoryIds.has(neuron.memoryId) && this.recallEmphasis > 0.05;
       const target = this.neuronTarget.copy(neuron.basePosition);
       const birthEase = 1 - Math.pow(1 - neuron.birth, 3);
       target.multiplyScalar(THREE.MathUtils.lerp(0.22, 1, birthEase));
@@ -795,7 +1019,8 @@ export class NeuralSphere {
       target.z += Math.sin(elapsed * 0.53 + neuron.phase * 0.7) * drift;
       neuron.position.lerp(target, 1 - Math.exp(-Math.max(delta, 0.016) * 8));
 
-      const attention = selected ? 1.15 : hovered ? 0.72 : related ? 0.24 : 0;
+      const recallBoost = recalled ? this.recallEmphasis * 0.95 : 0;
+      const attention = (selected ? 1.15 : hovered ? 0.72 : related ? 0.24 : 0) + recallBoost;
       const unstable = (1 - neuron.confidence) * Math.sin(elapsed * 3.2 + neuron.phase) * 0.07;
       const pulse = Math.sin(elapsed * (1.1 + neuron.importance * 0.08) + neuron.phase) * 0.04;
       const scale = neuron.radius
@@ -870,10 +1095,20 @@ export class NeuralSphere {
 
     for (const path of this.paths) {
       path.build = Math.min(1, path.build + Math.max(0.035, delta * (1.05 + this.memoryGrowthPulse * 0.65)));
-      const selected = this.selectedMemoryId === path.memoryId;
-      const hovered = this.hoveredMemoryId === path.memoryId;
+      const otherMemoryId = path.otherMemoryId;
+      const fromRecalled = this.recalledMemoryIds.has(path.memoryId);
+      const toRecalled = otherMemoryId !== undefined && this.recalledMemoryIds.has(otherMemoryId);
+      const bothRecalled = fromRecalled && toRecalled;
+      const eitherRecalled = (fromRecalled || toRecalled) && this.recallEmphasis > 0.05;
+      const selected = this.selectedMemoryId === path.memoryId
+        || (otherMemoryId !== undefined && this.selectedMemoryId === otherMemoryId);
+      const hovered = this.hoveredMemoryId === path.memoryId
+        || (otherMemoryId !== undefined && this.hoveredMemoryId === otherMemoryId);
       const related = selectedKind !== null && path.memoryKind === selectedKind;
-      const emphasis = selected ? 1.25 : hovered ? 0.85 : related ? 0.24 : 0;
+      const recallEmphasisBoost = bothRecalled
+        ? this.recallEmphasis * 1.4
+        : eitherRecalled ? this.recallEmphasis * 0.6 : 0;
+      const emphasis = (selected ? 1.25 : hovered ? 0.85 : related ? 0.24 : 0) + recallEmphasisBoost;
       const visibleSegments = Math.max(1, Math.floor((path.points.length - 1) * path.build));
 
       for (let i = 0; i < visibleSegments && segmentCount < PATH_SEGMENT_CAPACITY; i += 1) {
@@ -926,11 +1161,16 @@ export class NeuralSphere {
       : this.activityLevel * 6.2 + this.memoryGrowthPulse * 9.5 + this.responsePulse * 13 + this.audioLevel * 7.5 + phaseProfile.pulse;
 
     if (this.paths.length > 0 && Math.random() < delta * spawnRate) {
-      const preferred = this.selectedMemoryId !== null
-        ? this.pathIndicesByMemory.get(this.selectedMemoryId)
-        : this.hoveredMemoryId !== null
-          ? this.pathIndicesByMemory.get(this.hoveredMemoryId)
-          : null;
+      const recallPaths = this.recalledMemoryIds.size > 0 && this.recallEmphasis > 0.05
+        ? this.collectRecalledPaths()
+        : null;
+      const preferred = recallPaths?.length
+        ? recallPaths
+        : this.selectedMemoryId !== null
+          ? this.pathIndicesByMemory.get(this.selectedMemoryId)
+          : this.hoveredMemoryId !== null
+            ? this.pathIndicesByMemory.get(this.hoveredMemoryId)
+            : null;
       const source = preferred?.length ? preferred : null;
       const pathIndex = source
         ? source[Math.floor(Math.random() * source.length)]
@@ -975,6 +1215,21 @@ export class NeuralSphere {
     this.pulseMesh.count = Math.min(this.pulses.length, PULSE_CAPACITY);
     this.pulseMesh.instanceMatrix.needsUpdate = true;
     if (this.pulseMesh.instanceColor) this.pulseMesh.instanceColor.needsUpdate = true;
+  }
+
+  private collectRecalledPaths(): number[] {
+    const indices: number[] = [];
+    for (let i = 0; i < this.paths.length; i += 1) {
+      const path = this.paths[i];
+      const fromHit = this.recalledMemoryIds.has(path.memoryId);
+      const toHit = path.otherMemoryId !== undefined && this.recalledMemoryIds.has(path.otherMemoryId);
+      if (fromHit && toHit) {
+        indices.push(i);
+      } else if (fromHit || toHit) {
+        indices.push(i);
+      }
+    }
+    return indices;
   }
 
   private colorForNeuron(neuron: MemoryNeuron, attention: number, halo: boolean): THREE.Color {

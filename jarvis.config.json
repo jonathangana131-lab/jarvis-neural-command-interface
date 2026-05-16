@@ -1,0 +1,37 @@
+{
+  "assistantName": "Jarvis Neural Command Interface",
+  "workspaceAllowlist": [
+    "%USERPROFILE%\\Documents\\Jarvis Workspaces"
+  ],
+  "defaultWorkspace": "%USERPROFILE%\\Documents\\Jarvis Workspaces",
+  "memory": {
+    "automatic": true,
+    "databasePath": "data\\memory.sqlite",
+    "extractor": "ai",
+    "model": "gpt-5.5",
+    "reasoningEffort": "low",
+    "minConfidence": 0.68
+  },
+  "localModel": {
+    "provider": "opencode",
+    "endpoint": "https://opencode.ai/zen/v1",
+    "model": "minimax-m2.5-free"
+  },
+  "codex": {
+    "command": "codex.cmd",
+    "model": "gpt-5.5",
+    "reasoningEffort": "low",
+    "ephemeral": true,
+    "maxTaskRuntimeMs": 900000,
+    "blockedPhrases": [
+      "delete system32",
+      "format drive",
+      "purchase",
+      "buy now",
+      "send email",
+      "transfer money",
+      "password",
+      "outside allowlist"
+    ]
+  }
+}

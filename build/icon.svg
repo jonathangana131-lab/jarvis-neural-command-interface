@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Jarvis Neural Command Interface icon">
+  <defs>
+    <radialGradient id="bg" cx="48%" cy="38%" r="78%">
+      <stop offset="0%" stop-color="#1ef7ff"/>
+      <stop offset="34%" stop-color="#0a6f96"/>
+      <stop offset="72%" stop-color="#07111f"/>
+      <stop offset="100%" stop-color="#02050a"/>
+    </radialGradient>
+    <linearGradient id="stroke" x1="48" y1="28" x2="208" y2="226">
+      <stop stop-color="#bdfcff"/>
+      <stop offset="48%" stop-color="#4ce6ff"/>
+      <stop offset="100%" stop-color="#7f7cff"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="#03070d"/>
+  <circle cx="128" cy="128" r="103" fill="url(#bg)" opacity=".92"/>
+  <circle cx="128" cy="128" r="86" fill="none" stroke="url(#stroke)" stroke-width="5" opacity=".88"/>
+  <circle cx="128" cy="128" r="58" fill="none" stroke="#7ff7ff" stroke-width="2.5" opacity=".42"/>
+  <path d="M79 88c15-20 36-30 63-28 20 2 37 10 51 24M68 142c8 29 29 47 61 53 24 4 45-2 62-17" fill="none" stroke="#d8feff" stroke-width="7" stroke-linecap="round" opacity=".82"/>
+  <path d="M153 71v79c0 25-15 40-40 40-18 0-32-8-41-23" fill="none" stroke="#f7ffff" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M153 71v79c0 25-15 40-40 40-18 0-32-8-41-23" fill="none" stroke="#132338" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity=".38"/>
+  <circle cx="75" cy="95" r="8" fill="#dfffff"/>
+  <circle cx="190" cy="88" r="7" fill="#96f5ff"/>
+  <circle cx="199" cy="170" r="8" fill="#b8b7ff"/>
+  <circle cx="63" cy="146" r="6" fill="#45e8ff"/>
+</svg>

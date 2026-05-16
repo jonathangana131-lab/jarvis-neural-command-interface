@@ -1,0 +1,82 @@
+{
+  "name": "jarvis-neural-command-interface",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "main": "electron/main.cjs",
+  "description": "A local Windows desktop neural command interface for chat, memory, and Codex-powered tasks.",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:client": "vite --host 127.0.0.1",
+    "dev:server": "node --env-file-if-exists=.env --experimental-sqlite server/index.mjs",
+    "desktop": "node scripts/desktop.mjs",
+    "desktop:smoke": "node scripts/desktop.mjs --smoke",
+    "build": "tsc && vite build",
+    "test:memory": "node --experimental-sqlite scripts/test-memory.mjs",
+    "test:artifacts": "node --experimental-sqlite scripts/test-streaming-artifacts.mjs",
+    "preview": "node --experimental-sqlite server/index.mjs",
+    "package:win": "npm run build && electron-builder --win --dir",
+    "package:mac": "npm run build && electron-builder --mac --dir",
+    "installer:win": "npm run build && electron-builder --win nsis",
+    "dist:win": "npm run installer:win"
+  },
+  "build": {
+    "appId": "local.jarvis.neural-command-interface",
+    "productName": "Jarvis Neural Command Interface",
+    "asar": false,
+    "directories": {
+      "output": "release"
+    },
+    "afterPack": "scripts/after-pack.cjs",
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "server/**/*",
+      "build/**/*",
+      "jarvis.config.json",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        "dir",
+        "nsis"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dir"
+      ],
+      "category": "public.app-category.developer-tools",
+      "identity": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Jarvis Neural Command Interface",
+      "artifactName": "Jarvis-Neural-Command-Interface-Setup-${version}.${ext}"
+    }
+  },
+  "dependencies": {
+    "@shoelace-style/shoelace": "^2.20.1",
+    "express": "^5.1.0",
+    "gsap": "^3.15.0",
+    "lucide": "^1.14.0",
+    "three": "^0.176.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.10.1",
+    "@types/three": "^0.184.0",
+    "@types/ws": "^8.18.1",
+    "electron": "^42.0.0",
+    "electron-builder": "^26.8.1",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.2"
+  }
+}

@@ -1,0 +1,5561 @@
+:root {
+  --void: #010308;
+  --void-2: #030914;
+  --glass: rgba(5, 18, 29, 0.66);
+  --glass-strong: rgba(7, 24, 38, 0.84);
+  --glass-soft: rgba(10, 42, 58, 0.34);
+  --line: rgba(115, 243, 255, 0.36);
+  --line-strong: rgba(209, 252, 255, 0.82);
+  --line-soft: rgba(115, 243, 255, 0.13);
+  --text: #edfaff;
+  --muted: #91aeb8;
+  --dim: #58727d;
+  --cyan: #73f3ff;
+  --cyan-hot: #e9fdff;
+  --blue: #2a8cff;
+  --amber: #ffc857;
+  --amber-hot: #ffe2a2;
+  --danger: #ff6174;
+  --ok: #88ffca;
+  --panel-shadow: 0 28px 90px rgba(0, 0, 0, 0.48), 0 0 54px rgba(55, 219, 255, 0.12);
+  color-scheme: dark;
+}
+
+/* Absolute last drawer/menu correction: closed drawer cannot block clicks, open
+   drawer sits below the top HUD, and the toggle remains available to close it. */
+@media (min-width: 901px) {
+  .chat-session-rail,
+  .command-console.active-view .chat-session-rail {
+    position: fixed !important;
+    z-index: 200 !important;
+    top: 160px !important;
+    bottom: 18px !important;
+    left: 24px !important;
+    width: 318px !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transform: translateX(-380px) scale(0.985) !important;
+  }
+
+  #app[data-chat-sidebar="open"] .chat-session-rail,
+  #app[data-chat-sidebar="open"] .command-console.active-view .chat-session-rail {
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: translateX(0) scale(1) !important;
+  }
+
+  .chat-sidebar-toggle {
+    position: fixed !important;
+    z-index: 230 !important;
+    left: 24px !important;
+    bottom: 24px !important;
+    top: auto !important;
+    min-height: 42px !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: none !important;
+  }
+
+  #app[data-chat-sidebar="open"] .chat-sidebar-toggle {
+    left: 354px !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: none !important;
+  }
+}
+
+/* Final desktop EXE HUD layout. Keep this last so older experiments cannot
+   re-expand the console or right navigation. */
+@media (min-width: 901px) {
+  .radial-nav {
+    right: 24px;
+    top: 50%;
+    display: grid;
+    gap: 8px;
+    width: 52px;
+    transform: translateY(-50%);
+  }
+
+  .radial-nav button {
+    width: 48px;
+    height: 48px;
+    min-height: 48px;
+    justify-content: center;
+    padding: 0;
+    border-radius: 13px;
+    clip-path: none;
+  }
+
+  .radial-nav button span {
+    position: absolute;
+    right: 58px;
+    top: 50%;
+    max-width: 160px;
+    padding: 7px 10px;
+    overflow: hidden;
+    border: 1px solid rgba(115, 243, 255, 0.22);
+    border-radius: 8px;
+    background: rgba(0, 8, 15, 0.88);
+    color: var(--text);
+    font-size: 10px;
+    font-weight: 900;
+    opacity: 0;
+    pointer-events: none;
+    text-overflow: ellipsis;
+    transform: translate(8px, -50%);
+    transition: opacity 140ms ease, transform 140ms ease;
+    white-space: nowrap;
+  }
+
+  .radial-nav button:hover span,
+  .radial-nav button:focus-visible span,
+  .radial-nav button.active span {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+
+  .radial-nav svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .command-console.active-view {
+    overflow: visible;
+    max-height: none;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    clip-path: none;
+    pointer-events: none;
+  }
+
+  .command-console.active-view::before,
+  .command-console.active-view::after {
+    display: none;
+  }
+
+  .command-console.active-view .mission-control {
+    position: static;
+    display: contents;
+    width: auto;
+    height: auto;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    pointer-events: none;
+    transform: none;
+  }
+
+  .command-console.active-view .mission-header {
+    position: fixed;
+    z-index: 4;
+    top: 158px;
+    right: 92px;
+    left: 24px;
+    display: grid;
+    grid-template-columns: minmax(220px, 320px) minmax(360px, 1fr) 176px;
+    gap: 12px;
+    min-height: 72px;
+    padding: 10px 12px;
+    border: 1px solid rgba(115, 243, 255, 0.18);
+    border-radius: 15px;
+    background:
+      radial-gradient(circle at 18% 0, rgba(229, 253, 255, 0.12), transparent 34%),
+      linear-gradient(135deg, rgba(3, 18, 28, 0.48), rgba(0, 5, 11, 0.3));
+    box-shadow: 0 18px 56px rgba(0, 0, 0, 0.22), inset 0 0 30px rgba(115, 243, 255, 0.04);
+    backdrop-filter: blur(8px);
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-title {
+    min-height: 0;
+    padding: 10px 12px;
+    border: 1px solid rgba(115, 243, 255, 0.12);
+    border-radius: 12px;
+    background: rgba(0, 8, 15, 0.28);
+    box-shadow: none;
+  }
+
+  .command-console.active-view .mission-title strong {
+    font-size: 18px;
+  }
+
+  .command-console.active-view .mission-vitals {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .command-console.active-view .mission-vitals span {
+    min-height: 48px;
+    padding: 8px 10px;
+    border: 1px solid rgba(115, 243, 255, 0.12);
+    border-radius: 11px;
+    background: rgba(0, 8, 15, 0.28);
+  }
+
+  .command-console.active-view .mission-header .queue-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    align-content: center;
+  }
+
+  .command-console.active-view .mission-grid {
+    position: fixed;
+    z-index: 4;
+    top: 250px;
+    right: 92px;
+    bottom: 108px;
+    display: grid;
+    width: 286px;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    gap: 10px;
+    min-height: 0;
+    padding: 0;
+    overflow: visible;
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-card {
+    display: grid;
+    grid-column: auto;
+    grid-row: auto;
+    min-height: 0;
+    max-height: none;
+    align-self: auto;
+    padding: 12px;
+    border: 1px solid rgba(115, 243, 255, 0.17);
+    border-radius: 14px;
+    background:
+      radial-gradient(circle at 12% 0, rgba(115, 243, 255, 0.1), transparent 32%),
+      linear-gradient(135deg, rgba(3, 18, 28, 0.5), rgba(0, 5, 11, 0.28));
+    box-shadow: 0 18px 56px rgba(0, 0, 0, 0.22), inset 0 0 24px rgba(115, 243, 255, 0.035);
+    backdrop-filter: blur(8px);
+    clip-path: none;
+  }
+
+  .command-console.active-view .mission-memory-context {
+    max-height: 190px;
+  }
+
+  .command-console.active-view .mission-artifacts {
+    max-height: 118px;
+  }
+
+  .command-console.active-view .mission-timeline {
+    position: fixed;
+    z-index: 4;
+    right: 408px;
+    bottom: 104px;
+    left: 316px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    min-height: 176px;
+    max-height: min(260px, calc(100vh - 410px));
+    margin: 0;
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-event--response {
+    display: grid;
+    grid-row: auto;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 0;
+    max-height: none;
+    padding: 14px 16px;
+    border: 1px solid rgba(115, 243, 255, 0.24);
+    border-radius: 16px;
+    background:
+      radial-gradient(circle at 22% 0, rgba(229, 253, 255, 0.12), transparent 32%),
+      linear-gradient(135deg, rgba(4, 20, 31, 0.62), rgba(0, 5, 11, 0.42));
+    box-shadow: 0 24px 76px rgba(0, 0, 0, 0.32), inset 0 0 36px rgba(115, 243, 255, 0.045);
+    backdrop-filter: blur(8px);
+    clip-path: none;
+  }
+
+  .command-console.active-view .conversation-stream {
+    max-height: none;
+  }
+
+  .command-console.active-view .command-dock__main {
+    position: fixed;
+    z-index: 5;
+    right: 408px;
+    bottom: 24px;
+    left: 316px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 116px;
+    gap: 12px;
+    min-height: 64px;
+    padding: 9px;
+    border: 1px solid rgba(115, 243, 255, 0.22);
+    border-radius: 16px;
+    background:
+      radial-gradient(circle at 0 0, rgba(115, 243, 255, 0.1), transparent 34%),
+      rgba(0, 5, 11, 0.56);
+    box-shadow: 0 22px 74px rgba(0, 0, 0, 0.34), inset 0 0 28px rgba(115, 243, 255, 0.04);
+    backdrop-filter: blur(8px);
+    pointer-events: auto;
+  }
+
+  .command-console.active-view #task-prompt,
+  .command-console.active-view .ignite-button {
+    min-height: 48px;
+    height: 48px;
+  }
+
+  .chat-sidebar-toggle {
+    position: fixed;
+    z-index: 7;
+    left: 24px;
+    bottom: 24px;
+    top: auto;
+    min-height: 42px;
+  }
+
+  .command-console.active-view .workspace-field,
+  .command-console.active-view .mission-status-strip,
+  .command-console.active-view .mission-event--activity,
+  .command-console.active-view .mission-event--command,
+  .command-console.active-view .mission-event--signal {
+    display: none;
+  }
+}
+
+/* Absolute last drawer/menu correction: closed drawer cannot block clicks, open
+   drawer sits below the top HUD, and the toggle remains available to close it. */
+@media (min-width: 901px) {
+  .chat-session-rail,
+  .command-console.active-view .chat-session-rail {
+    position: fixed !important;
+    z-index: 200 !important;
+    top: 160px !important;
+    bottom: 18px !important;
+    left: 24px !important;
+    width: 318px !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transform: translateX(-380px) scale(0.985) !important;
+  }
+
+  #app[data-chat-sidebar="open"] .chat-session-rail,
+  #app[data-chat-sidebar="open"] .command-console.active-view .chat-session-rail {
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: translateX(0) scale(1) !important;
+  }
+
+  .chat-sidebar-toggle {
+    position: fixed !important;
+    z-index: 230 !important;
+    left: 24px !important;
+    bottom: 24px !important;
+    top: auto !important;
+    min-height: 42px !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: none !important;
+  }
+
+  #app[data-chat-sidebar="open"] .chat-sidebar-toggle {
+    left: 354px !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    transform: none !important;
+  }
+}
+
+/* Hard final desktop pass requested for the EXE: no top Run bar, no nav labels,
+   no right-side overlap, and the chat drawer must always be clickable. */
+@media (min-width: 901px) {
+  .radial-nav {
+    z-index: 20;
+    right: 24px;
+    top: 50%;
+    width: 52px;
+    gap: 8px;
+    transform: translateY(-50%);
+  }
+
+  .radial-nav button {
+    width: 48px;
+    height: 48px;
+    min-height: 48px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 13px;
+    clip-path: none;
+  }
+
+  .radial-nav button span {
+    display: none !important;
+  }
+
+  .radial-nav svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .command-console.active-view,
+  .command-console.active-view .mission-control {
+    pointer-events: none;
+  }
+
+  .command-console.active-view .mission-header {
+    display: none !important;
+  }
+
+  .command-console.active-view .mission-grid {
+    position: fixed;
+    z-index: 4;
+    top: 172px;
+    right: 104px;
+    bottom: 110px;
+    display: grid !important;
+    width: 292px;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    gap: 10px;
+    padding: 0;
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-card {
+    display: grid !important;
+    grid-column: auto !important;
+    grid-row: auto !important;
+    min-height: 0;
+    max-height: none;
+    align-self: auto;
+    padding: 12px;
+    border: 1px solid rgba(115, 243, 255, 0.18);
+    border-radius: 14px;
+    background:
+      radial-gradient(circle at 12% 0, rgba(115, 243, 255, 0.1), transparent 32%),
+      linear-gradient(135deg, rgba(3, 18, 28, 0.52), rgba(0, 5, 11, 0.3));
+    box-shadow: 0 18px 56px rgba(0, 0, 0, 0.24), inset 0 0 24px rgba(115, 243, 255, 0.04);
+    backdrop-filter: blur(8px);
+    clip-path: none;
+  }
+
+  .command-console.active-view .mission-memory-context {
+    max-height: 226px;
+  }
+
+  .command-console.active-view .mission-artifacts {
+    max-height: 132px;
+  }
+
+  .command-console.active-view .mission-timeline {
+    position: fixed;
+    z-index: 4;
+    left: 316px;
+    right: 430px;
+    bottom: 104px;
+    display: grid;
+    min-height: 192px;
+    max-height: min(286px, calc(100vh - 330px));
+    margin: 0;
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-event--response {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 0;
+    max-height: none;
+    padding: 14px 16px;
+    border: 1px solid rgba(115, 243, 255, 0.24);
+    border-radius: 16px;
+    background:
+      radial-gradient(circle at 22% 0, rgba(229, 253, 255, 0.12), transparent 32%),
+      linear-gradient(135deg, rgba(4, 20, 31, 0.64), rgba(0, 5, 11, 0.44));
+    box-shadow: 0 24px 76px rgba(0, 0, 0, 0.32), inset 0 0 36px rgba(115, 243, 255, 0.05);
+    backdrop-filter: blur(8px);
+    clip-path: none;
+  }
+
+  .command-console.active-view .conversation-stream {
+    max-height: none;
+  }
+
+  .command-console.active-view .command-dock__main {
+    position: fixed;
+    z-index: 5;
+    left: 316px;
+    right: 430px;
+    bottom: 24px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 116px;
+    gap: 12px;
+    min-height: 64px;
+    padding: 9px;
+    border: 1px solid rgba(115, 243, 255, 0.22);
+    border-radius: 16px;
+    background:
+      radial-gradient(circle at 0 0, rgba(115, 243, 255, 0.1), transparent 34%),
+      rgba(0, 5, 11, 0.58);
+    box-shadow: 0 22px 74px rgba(0, 0, 0, 0.34), inset 0 0 28px rgba(115, 243, 255, 0.04);
+    backdrop-filter: blur(8px);
+    pointer-events: auto;
+  }
+
+  .command-console.active-view #task-prompt,
+  .command-console.active-view .ignite-button {
+    min-height: 48px;
+    height: 48px;
+  }
+
+  .chat-sidebar-toggle {
+    position: fixed !important;
+    z-index: 100;
+    left: 24px;
+    bottom: 24px;
+    top: auto;
+    min-height: 42px;
+    pointer-events: auto !important;
+  }
+
+  .chat-sidebar-scrim {
+    z-index: 38;
+    pointer-events: none;
+  }
+
+  .chat-session-rail {
+    z-index: 200;
+    top: 160px !important;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .command-console.active-view .chat-session-rail {
+    position: fixed;
+    z-index: 200;
+    top: 160px !important;
+    bottom: 18px;
+    left: 24px;
+    width: min(318px, calc(100vw - 48px));
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none !important;
+    transform: translateX(calc(-100% - 36px)) scale(0.985);
+  }
+
+  #app[data-chat-sidebar="open"] .chat-sidebar-scrim {
+    pointer-events: auto;
+  }
+
+  #app[data-chat-sidebar="open"] .chat-session-rail {
+    visibility: visible;
+    pointer-events: auto !important;
+  }
+
+  #app[data-chat-sidebar="open"] .command-console.active-view .chat-session-rail {
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto !important;
+    transform: translateX(0) scale(1);
+  }
+
+  .console-deck:has(.console-view.active-view:not(.command-console)) {
+    left: 24px;
+    right: 92px;
+    bottom: 18px;
+    width: auto;
+    transform: none;
+  }
+
+  .console-view.active-view:not(.command-console) {
+    max-height: calc(100vh - 190px);
+    margin-top: 154px;
+    overflow: auto;
+  }
+}
+
+/* Final desktop EXE HUD layout. This must stay after the older Run layout
+   experiments so the packaged app uses the distributed Jarvis HUD. */
+@media (min-width: 901px) {
+  .radial-nav {
+    right: 24px;
+    top: 50%;
+    display: grid;
+    gap: 8px;
+    width: 52px;
+    transform: translateY(-50%);
+  }
+
+  .radial-nav button {
+    width: 48px;
+    height: 48px;
+    min-height: 48px;
+    justify-content: center;
+    padding: 0;
+    border-radius: 13px;
+    clip-path: none;
+  }
+
+  .radial-nav button span {
+    position: absolute;
+    right: 58px;
+    top: 50%;
+    max-width: 160px;
+    padding: 7px 10px;
+    overflow: hidden;
+    border: 1px solid rgba(115, 243, 255, 0.22);
+    border-radius: 8px;
+    background: rgba(0, 8, 15, 0.88);
+    color: var(--text);
+    font-size: 10px;
+    font-weight: 900;
+    opacity: 0;
+    pointer-events: none;
+    text-overflow: ellipsis;
+    transform: translate(8px, -50%);
+    transition: opacity 140ms ease, transform 140ms ease;
+    white-space: nowrap;
+  }
+
+  .radial-nav button:hover span,
+  .radial-nav button:focus-visible span,
+  .radial-nav button.active span {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+
+  .radial-nav svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .command-console.active-view {
+    overflow: visible;
+    max-height: none;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    clip-path: none;
+    pointer-events: none;
+  }
+
+  .command-console.active-view::before,
+  .command-console.active-view::after {
+    display: none;
+  }
+
+  .command-console.active-view .mission-control {
+    position: static;
+    display: contents;
+    width: auto;
+    height: auto;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    pointer-events: none;
+    transform: none;
+  }
+
+  .command-console.active-view .mission-header {
+    position: fixed;
+    z-index: 4;
+    top: 158px;
+    right: 92px;
+    left: 24px;
+    display: grid;
+    grid-template-columns: minmax(220px, 320px) minmax(360px, 1fr) 176px;
+    gap: 12px;
+    min-height: 72px;
+    padding: 10px 12px;
+    border: 1px solid rgba(115, 243, 255, 0.18);
+    border-radius: 15px;
+    background:
+      radial-gradient(circle at 18% 0, rgba(229, 253, 255, 0.12), transparent 34%),
+      linear-gradient(135deg, rgba(3, 18, 28, 0.48), rgba(0, 5, 11, 0.3));
+    box-shadow: 0 18px 56px rgba(0, 0, 0, 0.22), inset 0 0 30px rgba(115, 243, 255, 0.04);
+    backdrop-filter: blur(8px);
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-title {
+    min-height: 0;
+    padding: 10px 12px;
+    border: 1px solid rgba(115, 243, 255, 0.12);
+    border-radius: 12px;
+    background: rgba(0, 8, 15, 0.28);
+    box-shadow: none;
+  }
+
+  .command-console.active-view .mission-title strong {
+    font-size: 18px;
+  }
+
+  .command-console.active-view .mission-vitals {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .command-console.active-view .mission-vitals span {
+    min-height: 48px;
+    padding: 8px 10px;
+    border: 1px solid rgba(115, 243, 255, 0.12);
+    border-radius: 11px;
+    background: rgba(0, 8, 15, 0.28);
+  }
+
+  .command-console.active-view .mission-header .queue-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    align-content: center;
+  }
+
+  .command-console.active-view .mission-grid {
+    position: fixed;
+    z-index: 4;
+    top: 250px;
+    right: 92px;
+    bottom: 108px;
+    display: grid;
+    width: 286px;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    gap: 10px;
+    min-height: 0;
+    padding: 0;
+    overflow: visible;
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-card {
+    display: grid;
+    grid-column: auto;
+    grid-row: auto;
+    min-height: 0;
+    max-height: none;
+    align-self: auto;
+    padding: 12px;
+    border: 1px solid rgba(115, 243, 255, 0.17);
+    border-radius: 14px;
+    background:
+      radial-gradient(circle at 12% 0, rgba(115, 243, 255, 0.1), transparent 32%),
+      linear-gradient(135deg, rgba(3, 18, 28, 0.5), rgba(0, 5, 11, 0.28));
+    box-shadow: 0 18px 56px rgba(0, 0, 0, 0.22), inset 0 0 24px rgba(115, 243, 255, 0.035);
+    backdrop-filter: blur(8px);
+    clip-path: none;
+  }
+
+  .command-console.active-view .mission-memory-context {
+    max-height: 190px;
+  }
+
+  .command-console.active-view .mission-artifacts {
+    max-height: 118px;
+  }
+
+  .command-console.active-view .mission-timeline {
+    position: fixed;
+    z-index: 4;
+    right: 408px;
+    bottom: 104px;
+    left: 316px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    min-height: 176px;
+    max-height: min(260px, calc(100vh - 410px));
+    margin: 0;
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-event--response {
+    display: grid;
+    grid-row: auto;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 0;
+    max-height: none;
+    padding: 14px 16px;
+    border: 1px solid rgba(115, 243, 255, 0.24);
+    border-radius: 16px;
+    background:
+      radial-gradient(circle at 22% 0, rgba(229, 253, 255, 0.12), transparent 32%),
+      linear-gradient(135deg, rgba(4, 20, 31, 0.62), rgba(0, 5, 11, 0.42));
+    box-shadow: 0 24px 76px rgba(0, 0, 0, 0.32), inset 0 0 36px rgba(115, 243, 255, 0.045);
+    backdrop-filter: blur(8px);
+    clip-path: none;
+  }
+
+  .command-console.active-view .conversation-stream {
+    max-height: none;
+  }
+
+  .command-console.active-view .command-dock__main {
+    position: fixed;
+    z-index: 5;
+    right: 408px;
+    bottom: 24px;
+    left: 316px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 116px;
+    gap: 12px;
+    min-height: 64px;
+    padding: 9px;
+    border: 1px solid rgba(115, 243, 255, 0.22);
+    border-radius: 16px;
+    background:
+      radial-gradient(circle at 0 0, rgba(115, 243, 255, 0.1), transparent 34%),
+      rgba(0, 5, 11, 0.56);
+    box-shadow: 0 22px 74px rgba(0, 0, 0, 0.34), inset 0 0 28px rgba(115, 243, 255, 0.04);
+    backdrop-filter: blur(8px);
+    pointer-events: auto;
+  }
+
+  .command-console.active-view #task-prompt,
+  .command-console.active-view .ignite-button {
+    min-height: 48px;
+    height: 48px;
+  }
+
+  .chat-sidebar-toggle {
+    position: fixed;
+    z-index: 7;
+    left: 24px;
+    bottom: 24px;
+    top: auto;
+    min-height: 42px;
+  }
+
+  .command-console.active-view .workspace-field,
+  .command-console.active-view .mission-status-strip,
+  .command-console.active-view .mission-event--activity,
+  .command-console.active-view .mission-event--command,
+  .command-console.active-view .mission-event--signal {
+    display: none;
+  }
+}
+
+/* Distributed desktop HUD: status belongs around the orb, chat stays compact. */
+@media (min-width: 901px) {
+  .command-console.active-view .mission-control {
+    position: static;
+    inset: auto;
+    width: auto;
+    height: auto;
+    min-width: 0;
+    display: contents;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    pointer-events: none;
+  }
+
+  .command-console.active-view .mission-header {
+    position: fixed;
+    z-index: 4;
+    top: 158px;
+    right: 184px;
+    left: 24px;
+    display: grid;
+    grid-template-columns: minmax(220px, 320px) minmax(360px, 1fr) 176px;
+    gap: 12px;
+    min-height: 72px;
+    padding: 10px 12px;
+    border: 1px solid rgba(115, 243, 255, 0.18);
+    border-radius: 15px;
+    background:
+      radial-gradient(circle at 18% 0, rgba(229, 253, 255, 0.12), transparent 34%),
+      linear-gradient(135deg, rgba(3, 18, 28, 0.48), rgba(0, 5, 11, 0.3));
+    box-shadow: 0 18px 56px rgba(0, 0, 0, 0.22), inset 0 0 30px rgba(115, 243, 255, 0.04);
+    backdrop-filter: blur(8px);
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-title {
+    padding: 10px 12px;
+    border: 1px solid rgba(115, 243, 255, 0.12);
+    border-radius: 12px;
+    background: rgba(0, 8, 15, 0.28);
+  }
+
+  .command-console.active-view .mission-vitals {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .command-console.active-view .mission-vitals span {
+    min-height: 48px;
+    border: 1px solid rgba(115, 243, 255, 0.12);
+    border-radius: 11px;
+    background: rgba(0, 8, 15, 0.28);
+  }
+
+  .command-console.active-view .mission-header .queue-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    align-content: center;
+  }
+
+  .command-console.active-view .mission-grid {
+    position: fixed;
+    z-index: 4;
+    top: 250px;
+    right: 184px;
+    bottom: 108px;
+    display: grid;
+    width: 300px;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    gap: 10px;
+    min-height: 0;
+    padding: 0;
+    overflow: visible;
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-card {
+    display: grid;
+    min-height: 0;
+    max-height: none;
+    padding: 12px;
+    border: 1px solid rgba(115, 243, 255, 0.17);
+    border-radius: 14px;
+    background:
+      radial-gradient(circle at 12% 0, rgba(115, 243, 255, 0.1), transparent 32%),
+      linear-gradient(135deg, rgba(3, 18, 28, 0.5), rgba(0, 5, 11, 0.28));
+    box-shadow: 0 18px 56px rgba(0, 0, 0, 0.22), inset 0 0 24px rgba(115, 243, 255, 0.035);
+    backdrop-filter: blur(8px);
+  }
+
+  .command-console.active-view .mission-card--phase,
+  .command-console.active-view .mission-card--memory,
+  .command-console.active-view .mission-card--artifacts {
+    grid-column: auto;
+    grid-row: auto;
+    align-self: auto;
+  }
+
+  .command-console.active-view .mission-memory-context {
+    max-height: 190px;
+  }
+
+  .command-console.active-view .mission-artifacts {
+    max-height: 118px;
+  }
+
+  .command-console.active-view .mission-timeline {
+    position: fixed;
+    z-index: 4;
+    right: 512px;
+    bottom: 104px;
+    left: 316px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    min-height: 176px;
+    max-height: min(260px, calc(100vh - 410px));
+    margin: 0;
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-event--response {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 0;
+    max-height: none;
+    padding: 14px 16px;
+    border: 1px solid rgba(115, 243, 255, 0.24);
+    border-radius: 16px;
+    background:
+      radial-gradient(circle at 22% 0, rgba(229, 253, 255, 0.12), transparent 32%),
+      linear-gradient(135deg, rgba(4, 20, 31, 0.62), rgba(0, 5, 11, 0.42));
+    box-shadow: 0 24px 76px rgba(0, 0, 0, 0.32), inset 0 0 36px rgba(115, 243, 255, 0.045);
+    backdrop-filter: blur(8px);
+  }
+
+  .command-console.active-view .conversation-stream {
+    max-height: none;
+  }
+
+  .command-console.active-view .command-dock__main {
+    position: fixed;
+    z-index: 5;
+    right: 512px;
+    bottom: 24px;
+    left: 316px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 116px;
+    gap: 12px;
+    min-height: 64px;
+    padding: 9px;
+    border: 1px solid rgba(115, 243, 255, 0.22);
+    border-radius: 16px;
+    background:
+      radial-gradient(circle at 0 0, rgba(115, 243, 255, 0.1), transparent 34%),
+      rgba(0, 5, 11, 0.56);
+    box-shadow: 0 22px 74px rgba(0, 0, 0, 0.34), inset 0 0 28px rgba(115, 243, 255, 0.04);
+    backdrop-filter: blur(8px);
+    pointer-events: auto;
+  }
+
+  .command-console.active-view #task-prompt,
+  .command-console.active-view .ignite-button {
+    min-height: 48px;
+    height: 48px;
+  }
+
+  .chat-sidebar-toggle {
+    position: fixed;
+    z-index: 7;
+    left: 24px;
+    bottom: 24px;
+    top: auto;
+    min-height: 42px;
+  }
+
+  .command-console.active-view .workspace-field,
+  .command-console.active-view .mission-status-strip,
+  .command-console.active-view .mission-event--activity,
+  .command-console.active-view .mission-event--command,
+  .command-console.active-view .mission-event--signal {
+    display: none;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+* {
+  scrollbar-color: rgba(115, 243, 255, 0.42) rgba(2, 8, 13, 0.5);
+  scrollbar-width: thin;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--void);
+  color: var(--text);
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+button,
+textarea,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  border: 0;
+}
+
+#app {
+  position: relative;
+  isolation: isolate;
+}
+
+#core {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  outline: none;
+  cursor: grab;
+  touch-action: none;
+}
+
+#core:active {
+  cursor: grabbing;
+}
+
+.hidden,
+.console-view[hidden],
+.console-view:not(.active-view) {
+  display: none !important;
+}
+
+.cockpit-backdrop,
+.film-grain,
+.scanline-field {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.cockpit-backdrop {
+  background:
+    radial-gradient(circle at 50% 49%, rgba(97, 239, 255, 0.18), transparent 18%),
+    radial-gradient(circle at 50% 53%, rgba(255, 200, 87, 0.075), transparent 31%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.82), transparent 24%, transparent 76%, rgba(0, 0, 0, 0.82)),
+    linear-gradient(180deg, rgba(1, 3, 8, 0.2), transparent 36%, rgba(0, 0, 0, 0.7));
+}
+
+.star-wash {
+  position: absolute;
+  inset: -10%;
+  background-image:
+    radial-gradient(circle, rgba(172, 250, 255, 0.28) 0 1px, transparent 1px),
+    radial-gradient(circle, rgba(255, 211, 124, 0.18) 0 1px, transparent 1px);
+  background-position: 0 0, 43px 71px;
+  background-size: 170px 170px, 230px 230px;
+  opacity: 0.18;
+  animation: star-drift 30s linear infinite;
+}
+
+.perspective-grid {
+  position: absolute;
+  inset: 12% -10% -12%;
+  background-image:
+    linear-gradient(rgba(115, 243, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(115, 243, 255, 0.045) 1px, transparent 1px);
+  background-size: 76px 76px;
+  mask-image: radial-gradient(ellipse at 50% 49%, rgba(0, 0, 0, 0.88), transparent 72%);
+  transform: perspective(760px) rotateX(62deg) translateY(12%);
+  transform-origin: center bottom;
+}
+
+.horizon-scan {
+  position: absolute;
+  top: 49%;
+  left: 12%;
+  width: 76%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(115, 243, 255, 0.55), rgba(255, 200, 87, 0.26), transparent);
+  box-shadow: 0 0 42px rgba(115, 243, 255, 0.34);
+  opacity: 0.48;
+}
+
+.orb-target {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border: 1px solid rgba(115, 243, 255, 0.18);
+  border-radius: 50%;
+  box-shadow: inset 0 0 32px rgba(115, 243, 255, 0.06), 0 0 30px rgba(115, 243, 255, 0.08);
+  transform: translate(-50%, -50%);
+}
+
+.orb-target--outer {
+  width: min(44vw, 560px);
+  aspect-ratio: 1;
+  animation: reticle-turn 28s linear infinite;
+}
+
+.orb-target--inner {
+  width: min(28vw, 360px);
+  aspect-ratio: 1;
+  border-style: dashed;
+  animation: reticle-turn 18s linear infinite reverse;
+}
+
+.orb-axis {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  background: linear-gradient(90deg, transparent, rgba(115, 243, 255, 0.18), transparent);
+  transform-origin: center;
+  opacity: 0.58;
+}
+
+.orb-axis--x {
+  width: min(62vw, 820px);
+  height: 1px;
+  transform: translate(-50%, -50%) rotate(-17deg);
+}
+
+.orb-axis--y {
+  width: min(52vw, 680px);
+  height: 1px;
+  transform: translate(-50%, -50%) rotate(73deg);
+}
+
+.light-sweep {
+  position: absolute;
+  inset: -20% -60%;
+  background: linear-gradient(105deg, transparent 42%, rgba(115, 243, 255, 0.12), rgba(255, 255, 255, 0.055), transparent 58%);
+  animation: light-sweep 7s ease-in-out infinite;
+}
+
+.command-mast,
+.voice-dock,
+.radial-nav,
+.console-deck,
+.operation-channel {
+  position: fixed;
+  z-index: 3;
+}
+
+.command-mast {
+  top: 20px;
+  left: 24px;
+  right: 24px;
+  display: grid;
+  grid-template-columns: minmax(230px, 0.85fr) minmax(420px, 1.15fr);
+  gap: 18px;
+  pointer-events: none;
+}
+
+.brand-lockup,
+.telemetry-strip,
+.voice-dock,
+.console-view,
+.operation-card,
+.detail-module,
+.data-node,
+.local-model-console,
+.model-preset-card,
+.model-key-panel,
+.model-instructions,
+.settings-grid label,
+.diagnostics-grid article {
+  position: relative;
+  border: 1px solid var(--line-soft);
+  background:
+    linear-gradient(135deg, rgba(15, 59, 82, 0.48), rgba(3, 10, 17, 0.58) 58%, rgba(2, 5, 10, 0.34)),
+    linear-gradient(90deg, rgba(115, 243, 255, 0.08), transparent 42%, rgba(255, 200, 87, 0.035));
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(18px);
+  clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
+}
+
+.brand-lockup::before,
+.telemetry-strip::before,
+.voice-dock::before,
+.console-view::before,
+.operation-card::before,
+.detail-module::before,
+.data-node::before,
+.local-model-console::before,
+.model-preset-card::before,
+.model-key-panel::before,
+.model-instructions::before,
+.settings-grid label::before,
+.diagnostics-grid article::before {
+  position: absolute;
+  top: 0;
+  left: 18px;
+  right: 18px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
+  content: "";
+}
+
+.brand-lockup {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 13px;
+  padding: 13px 16px;
+  pointer-events: auto;
+}
+
+.brand-mark {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid rgba(115, 243, 255, 0.44);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(229, 253, 255, 0.94), rgba(115, 243, 255, 0.3) 42%, rgba(16, 44, 68, 0.44) 72%);
+  color: #06131a;
+  font-size: 20px;
+  font-weight: 900;
+  box-shadow: 0 0 34px rgba(115, 243, 255, 0.36);
+}
+
+.brand-lockup strong,
+.panel-header strong,
+.telemetry-strip strong {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--cyan-hot);
+  font-size: 14px;
+  font-weight: 820;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.micro-label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.telemetry-strip {
+  display: grid;
+  grid-template-columns: 0.7fr 0.85fr minmax(0, 1.45fr);
+  pointer-events: auto;
+}
+
+.telemetry-strip article {
+  min-width: 0;
+  padding: 13px 15px;
+  border-right: 1px solid rgba(115, 243, 255, 0.1);
+}
+
+.telemetry-strip article:last-child {
+  border-right: 0;
+}
+
+.voice-dock {
+  top: 92px;
+  right: auto;
+  left: 24px;
+  display: grid;
+  width: min(520px, calc(100vw - 48px));
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  padding: 11px;
+}
+
+#voice-status,
+#queue-status {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-button,
+.radial-nav button,
+.ignite-button,
+.panel-actions button,
+.task-actions button,
+.memory-edit-row button,
+.operation-card button {
+  position: relative;
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  overflow: hidden;
+  border: 1px solid rgba(115, 243, 255, 0.28);
+  border-radius: 6px;
+  background:
+    linear-gradient(180deg, rgba(16, 57, 78, 0.7), rgba(3, 12, 20, 0.78));
+  color: var(--text);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.hud-button svg,
+.radial-nav svg,
+.ignite-button svg,
+.panel-actions svg,
+.operation-card button svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  stroke-width: 2.2;
+}
+
+.hud-button::after,
+.radial-nav button::after,
+.ignite-button::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 36%, rgba(255, 255, 255, 0.2), transparent 62%);
+  transform: translateX(-140%);
+  content: "";
+}
+
+.hud-button:hover,
+.radial-nav button:hover,
+.ignite-button:hover {
+  border-color: rgba(229, 253, 255, 0.76);
+  box-shadow: 0 0 24px rgba(115, 243, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.hud-button:hover::after,
+.radial-nav button:hover::after,
+.ignite-button:hover::after {
+  animation: button-sweep 720ms ease forwards;
+}
+
+.hud-button--primary {
+  border-color: rgba(115, 243, 255, 0.55);
+  color: var(--cyan-hot);
+}
+
+.ignite-button {
+  min-height: 52px;
+  border-color: rgba(255, 200, 87, 0.78);
+  background:
+    linear-gradient(180deg, rgba(255, 230, 158, 0.98), rgba(224, 150, 32, 0.96));
+  color: #170f04;
+  font-size: 12px;
+  box-shadow: 0 0 36px rgba(255, 200, 87, 0.24);
+}
+
+.radial-nav {
+  right: 24px;
+  top: 50%;
+  display: grid;
+  gap: 10px;
+  transform: translateY(-50%);
+}
+
+.radial-nav sl-tooltip {
+  display: block;
+}
+
+.radial-nav button {
+  width: 142px;
+  justify-content: flex-start;
+  padding-inline: 13px;
+  border-right-color: rgba(229, 253, 255, 0.42);
+  background:
+    linear-gradient(90deg, rgba(3, 9, 15, 0.18), rgba(11, 42, 58, 0.8));
+  clip-path: polygon(13px 0, 100% 0, 100% 100%, 0 100%, 0 13px);
+}
+
+.radial-nav button.active {
+  border-color: rgba(229, 253, 255, 0.78);
+  background:
+    linear-gradient(90deg, rgba(115, 243, 255, 0.12), rgba(24, 86, 114, 0.88));
+  color: var(--cyan-hot);
+  box-shadow: 0 0 34px rgba(115, 243, 255, 0.24);
+}
+
+.console-deck {
+  left: 50%;
+  bottom: 18px;
+  width: min(1080px, calc(100vw - 390px));
+  transform: translateX(-50%);
+}
+
+.console-view {
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  padding: 18px;
+  animation: panel-enter 220ms cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+.command-console {
+  padding: 0;
+  border-color: rgba(115, 243, 255, 0.3);
+  background:
+    radial-gradient(circle at 68% 8%, rgba(229, 253, 255, 0.18), transparent 24%),
+    linear-gradient(135deg, rgba(7, 33, 49, 0.74), rgba(1, 5, 10, 0.7) 58%, rgba(0, 0, 0, 0.44)),
+    repeating-linear-gradient(90deg, rgba(115, 243, 255, 0.035) 0 1px, transparent 1px 28px);
+  clip-path: polygon(24px 0, 100% 0, 100% calc(100% - 26px), calc(100% - 26px) 100%, 0 100%, 0 24px);
+}
+
+.command-console::after {
+  position: absolute;
+  right: 18px;
+  bottom: 18px;
+  width: 28%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--amber), var(--cyan-hot));
+  box-shadow: 0 0 28px rgba(255, 200, 87, 0.36);
+  content: "";
+}
+
+.command-console__matrix {
+  display: grid;
+  grid-template-columns: 176px minmax(0, 1fr);
+  min-height: 348px;
+}
+
+.session-rail {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  padding: 22px 16px;
+  border-right: 1px solid rgba(115, 243, 255, 0.18);
+  background:
+    linear-gradient(180deg, rgba(115, 243, 255, 0.11), transparent 36%),
+    rgba(0, 7, 13, 0.32);
+}
+
+.session-rail::after {
+  position: absolute;
+  top: 18px;
+  right: -1px;
+  bottom: 18px;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, var(--cyan), var(--amber), transparent);
+  box-shadow: 0 0 20px rgba(115, 243, 255, 0.6);
+  content: "";
+}
+
+.pulse-node {
+  display: block;
+  width: 58px;
+  aspect-ratio: 1;
+  border: 1px solid rgba(229, 253, 255, 0.7);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(229, 253, 255, 0.95), rgba(115, 243, 255, 0.34) 38%, rgba(42, 140, 255, 0.08) 64%, transparent 65%),
+    conic-gradient(from 0deg, transparent, rgba(115, 243, 255, 0.7), transparent, rgba(255, 200, 87, 0.55), transparent);
+  box-shadow: 0 0 34px rgba(115, 243, 255, 0.34);
+  animation: node-breathe 2.2s ease-in-out infinite;
+}
+
+.session-rail .system-chip,
+.session-rail #queue-status {
+  display: block;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cyan-hot);
+  font-size: 12px;
+  line-height: 1.28;
+  text-transform: none;
+}
+
+.session-rail .queue-controls {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.session-rail .hud-button {
+  justify-content: flex-start;
+  min-height: 34px;
+}
+
+.chat-stage {
+  min-width: 0;
+  padding: 22px;
+}
+
+.command-title {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.command-title strong {
+  display: block;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1.05;
+  text-shadow: 0 0 24px rgba(115, 243, 255, 0.34);
+}
+
+.command-frequency {
+  flex: 0 0 auto;
+  padding-top: 3px;
+  color: var(--amber-hot);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.chat-feed {
+  display: grid;
+  gap: 10px;
+  margin: 15px 0 14px;
+}
+
+.command-chat-feed {
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr) 86px;
+  align-items: stretch;
+  margin: 0;
+  min-height: 88px;
+}
+
+.chat-burst {
+  position: relative;
+  max-width: min(560px, 100%);
+  min-width: 0;
+  padding: 11px 13px;
+  border: 1px solid rgba(115, 243, 255, 0.17);
+  background:
+    linear-gradient(90deg, rgba(115, 243, 255, 0.1), rgba(0, 5, 12, 0.4));
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+
+.command-chat-feed .chat-burst {
+  display: grid;
+  align-content: start;
+  max-width: none;
+  min-height: 88px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 0 0, rgba(229, 253, 255, 0.13), transparent 42%),
+    linear-gradient(115deg, rgba(9, 38, 54, 0.56), rgba(0, 5, 12, 0.48));
+}
+
+.chat-burst--user {
+  justify-self: end;
+  border-color: rgba(255, 200, 87, 0.22);
+  background:
+    linear-gradient(270deg, rgba(255, 200, 87, 0.13), rgba(0, 5, 12, 0.42));
+}
+
+.command-chat-feed .chat-burst--user {
+  justify-self: stretch;
+  border-color: rgba(255, 200, 87, 0.28);
+  background:
+    radial-gradient(circle at 100% 0, rgba(255, 200, 87, 0.14), transparent 44%),
+    linear-gradient(245deg, rgba(255, 200, 87, 0.12), rgba(0, 5, 12, 0.48));
+}
+
+.chat-burst--system::after,
+.chat-burst--user::after {
+  position: absolute;
+  right: 11px;
+  bottom: 10px;
+  width: 34%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(229, 253, 255, 0.58));
+  box-shadow: 0 0 18px rgba(115, 243, 255, 0.3);
+  content: "";
+}
+
+.chat-burst--user::after {
+  background: linear-gradient(90deg, transparent, rgba(255, 200, 87, 0.62));
+  box-shadow: 0 0 18px rgba(255, 200, 87, 0.24);
+}
+
+.chat-burst span {
+  display: block;
+  color: var(--cyan);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.chat-burst--user span {
+  color: var(--amber-hot);
+}
+
+.chat-burst p {
+  display: -webkit-box;
+  margin: 5px 0 0;
+  overflow: hidden;
+  color: #d8eef2;
+  font-size: 12px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.chat-signal {
+  position: relative;
+  display: flex;
+  min-height: 88px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid rgba(115, 243, 255, 0.16);
+  background:
+    radial-gradient(circle, rgba(115, 243, 255, 0.12), transparent 55%),
+    rgba(0, 5, 12, 0.34);
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+
+.chat-signal span {
+  width: 4px;
+  height: 18px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--cyan-hot), var(--cyan), transparent);
+  box-shadow: 0 0 18px rgba(115, 243, 255, 0.55);
+  opacity: 0.42;
+  animation: chat-signal 980ms ease-in-out infinite;
+}
+
+.chat-signal span:nth-child(2) { animation-delay: 120ms; }
+.chat-signal span:nth-child(3) { animation-delay: 240ms; }
+.chat-signal span:nth-child(4) { animation-delay: 360ms; }
+.chat-signal span:nth-child(5) { animation-delay: 480ms; }
+
+.composer-shell {
+  position: relative;
+  padding: 12px;
+  border: 1px solid rgba(229, 253, 255, 0.2);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(115, 243, 255, 0.14), transparent 42%),
+    rgba(0, 4, 10, 0.56);
+  box-shadow: inset 0 0 30px rgba(115, 243, 255, 0.055), 0 0 42px rgba(0, 0, 0, 0.28);
+}
+
+.composer-shell::before {
+  position: absolute;
+  inset: -1px;
+  border-radius: 12px;
+  background: linear-gradient(115deg, transparent, rgba(229, 253, 255, 0.22), transparent 58%);
+  opacity: 0.38;
+  pointer-events: none;
+  content: "";
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.system-chip {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  border: 1px solid rgba(255, 200, 87, 0.42);
+  border-radius: 5px;
+  padding: 0 10px;
+  background: rgba(255, 200, 87, 0.1);
+  color: var(--amber-hot);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+textarea,
+input,
+select {
+  width: 100%;
+  border: 1px solid rgba(115, 243, 255, 0.2);
+  border-radius: 7px;
+  background: rgba(0, 5, 11, 0.58);
+  color: var(--text);
+  outline: none;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+
+textarea:focus,
+input:focus,
+select:focus {
+  border-color: rgba(229, 253, 255, 0.78);
+  background: rgba(2, 11, 18, 0.76);
+  box-shadow: 0 0 0 3px rgba(115, 243, 255, 0.11), 0 0 30px rgba(115, 243, 255, 0.12);
+}
+
+textarea::placeholder {
+  color: #6f8994;
+}
+
+#task-prompt {
+  position: relative;
+  min-height: 64px;
+  height: 64px;
+  resize: none;
+  padding: 12px 13px;
+  border-color: rgba(115, 243, 255, 0.24);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(5, 22, 34, 0.62), rgba(0, 4, 9, 0.6));
+  font-size: 13px;
+  line-height: 1.38;
+}
+
+.command-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 148px;
+  gap: 12px;
+  align-items: end;
+  margin-top: 12px;
+}
+
+.composer-actions {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 148px;
+  gap: 12px;
+  align-items: end;
+  margin-top: 11px;
+}
+
+.command-console {
+  padding: 12px;
+  background:
+    linear-gradient(135deg, rgba(8, 28, 42, 0.82), rgba(0, 5, 11, 0.72)),
+    repeating-linear-gradient(90deg, rgba(115, 243, 255, 0.026) 0 1px, transparent 1px 30px);
+}
+
+.command-console::after {
+  right: 12px;
+  bottom: 10px;
+  width: 18%;
+}
+
+.mission-control {
+  display: grid;
+  gap: 12px;
+}
+
+.mission-header {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(360px, 1.25fr) auto;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.mission-title,
+.mission-vitals,
+.mission-card,
+.mission-event,
+.mission-status-strip {
+  position: relative;
+  border: 1px solid rgba(115, 243, 255, 0.18);
+  background:
+    radial-gradient(circle at 12% 0, rgba(229, 253, 255, 0.1), transparent 36%),
+    linear-gradient(135deg, rgba(8, 34, 50, 0.64), rgba(0, 5, 11, 0.5));
+  box-shadow: inset 0 0 28px rgba(115, 243, 255, 0.045);
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+}
+
+.mission-title {
+  min-width: 0;
+  padding: 13px 15px;
+}
+
+.mission-title strong {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #fff;
+  font-size: 19px;
+  font-weight: 900;
+  line-height: 1.12;
+  text-shadow: 0 0 22px rgba(115, 243, 255, 0.24);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.mission-vitals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.mission-vitals span,
+.mission-status-strip > span {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 4px;
+  padding: 10px 12px;
+  border-right: 1px solid rgba(115, 243, 255, 0.1);
+}
+
+.mission-vitals span:last-child,
+.mission-status-strip > span:last-child {
+  border-right: 0;
+}
+
+.mission-vitals b,
+.mission-status-strip strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--cyan-hot);
+  font-size: 11px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mission-vitals em {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mission-header .queue-controls {
+  display: grid;
+  grid-template-columns: 82px 92px;
+  gap: 7px;
+  align-self: stretch;
+  margin: 0;
+}
+
+.mission-header .queue-controls .hud-button {
+  min-height: 100%;
+  padding-inline: 9px;
+}
+
+.mission-grid {
+  display: grid;
+  grid-template-columns: 0.78fr 1.04fr 1fr;
+  gap: 12px;
+}
+
+.mission-card {
+  display: grid;
+  min-height: 164px;
+  align-content: start;
+  gap: 10px;
+  padding: 13px;
+  overflow: hidden;
+}
+
+.mission-card strong {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 880;
+  line-height: 1.2;
+}
+
+.mission-card p,
+.mission-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.mission-card--phase {
+  border-color: rgba(255, 200, 87, 0.28);
+  background:
+    radial-gradient(circle at 100% 0, rgba(255, 200, 87, 0.12), transparent 42%),
+    linear-gradient(135deg, rgba(8, 34, 50, 0.64), rgba(0, 5, 11, 0.5));
+}
+
+.mission-progress {
+  height: 9px;
+  overflow: hidden;
+  border: 1px solid rgba(115, 243, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(0, 5, 11, 0.56);
+}
+
+.mission-progress span {
+  display: block;
+  width: 8%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--cyan), var(--cyan-hot), var(--amber));
+  box-shadow: 0 0 22px rgba(115, 243, 255, 0.5);
+  transition: width 180ms ease;
+}
+
+.mission-memory-context {
+  display: grid;
+  max-height: 126px;
+  gap: 7px;
+  overflow: auto;
+  padding-right: 3px;
+}
+
+.memory-chip {
+  display: grid;
+  width: 100%;
+  min-height: 48px;
+  justify-items: start;
+  gap: 4px;
+  padding: 8px 9px;
+  border: 1px solid rgba(115, 243, 255, 0.16);
+  border-radius: 7px;
+  background:
+    linear-gradient(90deg, rgba(115, 243, 255, 0.12), rgba(0, 8, 14, 0.46));
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.memory-chip:hover,
+.memory-chip.selected {
+  border-color: rgba(229, 253, 255, 0.58);
+  background: rgba(21, 78, 100, 0.38);
+  transform: translateX(2px);
+}
+
+.memory-chip--created {
+  border-color: rgba(136, 255, 202, 0.48);
+  box-shadow: inset 0 0 28px rgba(136, 255, 202, 0.08), 0 0 18px rgba(136, 255, 202, 0.09);
+}
+
+.memory-chip strong {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--cyan-hot);
+  font-size: 11px;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-chip span,
+.memory-chip em {
+  max-width: 100%;
+  overflow: hidden;
+  color: #9cb8c0;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.memory-chip em {
+  color: var(--amber-hot);
+  text-transform: none;
+}
+
+.memory-chip--missing {
+  border-style: dashed;
+}
+
+.mission-artifacts {
+  display: grid;
+  max-height: 106px;
+  gap: 8px;
+  overflow: auto;
+  padding-right: 3px;
+}
+
+.artifact-group {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: 5px 8px;
+  align-items: start;
+}
+
+.artifact-group span {
+  grid-column: 1;
+  grid-row: 1 / span 4;
+  color: var(--amber-hot);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.artifact-group > code,
+.artifact-group > .artifact-file {
+  grid-column: 2;
+}
+
+.artifact-group code {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(115, 243, 255, 0.13);
+  border-radius: 5px;
+  padding: 3px 6px;
+  background: rgba(0, 5, 11, 0.44);
+  color: #dff8f9;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-file {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  border: 1px solid rgba(115, 243, 255, 0.18);
+  border-radius: 6px;
+  padding: 0;
+  background: rgba(2, 20, 30, 0.5);
+  color: #dff8f9;
+  cursor: pointer;
+}
+
+.artifact-file code {
+  border: 0;
+  background: transparent;
+}
+
+.artifact-file span {
+  padding-right: 7px;
+  color: var(--amber-hot);
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.artifact-file:hover {
+  border-color: rgba(255, 205, 98, 0.55);
+  box-shadow: 0 0 14px rgba(115, 243, 255, 0.12);
+}
+
+.mission-timeline {
+  display: grid;
+  grid-template-columns: minmax(0, 1.34fr) minmax(230px, 0.56fr);
+  gap: 10px;
+}
+
+.mission-event {
+  display: grid;
+  min-height: 108px;
+  align-content: start;
+  gap: 5px;
+  overflow: hidden;
+  padding: 11px 12px;
+}
+
+.mission-event > span {
+  color: var(--cyan);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mission-event strong {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 860;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.mission-event p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.42;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.mission-event pre {
+  min-height: 0;
+  max-height: 100%;
+  margin: 0;
+  overflow: auto;
+  color: #dff8f9;
+  font-size: 12px;
+  line-height: 1.48;
+  white-space: pre-wrap;
+}
+
+.mission-event--response {
+  min-height: 344px;
+  grid-row: span 2;
+  background:
+    radial-gradient(circle at 22% 0, rgba(229, 253, 255, 0.18), transparent 28%),
+    radial-gradient(circle at 86% 18%, rgba(255, 200, 87, 0.08), transparent 24%),
+    linear-gradient(145deg, rgba(8, 34, 52, 0.9), rgba(0, 4, 10, 0.76) 58%, rgba(2, 13, 21, 0.82));
+}
+
+.mission-event--response.is-live {
+  border-color: rgba(229, 253, 255, 0.5);
+  box-shadow: inset 0 0 42px rgba(115, 243, 255, 0.08), 0 0 46px rgba(115, 243, 255, 0.12);
+}
+
+.conversation-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.conversation-header span {
+  color: var(--cyan);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.conversation-header strong {
+  flex: 0 0 auto;
+  color: var(--amber-hot);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.conversation-stream {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-height: 274px;
+  gap: 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 4px 4px 2px;
+  scroll-behavior: auto;
+}
+
+.conversation-stream::before {
+  position: sticky;
+  z-index: 1;
+  top: -8px;
+  display: block;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(229, 253, 255, 0.54), rgba(115, 243, 255, 0.2), transparent);
+  box-shadow: 0 0 26px rgba(115, 243, 255, 0.34);
+  content: "";
+}
+
+.conversation-message {
+  position: relative;
+  display: grid;
+  width: min(88%, 760px);
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid rgba(115, 243, 255, 0.16);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 0 0, rgba(229, 253, 255, 0.12), transparent 36%),
+    linear-gradient(135deg, rgba(5, 26, 39, 0.72), rgba(0, 5, 11, 0.58));
+  box-shadow: inset 0 0 24px rgba(115, 243, 255, 0.04), 0 16px 44px rgba(0, 0, 0, 0.24);
+}
+
+.conversation-message::after {
+  position: absolute;
+  right: 12px;
+  bottom: 0;
+  left: 36%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(115, 243, 255, 0.42));
+  content: "";
+}
+
+.conversation-message--user {
+  justify-self: end;
+  border-color: rgba(255, 200, 87, 0.32);
+  background:
+    radial-gradient(circle at 100% 0, rgba(255, 200, 87, 0.16), transparent 38%),
+    linear-gradient(225deg, rgba(54, 37, 9, 0.62), rgba(0, 5, 11, 0.6));
+}
+
+.conversation-message--user::after {
+  right: 36%;
+  left: 12px;
+  background: linear-gradient(90deg, rgba(255, 200, 87, 0.5), transparent);
+}
+
+.conversation-message--assistant.is-live {
+  border-color: rgba(229, 253, 255, 0.54);
+  box-shadow: inset 0 0 34px rgba(115, 243, 255, 0.08), 0 0 32px rgba(115, 243, 255, 0.12);
+}
+
+.conversation-message__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--cyan);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.conversation-message__meta em {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-message--user .conversation-message__meta {
+  color: var(--amber-hot);
+}
+
+.conversation-message p {
+  display: block;
+  margin: 0;
+  color: #f2fbff;
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-line-clamp: unset;
+}
+
+.conversation-message pre {
+  min-height: 0;
+  max-height: none;
+  margin: 0;
+  color: #e8fdff;
+  font-size: 12px;
+  line-height: 1.52;
+  white-space: pre-wrap;
+}
+
+.mission-event--activity {
+  min-height: 168px;
+}
+
+.mission-activity-list {
+  display: grid;
+  gap: 7px;
+}
+
+.mission-activity-list p {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 27px;
+  padding: 5px 7px;
+  border: 1px solid rgba(115, 243, 255, 0.12);
+  border-radius: 7px;
+  background: rgba(0, 7, 12, 0.34);
+  -webkit-line-clamp: unset;
+}
+
+.mission-activity-list p.active {
+  border-color: rgba(255, 200, 87, 0.42);
+  background: rgba(255, 200, 87, 0.08);
+}
+
+.mission-activity-list b {
+  color: var(--cyan-hot);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.mission-activity-list em {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thinking-signal {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, 10px) minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+  min-height: 38px;
+  color: var(--amber-hot);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.thinking-signal i {
+  display: block;
+  width: 9px;
+  height: 26px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--cyan-hot), var(--cyan), transparent);
+  box-shadow: 0 0 18px rgba(115, 243, 255, 0.55);
+  animation: thinking-pulse 820ms ease-in-out infinite;
+}
+
+.thinking-signal i:nth-child(2) { animation-delay: 110ms; }
+.thinking-signal i:nth-child(3) { animation-delay: 220ms; }
+.thinking-signal i:nth-child(4) { animation-delay: 330ms; }
+
+.mission-event--command {
+  border-color: rgba(255, 200, 87, 0.24);
+}
+
+.mission-event--failed,
+.mission-event--timed_out,
+.mission-event--cancelled {
+  border-color: rgba(255, 97, 116, 0.36);
+}
+
+.mission-event--completed {
+  border-color: rgba(136, 255, 202, 0.3);
+}
+
+.mission-event--signal {
+  justify-items: stretch;
+  min-height: 118px;
+}
+
+.mission-event--signal .chat-signal {
+  min-height: 42px;
+  border: 0;
+  background: transparent;
+  clip-path: none;
+}
+
+.artifact-catalog {
+  display: grid;
+  gap: 18px;
+}
+
+.artifact-category {
+  display: grid;
+  gap: 10px;
+}
+
+.artifact-category > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.artifact-category > header strong {
+  color: var(--cyan-hot);
+  font-size: 13px;
+}
+
+.artifact-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.artifact-card,
+.artifact-empty {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid rgba(115, 243, 255, 0.18);
+  border-radius: 10px;
+  padding: 13px;
+  background:
+    radial-gradient(circle at 0 0, rgba(115, 243, 255, 0.12), transparent 34%),
+    linear-gradient(135deg, rgba(8, 34, 50, 0.62), rgba(0, 5, 11, 0.54));
+  box-shadow: inset 0 0 28px rgba(115, 243, 255, 0.045);
+}
+
+.artifact-card__head {
+  display: grid;
+  gap: 4px;
+}
+
+.artifact-card__head span,
+.artifact-card__head em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.artifact-card__head strong,
+.artifact-empty strong {
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.2;
+  text-transform: capitalize;
+}
+
+.artifact-card__files {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.artifact-card__files > code {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(115, 243, 255, 0.13);
+  border-radius: 6px;
+  padding: 4px 7px;
+  background: rgba(0, 5, 11, 0.44);
+  color: #dff8f9;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-card__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.mission-status-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.command-dock {
+  display: grid;
+  gap: 9px;
+}
+
+.command-dock__meta {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.7fr) minmax(110px, 0.7fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.command-dock__meta > div {
+  min-width: 0;
+}
+
+.command-dock__meta .system-chip,
+.command-dock__meta #queue-status {
+  display: block;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--cyan-hot);
+  font-size: 12px;
+  line-height: 1.2;
+  text-transform: none;
+}
+
+.command-dock .queue-controls {
+  display: grid;
+  grid-template-columns: 82px 92px;
+  gap: 7px;
+  margin: 0;
+}
+
+.command-dock .queue-controls .hud-button {
+  min-height: 30px;
+  padding-inline: 9px;
+}
+
+.command-dock__main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.mission-control .command-dock__main {
+  margin-top: 2px;
+}
+
+.command-dock .workspace-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.mission-control .workspace-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.command-dock .workspace-field .micro-label {
+  margin: 0;
+}
+
+.mission-control .workspace-field .micro-label {
+  margin: 0;
+}
+
+.command-dock .workspace-field input {
+  min-height: 34px;
+}
+
+.mission-control .workspace-field input {
+  min-height: 34px;
+}
+
+.workspace-field input {
+  min-height: 52px;
+  padding: 0 13px;
+  color: #dff5f8;
+  font-size: 12px;
+}
+
+.queue-controls {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.operation-channel {
+  top: 154px;
+  left: 24px;
+  right: auto;
+  width: min(520px, calc(100vw - 220px));
+  min-width: 410px;
+  max-height: calc(100vh - 360px);
+  overflow: auto;
+  transform: none;
+}
+
+.operation-channel:not(.hidden)::before {
+  position: fixed;
+  top: 50%;
+  left: min(544px, calc(100vw - 220px));
+  width: 22vw;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(229, 253, 255, 0.75), rgba(115, 243, 255, 0.28), transparent);
+  box-shadow: 0 0 24px rgba(115, 243, 255, 0.34);
+  transform: rotate(-8deg);
+  transform-origin: left center;
+  pointer-events: none;
+  content: "";
+}
+
+.operation-channel:not(.hidden)::after {
+  position: fixed;
+  top: calc(50% - 58px);
+  left: 50%;
+  width: 116px;
+  aspect-ratio: 1;
+  border: 1px solid rgba(229, 253, 255, 0.42);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(229, 253, 255, 0.18), rgba(115, 243, 255, 0.06) 48%, transparent 70%);
+  box-shadow: 0 0 42px rgba(115, 243, 255, 0.28);
+  transform: translateX(-50%);
+  pointer-events: none;
+  content: "";
+  animation: response-halo 1.3s ease-in-out infinite;
+}
+
+.operation-card {
+  padding: 16px 16px 14px;
+  overflow: hidden;
+  border-color: rgba(229, 253, 255, 0.26);
+  background:
+    radial-gradient(circle at 100% 50%, rgba(229, 253, 255, 0.16), transparent 38%),
+    linear-gradient(105deg, rgba(9, 38, 54, 0.78), rgba(1, 5, 10, 0.58) 58%, rgba(0, 0, 0, 0.22));
+  box-shadow: 0 20px 78px rgba(0, 0, 0, 0.36), 0 0 46px rgba(115, 243, 255, 0.12);
+  clip-path: polygon(0 0, calc(100% - 26px) 0, 100% 26px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
+}
+
+.operation-card::after {
+  position: absolute;
+  top: 50%;
+  right: -1px;
+  width: 88px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan-hot));
+  box-shadow: 0 0 24px rgba(229, 253, 255, 0.44);
+  content: "";
+}
+
+.operation-card.failed,
+.operation-card.timed_out,
+.operation-card.cancelled {
+  border-color: rgba(255, 97, 116, 0.34);
+}
+
+.operation-card__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--cyan-hot);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.operation-card__id {
+  color: var(--amber);
+  font-variant-numeric: tabular-nums;
+}
+
+.operation-card__title {
+  display: block;
+  margin-top: 8px;
+  color: #fff;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.operation-card__phase {
+  margin: 5px 0 0;
+  color: var(--amber-hot);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.operation-card__prompt {
+  display: -webkit-box;
+  margin: 10px 0 12px;
+  overflow: hidden;
+  color: #dceef2;
+  font-size: 13px;
+  line-height: 1.42;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.operation-card__output,
+.detail-module pre {
+  max-height: 38vh;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid rgba(115, 243, 255, 0.16);
+  border-radius: 7px;
+  background: rgba(0, 3, 8, 0.62);
+  color: #dff8f9;
+  font-size: 11px;
+  line-height: 1.52;
+  padding: 11px;
+  white-space: pre-wrap;
+}
+
+.operation-card .signal-bars {
+  margin-top: 8px;
+}
+
+.signal-bars {
+  display: flex;
+  width: 172px;
+  height: 30px;
+  align-items: center;
+  gap: 7px;
+}
+
+.signal-bars span {
+  width: 22px;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--cyan), var(--cyan-hot));
+  box-shadow: 0 0 18px rgba(115, 243, 255, 0.72);
+  opacity: 0.32;
+  animation: signal-rise 680ms ease-in-out infinite;
+}
+
+.signal-bars span:nth-child(2) { animation-delay: 110ms; }
+.signal-bars span:nth-child(3) { animation-delay: 220ms; }
+.signal-bars span:nth-child(4) { animation-delay: 330ms; }
+.signal-bars span:nth-child(5) { animation-delay: 440ms; }
+.signal-bars span:nth-child(6) { animation-delay: 550ms; }
+
+.operation-card button {
+  margin-top: 12px;
+}
+
+.split-console {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.72fr);
+  gap: 12px;
+  min-height: 280px;
+}
+
+.split-console:has(.detail-module.hidden) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.scroll-stream {
+  max-height: 38vh;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.data-node {
+  position: relative;
+  margin-bottom: 9px;
+  padding: 11px 12px;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.data-node:hover,
+.data-node.selected {
+  border-color: rgba(229, 253, 255, 0.52);
+  background:
+    linear-gradient(135deg, rgba(24, 84, 108, 0.54), rgba(2, 10, 16, 0.44));
+  transform: translateX(2px);
+}
+
+.data-node.crystal-active {
+  border-color: rgba(0, 240, 255, 0.65);
+  box-shadow: inset 0 0 24px rgba(0, 240, 255, 0.06), 0 0 20px rgba(0, 240, 255, 0.1);
+  background:
+    linear-gradient(135deg, rgba(20, 60, 80, 0.6), rgba(2, 10, 16, 0.5));
+}
+
+.data-node__meta,
+.data-node div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.data-node strong,
+.detail-module strong,
+.diagnostics-grid strong {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 820;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.data-node span,
+.detail-module span,
+.task-memory-activity span,
+.diagnostics-grid span {
+  color: #7f98a1;
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.data-node p,
+.detail-module p,
+.diagnostics-grid p,
+.task-memory-activity p {
+  display: -webkit-box;
+  margin: 7px 0 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.42;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.data-node button {
+  min-height: 27px;
+  margin-top: 9px;
+  padding-inline: 10px;
+}
+
+.detail-module {
+  align-self: start;
+  max-height: 38vh;
+  overflow: auto;
+  padding: 12px;
+}
+
+.detail-module input {
+  min-height: 36px;
+  margin-top: 8px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.detail-module textarea {
+  min-height: 100px;
+  margin-top: 9px;
+  padding: 10px;
+  resize: vertical;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.panel-actions,
+.memory-edit-row,
+.task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 116px;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.filter-row input,
+.filter-row select {
+  min-height: 38px;
+  padding: 0 11px;
+  font-size: 12px;
+}
+
+.empty-state {
+  padding: 14px;
+  border: 1px dashed rgba(115, 243, 255, 0.18);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-grid label {
+  display: block;
+  padding: 12px;
+  color: #839aa2;
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.settings-grid input {
+  min-height: 38px;
+  margin-top: 8px;
+  padding: 0 11px;
+  text-transform: none;
+}
+
+.settings-grid select {
+  min-height: 38px;
+  margin-top: 8px;
+  padding: 0 11px;
+  text-transform: none;
+}
+
+.settings-section {
+  margin-top: 14px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(115, 243, 255, 0.1), transparent 28%),
+    radial-gradient(circle at 86% 12%, rgba(255, 200, 87, 0.08), transparent 28%),
+    linear-gradient(135deg, rgba(10, 45, 62, 0.5), rgba(1, 6, 12, 0.55));
+  border: 1px solid var(--line-soft);
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+}
+
+.section-label {
+  display: block;
+  margin-bottom: 10px;
+  color: var(--cyan-hot);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.settings-section-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.settings-section-grid label {
+  display: block;
+  color: #839aa2;
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.settings-section-grid input,
+.settings-section-grid select {
+  min-height: 34px;
+  margin-top: 6px;
+  padding: 0 11px;
+  font-size: 12px;
+  text-transform: none;
+}
+
+.settings-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.key-status {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 10px;
+  color: var(--ok);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.model-profile-summary {
+  padding: 10px 12px;
+  color: var(--cyan-hot);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.model-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(118px, 1fr));
+  gap: 9px;
+  margin-bottom: 12px;
+}
+
+.model-preset-card {
+  display: grid;
+  min-height: 78px;
+  align-content: space-between;
+  justify-items: start;
+  padding: 11px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.model-preset-card svg {
+  width: 16px;
+  height: 16px;
+  color: var(--cyan);
+  stroke-width: 2.2;
+}
+
+.model-preset-card span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--cyan-hot);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.model-preset-card strong {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 780;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.model-preset-card:hover,
+.model-preset-card.selected {
+  border-color: rgba(255, 200, 87, 0.58);
+  background:
+    linear-gradient(135deg, rgba(255, 200, 87, 0.12), rgba(6, 25, 36, 0.68)),
+    linear-gradient(90deg, rgba(115, 243, 255, 0.08), transparent);
+  box-shadow: 0 16px 54px rgba(0, 0, 0, 0.3), 0 0 30px rgba(255, 200, 87, 0.1);
+  transform: translateY(-1px);
+}
+
+.model-key-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 12px;
+  padding: 12px;
+}
+
+.model-key-panel label {
+  color: #839aa2;
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.model-key-panel input {
+  min-height: 38px;
+  margin-top: 8px;
+  padding: 0 11px;
+}
+
+.model-key-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.model-apply-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  background:
+    linear-gradient(135deg, rgba(15, 59, 82, 0.48), rgba(3, 10, 17, 0.58) 58%, rgba(2, 5, 10, 0.34)),
+    linear-gradient(90deg, rgba(115, 243, 255, 0.08), transparent 42%, rgba(255, 200, 87, 0.035));
+  box-shadow: var(--panel-shadow);
+  backdrop-filter: blur(18px);
+}
+
+.model-apply-row .hud-button {
+  min-width: 140px;
+}
+
+.model-apply-row #model-apply-status {
+  color: var(--ok);
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.model-key-panel p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.model-instructions {
+  margin-top: 12px;
+  padding: 12px;
+  color: #d8eef2;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.model-instructions strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--amber-hot);
+  font-size: 12px;
+}
+
+.model-instructions ol {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.model-instructions li {
+  margin: 4px 0;
+}
+
+.model-instructions code {
+  color: var(--cyan-hot);
+}
+
+.diagnostics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.diagnostics-grid article {
+  padding: 12px;
+}
+
+.diagnostics-grid p {
+  overflow-wrap: anywhere;
+  -webkit-line-clamp: 4;
+}
+
+.film-grain {
+  z-index: 4;
+  opacity: 0.15;
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.16) 0 1px, transparent 1px),
+    radial-gradient(circle at 80% 70%, rgba(115, 243, 255, 0.12) 0 1px, transparent 1px);
+  background-size: 6px 6px, 10px 10px;
+  mix-blend-mode: screen;
+}
+
+.scanline-field {
+  z-index: 5;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      rgba(229, 253, 255, 0.018),
+      rgba(229, 253, 255, 0.018) 1px,
+      transparent 1px,
+      transparent 5px
+    );
+  opacity: 0.42;
+}
+
+sl-tooltip::part(base__popup) {
+  z-index: 20;
+}
+
+@keyframes star-drift {
+  to {
+    transform: translate3d(-170px, 80px, 0);
+  }
+}
+
+@keyframes reticle-turn {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
+@keyframes light-sweep {
+  0%,
+  42% {
+    transform: translateX(-34%) rotate(0deg);
+    opacity: 0;
+  }
+
+  50% {
+    opacity: 0.86;
+  }
+
+  64%,
+  100% {
+    transform: translateX(34%) rotate(0deg);
+    opacity: 0;
+  }
+}
+
+@keyframes button-sweep {
+  to {
+    transform: translateX(140%);
+  }
+}
+
+@keyframes panel-enter {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes signal-rise {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: scaleY(1);
+  }
+
+  48% {
+    opacity: 1;
+    transform: scaleY(3.4);
+  }
+}
+
+@keyframes chat-signal {
+  0%,
+  100% {
+    opacity: 0.32;
+    transform: scaleY(0.48);
+  }
+
+  48% {
+    opacity: 0.95;
+    transform: scaleY(1.28);
+  }
+}
+
+@keyframes thinking-pulse {
+  0%,
+  100% {
+    opacity: 0.32;
+    transform: scaleY(0.58);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scaleY(1.08);
+  }
+}
+
+@keyframes response-halo {
+  0%,
+  100% {
+    opacity: 0.44;
+    transform: translateX(-50%) scale(0.94);
+  }
+
+  50% {
+    opacity: 0.9;
+    transform: translateX(-50%) scale(1.18);
+  }
+}
+
+@keyframes node-breathe {
+  0%,
+  100% {
+    filter: brightness(0.9);
+    transform: scale(0.96) rotate(0deg);
+  }
+
+  50% {
+    filter: brightness(1.22);
+    transform: scale(1.04) rotate(18deg);
+  }
+}
+
+@media (max-width: 1240px) {
+  .command-mast {
+    grid-template-columns: 1fr;
+    right: 176px;
+  }
+
+  .voice-dock {
+    top: 150px;
+    left: 24px;
+    right: auto;
+  }
+
+  .console-deck {
+    left: 24px;
+    right: 176px;
+    width: auto;
+    transform: none;
+  }
+
+  .command-console__matrix {
+    grid-template-columns: 150px minmax(0, 1fr);
+  }
+
+  .mission-header,
+  .mission-grid,
+  .mission-timeline {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .operation-channel {
+    top: 220px;
+    left: 24px;
+    right: auto;
+    width: min(470px, calc(100vw - 220px));
+    min-width: 0;
+    max-height: calc(100vh - 430px);
+    transform: none;
+  }
+}
+
+@media (max-width: 900px) {
+  html,
+  body,
+  #app {
+    height: auto;
+    overflow: auto;
+    min-height: 100%;
+  }
+
+  #app {
+    min-height: 100vh;
+    padding: 12px;
+  }
+
+  #core {
+    position: fixed;
+  }
+
+  .command-mast,
+  .voice-dock,
+  .radial-nav,
+  .console-deck,
+  .operation-channel {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
+    width: auto;
+    transform: none;
+  }
+
+  .command-mast {
+    display: grid;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .telemetry-strip {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .voice-dock {
+    grid-template-columns: auto auto minmax(0, 1fr);
+    margin-bottom: 10px;
+  }
+
+  .radial-nav {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .radial-nav button {
+    width: 100%;
+    min-height: 42px;
+    padding: 0 8px;
+  }
+
+  .radial-nav button span {
+    display: none;
+  }
+
+  .operation-channel {
+    max-height: none;
+    min-width: 0;
+    margin-bottom: 10px;
+  }
+
+  .operation-channel::before,
+  .operation-channel::after {
+    display: none;
+  }
+
+  .console-deck {
+    margin-bottom: 12px;
+  }
+
+  .console-view {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .split-console {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .command-console__matrix {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .session-rail {
+    grid-template-columns: 58px minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+    border-right: 0;
+    border-bottom: 1px solid rgba(115, 243, 255, 0.18);
+  }
+
+  .session-rail::after {
+    top: auto;
+    right: 18px;
+    bottom: -1px;
+    left: 18px;
+    width: auto;
+    height: 1px;
+  }
+
+  .session-rail .queue-controls {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .command-dock__meta {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .command-dock .queue-controls {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .command-dock__main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mission-vitals,
+  .mission-status-strip {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-grid--local {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .model-preset-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .model-key-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .model-key-actions {
+    justify-content: flex-start;
+  }
+
+  .scroll-stream,
+  .detail-module {
+    max-height: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .brand-lockup {
+    padding: 11px;
+  }
+
+  .telemetry-strip {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .telemetry-strip article:last-child {
+    grid-column: 1 / -1;
+    border-top: 1px solid rgba(115, 243, 255, 0.1);
+  }
+
+  .voice-dock,
+  .command-grid,
+  .composer-actions,
+  .queue-controls,
+  .settings-grid,
+  .settings-grid--local,
+  .model-preset-grid,
+  .model-key-panel,
+  .diagnostics-grid,
+  .filter-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .local-model-console__head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .panel-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .panel-actions {
+    justify-content: flex-start;
+  }
+
+  #voice-status,
+  #queue-status {
+    white-space: normal;
+  }
+
+  .chat-stage,
+  .session-rail {
+    padding: 16px;
+  }
+
+  .command-title {
+    display: block;
+  }
+
+  .command-title strong {
+    font-size: 21px;
+  }
+
+  .chat-burst {
+    max-width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+@media (min-width: 901px) {
+  .command-mast,
+  .voice-dock,
+  .radial-nav {
+    z-index: 5;
+  }
+
+  .cockpit-shell:has(.command-console.active-view) .cockpit-backdrop {
+    background:
+      linear-gradient(90deg, rgba(0, 0, 0, 0.74), transparent 22%, transparent 78%, rgba(0, 0, 0, 0.78)),
+      linear-gradient(180deg, rgba(1, 3, 8, 0.08), transparent 38%, rgba(0, 0, 0, 0.62));
+  }
+
+  .cockpit-shell:has(.command-console.active-view) .orb-target--outer {
+    width: min(50vw, 660px);
+  }
+
+  .cockpit-shell:has(.command-console.active-view) .orb-target--inner {
+    width: min(32vw, 420px);
+  }
+
+  .console-deck:has(.command-console.active-view) {
+    inset: 0;
+    width: auto;
+    transform: none;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  .command-console.active-view {
+    position: fixed;
+    inset: 0;
+    max-height: none;
+    overflow: visible;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: none;
+    clip-path: none;
+    pointer-events: none;
+  }
+
+  .command-console.active-view::before,
+  .command-console.active-view::after {
+    display: none;
+  }
+
+  .command-console.active-view .mission-control {
+    position: absolute;
+    inset: 158px 206px 18px 28px;
+    display: grid;
+    grid-template-columns: 300px minmax(460px, 1fr) 330px;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 16px 22px;
+    pointer-events: none;
+  }
+
+  .command-console.active-view .mission-header,
+  .command-console.active-view .mission-card,
+  .command-console.active-view .mission-event,
+  .command-console.active-view .command-dock__main,
+  .command-console.active-view .workspace-field {
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-header {
+    grid-column: 1;
+    grid-row: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    align-self: start;
+  }
+
+  .command-console.active-view .mission-title {
+    padding: 16px 18px 14px;
+    border-color: rgba(115, 243, 255, 0.22);
+    background:
+      radial-gradient(circle at 0 0, rgba(115, 243, 255, 0.18), transparent 42%),
+      linear-gradient(135deg, rgba(6, 26, 39, 0.72), rgba(0, 5, 11, 0.5));
+    box-shadow: 0 20px 70px rgba(0, 0, 0, 0.28), inset 0 0 34px rgba(115, 243, 255, 0.04);
+    clip-path: none;
+    border-radius: 10px;
+  }
+
+  .command-console.active-view .mission-title strong {
+    margin-top: 4px;
+    font-size: 23px;
+    line-height: 1.05;
+    -webkit-line-clamp: 3;
+  }
+
+  .command-console.active-view .mission-vitals {
+    grid-template-columns: 1fr;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    clip-path: none;
+  }
+
+  .command-console.active-view .mission-vitals span {
+    min-height: 48px;
+    margin-bottom: 7px;
+    border: 1px solid rgba(115, 243, 255, 0.16);
+    border-radius: 9px;
+    background: rgba(0, 8, 14, 0.44);
+  }
+
+  .command-console.active-view .mission-vitals b {
+    font-size: 13px;
+  }
+
+  .command-console.active-view .mission-vitals em {
+    font-size: 11px;
+  }
+
+  .command-console.active-view .mission-header .queue-controls {
+    grid-template-columns: 1fr 1fr;
+    min-height: 38px;
+  }
+
+  .command-console.active-view .mission-grid {
+    display: contents;
+  }
+
+  .command-console.active-view .mission-card {
+    border-radius: 12px;
+    clip-path: none;
+    backdrop-filter: blur(14px);
+  }
+
+  .command-console.active-view .mission-card--phase {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 0;
+    align-self: stretch;
+  }
+
+  .command-console.active-view .mission-card--memory {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+    min-height: 0;
+  }
+
+  .command-console.active-view .mission-card--artifacts {
+    grid-column: 1;
+    grid-row: 3;
+    min-height: 134px;
+  }
+
+  .command-console.active-view .mission-card strong {
+    font-size: 15px;
+  }
+
+  .command-console.active-view .mission-card p,
+  .command-console.active-view .mission-empty {
+    font-size: 13px;
+  }
+
+  .command-console.active-view .mission-memory-context {
+    max-height: calc(100vh - 360px);
+    gap: 10px;
+  }
+
+  .command-console.active-view .memory-chip {
+    min-height: 66px;
+    padding: 11px 12px;
+    border-color: rgba(115, 243, 255, 0.22);
+    background:
+      radial-gradient(circle at 0 0, rgba(229, 253, 255, 0.1), transparent 34%),
+      linear-gradient(90deg, rgba(12, 45, 60, 0.72), rgba(0, 8, 14, 0.54));
+  }
+
+  .command-console.active-view .memory-chip strong {
+    font-size: 13px;
+  }
+
+  .command-console.active-view .memory-chip span,
+  .command-console.active-view .memory-chip em {
+    font-size: 11px;
+  }
+
+  .command-console.active-view .mission-artifacts {
+    max-height: 102px;
+  }
+
+  .command-console.active-view .mission-timeline {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(300px, 1fr) auto auto;
+    gap: 14px;
+    min-height: 0;
+    align-self: stretch;
+  }
+
+  .command-console.active-view .mission-event {
+    min-height: 96px;
+    border-radius: 12px;
+    background:
+      linear-gradient(135deg, rgba(8, 34, 50, 0.62), rgba(0, 5, 11, 0.54));
+    clip-path: none;
+  }
+
+  .command-console.active-view .mission-event--signal {
+    display: grid;
+  }
+
+  .command-console.active-view .mission-event--response {
+    grid-column: 1;
+    grid-row: 1;
+    min-height: 0;
+  }
+
+  .command-console.active-view .mission-event--activity {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 116px;
+  }
+
+  .command-console.active-view .mission-event--command {
+    grid-column: 1;
+    grid-row: 3;
+    min-height: 78px;
+  }
+
+  .command-console.active-view .mission-event--signal {
+    display: none;
+  }
+
+  .command-console.active-view .mission-event strong {
+    font-size: 14px;
+  }
+
+  .command-console.active-view .mission-event p {
+    font-size: 12px;
+    -webkit-line-clamp: 3;
+  }
+
+  .command-console.active-view .command-dock__main {
+    grid-column: 2 / span 2;
+    grid-row: 3;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 116px;
+    gap: 12px;
+    align-self: end;
+    padding: 10px;
+    border: 1px solid rgba(229, 253, 255, 0.2);
+    border-radius: 14px;
+    background:
+      radial-gradient(circle at 0 0, rgba(115, 243, 255, 0.14), transparent 34%),
+      rgba(0, 5, 11, 0.62);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34), inset 0 0 32px rgba(115, 243, 255, 0.045);
+  }
+
+  .command-console.active-view #task-prompt {
+    min-height: 66px;
+    height: 66px;
+    border-radius: 10px;
+    font-size: 14px;
+  }
+
+  .command-console.active-view .ignite-button {
+    min-height: 66px;
+    border-radius: 10px;
+    font-size: 13px;
+  }
+
+  .command-console.active-view .workspace-field {
+    display: none;
+  }
+
+  .command-console.active-view .mission-status-strip {
+    display: none;
+  }
+}
+
+@media (min-width: 901px) {
+  .cockpit-shell:has(.command-console.active-view) .cockpit-backdrop {
+    background:
+      radial-gradient(circle at 50% 47%, rgba(115, 243, 255, 0.12), transparent 25%),
+      linear-gradient(180deg, rgba(1, 3, 8, 0.02), transparent 48%, rgba(0, 0, 0, 0.48));
+  }
+
+  .command-console.active-view .mission-control {
+    position: fixed;
+    right: auto;
+    bottom: 24px;
+    left: 50%;
+    width: min(860px, calc(100vw - 370px));
+    min-width: 620px;
+    transform: translateX(-50%);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    gap: 10px;
+    pointer-events: none;
+  }
+
+  .command-console.active-view .mission-header,
+  .command-console.active-view .mission-grid,
+  .command-console.active-view .mission-card,
+  .command-console.active-view .workspace-field,
+  .command-console.active-view .mission-status-strip {
+    display: none;
+  }
+
+  .command-console.active-view .mission-timeline {
+    grid-column: 1;
+    grid-row: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    gap: 8px;
+    min-height: 0;
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-event {
+    clip-path: none;
+    border-radius: 14px;
+  }
+
+  .command-console.active-view .mission-event--response {
+    grid-column: 1;
+    grid-row: 1;
+    min-height: 142px;
+    max-height: 310px;
+    padding: 17px 19px;
+    border-color: rgba(115, 243, 255, 0.28);
+    background:
+      radial-gradient(circle at 16% 0, rgba(229, 253, 255, 0.12), transparent 38%),
+      linear-gradient(135deg, rgba(5, 26, 39, 0.76), rgba(0, 5, 11, 0.54));
+    box-shadow: 0 22px 90px rgba(0, 0, 0, 0.38), inset 0 0 38px rgba(115, 243, 255, 0.06);
+    backdrop-filter: blur(10px);
+  }
+
+  .command-console.active-view .mission-event--response > span {
+    color: var(--cyan);
+  }
+
+  .command-console.active-view .mission-event--response strong {
+    font-size: 18px;
+    line-height: 1.2;
+  }
+
+  .command-console.active-view .mission-event--response pre {
+    max-height: 210px;
+    padding-right: 4px;
+    font-size: 13px;
+  }
+
+  .command-console.active-view .mission-event--activity {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .command-console.active-view .mission-event--activity > span {
+    display: none;
+  }
+
+  .command-console.active-view .mission-activity-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .command-console.active-view .mission-activity-list p {
+    grid-template-columns: auto;
+    min-height: 25px;
+    padding: 5px 9px;
+    border-color: rgba(115, 243, 255, 0.14);
+    border-radius: 999px;
+    background: rgba(0, 8, 14, 0.52);
+    opacity: 0.44;
+  }
+
+  .command-console.active-view .mission-activity-list p.active {
+    border-color: rgba(255, 200, 87, 0.55);
+    background: rgba(255, 200, 87, 0.1);
+    opacity: 1;
+  }
+
+  .command-console.active-view .mission-activity-list em {
+    display: none;
+  }
+
+  .command-console.active-view .mission-event--command,
+  .command-console.active-view .mission-event--signal {
+    display: none;
+  }
+
+  .command-console.active-view .command-dock__main {
+    grid-column: 1;
+    grid-row: 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 116px;
+    gap: 12px;
+    min-height: 78px;
+    padding: 10px;
+    border: 1px solid rgba(229, 253, 255, 0.2);
+    border-radius: 16px;
+    background:
+      radial-gradient(circle at 0 0, rgba(115, 243, 255, 0.12), transparent 34%),
+      rgba(0, 5, 11, 0.58);
+    box-shadow: 0 24px 90px rgba(0, 0, 0, 0.38), inset 0 0 32px rgba(115, 243, 255, 0.045);
+    pointer-events: auto;
+  }
+
+  .command-console.active-view #task-prompt {
+    min-height: 58px;
+    height: 58px;
+    border-radius: 11px;
+    font-size: 14px;
+  }
+
+  .command-console.active-view .ignite-button {
+    min-height: 58px;
+    border-radius: 11px;
+  }
+}
+
+@media (min-width: 901px) {
+  .command-console.active-view .mission-control {
+    position: fixed;
+    inset: 112px 116px 18px 28px;
+    width: auto;
+    min-width: 0;
+    transform: none;
+    display: grid;
+    grid-template-columns: minmax(220px, 270px) minmax(640px, 1fr) minmax(240px, 300px);
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    gap: 14px 18px;
+    pointer-events: none;
+  }
+
+  .command-console.active-view .mission-title,
+  .command-console.active-view .mission-vitals,
+  .command-console.active-view .mission-card,
+  .command-console.active-view .mission-event,
+  .command-console.active-view .mission-status-strip,
+  .command-console.active-view .command-dock__main {
+    clip-path: none;
+    border-radius: 14px;
+    border-color: rgba(115, 243, 255, 0.18);
+    background:
+      radial-gradient(circle at 14% 0, rgba(115, 243, 255, 0.11), transparent 32%),
+      linear-gradient(135deg, rgba(3, 18, 28, 0.54), rgba(0, 4, 9, 0.34));
+    box-shadow:
+      0 18px 56px rgba(0, 0, 0, 0.28),
+      inset 0 0 30px rgba(115, 243, 255, 0.04);
+    backdrop-filter: blur(8px);
+  }
+
+  .command-console.active-view .mission-header {
+    display: grid;
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-title {
+    min-height: 86px;
+    padding: 14px 15px;
+  }
+
+  .command-console.active-view .mission-title strong {
+    font-size: 20px;
+    line-height: 1.1;
+    -webkit-line-clamp: 3;
+  }
+
+  .command-console.active-view .mission-vitals {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    overflow: visible;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    border-color: transparent;
+    gap: 8px;
+  }
+
+  .command-console.active-view .mission-vitals span {
+    min-height: 52px;
+    padding: 9px 12px;
+    border: 1px solid rgba(115, 243, 255, 0.13);
+    border-radius: 11px;
+    background: rgba(0, 12, 20, 0.38);
+  }
+
+  .command-console.active-view .mission-vitals b {
+    font-size: 11px;
+    color: var(--text);
+  }
+
+  .command-console.active-view .mission-vitals em {
+    font-size: 11px;
+  }
+
+  .command-console.active-view .mission-header .queue-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 0;
+  }
+
+  .command-console.active-view .mission-header .queue-controls .hud-button {
+    min-height: 38px;
+  }
+
+  .command-console.active-view .mission-grid {
+    display: contents;
+  }
+
+  .command-console.active-view .mission-card {
+    display: grid;
+    min-height: 0;
+    padding: 12px;
+    gap: 8px;
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-card--phase {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: end;
+    max-height: 178px;
+    border-color: rgba(255, 200, 87, 0.24);
+    background:
+      radial-gradient(circle at 100% 0, rgba(255, 200, 87, 0.12), transparent 42%),
+      linear-gradient(135deg, rgba(8, 26, 32, 0.5), rgba(0, 4, 9, 0.34));
+  }
+
+  .command-console.active-view .mission-card--memory {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: start;
+    max-height: min(390px, calc(100vh - 370px));
+  }
+
+  .command-console.active-view .mission-card--artifacts {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: end;
+    max-height: 178px;
+    border-color: rgba(255, 200, 87, 0.18);
+  }
+
+  .command-console.active-view .mission-memory-context {
+    max-height: min(286px, calc(100vh - 480px));
+    gap: 8px;
+  }
+
+  .command-console.active-view .memory-chip {
+    min-height: 56px;
+    border-radius: 10px;
+    background:
+      linear-gradient(90deg, rgba(115, 243, 255, 0.12), rgba(0, 8, 14, 0.28));
+  }
+
+  .command-console.active-view .mission-artifacts {
+    max-height: 106px;
+  }
+
+  .command-console.active-view .mission-timeline {
+    grid-column: 2;
+    grid-row: 2;
+    align-self: end;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    gap: 10px;
+    min-height: 0;
+    margin-bottom: 0;
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-event--response {
+    grid-column: 1;
+    grid-row: 1;
+    min-height: 148px;
+    max-height: 210px;
+    padding: 18px 20px;
+    border-color: rgba(115, 243, 255, 0.3);
+    background:
+      radial-gradient(circle at 48% 0, rgba(229, 253, 255, 0.11), transparent 36%),
+      linear-gradient(135deg, rgba(5, 26, 39, 0.5), rgba(0, 5, 11, 0.28));
+  }
+
+  .command-console.active-view .mission-event--response strong {
+    font-size: 17px;
+    line-height: 1.18;
+  }
+
+  .command-console.active-view .mission-event--response pre {
+    max-height: 118px;
+    font-size: 13px;
+  }
+
+  .command-console.active-view .conversation-header {
+    align-items: start;
+  }
+
+  .command-console.active-view .conversation-header strong {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: right;
+    white-space: normal;
+  }
+
+  .command-console.active-view .conversation-stream {
+    max-height: 132px;
+  }
+
+  .command-console.active-view .conversation-message {
+    width: min(92%, 820px);
+  }
+
+  .command-console.active-view .mission-event--activity {
+    grid-column: 1;
+    grid-row: 2;
+    display: grid;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .command-console.active-view .mission-event--activity > span {
+    display: none;
+  }
+
+  .command-console.active-view .mission-activity-list {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 7px;
+  }
+
+  .command-console.active-view .mission-activity-list p {
+    display: grid;
+    grid-template-columns: auto;
+    min-height: 27px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(0, 10, 18, 0.44);
+    opacity: 0.55;
+  }
+
+  .command-console.active-view .mission-activity-list p.active {
+    border-color: rgba(255, 200, 87, 0.58);
+    background: rgba(255, 200, 87, 0.12);
+    opacity: 1;
+  }
+
+  .command-console.active-view .mission-activity-list em {
+    display: none;
+  }
+
+  .command-console.active-view .mission-event--command {
+    display: none;
+  }
+
+  .command-console.active-view .mission-event--signal {
+    display: none;
+  }
+
+  .command-console.active-view .command-dock {
+    display: contents;
+  }
+
+  .command-console.active-view .command-dock__main {
+    grid-column: 2;
+    grid-row: 3;
+    align-self: end;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 116px;
+    gap: 12px;
+    min-height: 78px;
+    padding: 10px;
+    pointer-events: auto;
+  }
+
+  .command-console.active-view #task-prompt {
+    min-height: 58px;
+    height: 58px;
+    border-radius: 11px;
+  }
+
+  .command-console.active-view .ignite-button {
+    min-height: 58px;
+    border-radius: 11px;
+  }
+
+  .command-console.active-view .workspace-field,
+  .command-console.active-view .command-dock__meta,
+  .command-console.active-view .mission-status-strip {
+    display: none;
+  }
+}
+
+.mission-event--response.is-live {
+  overflow: hidden;
+}
+
+.mission-event--response.is-live::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(110deg, transparent 0 22%, rgba(229, 253, 255, 0.12) 42%, transparent 62%),
+    radial-gradient(circle at 50% 0, rgba(115, 243, 255, 0.16), transparent 34%);
+  opacity: 0.78;
+  transform: translateX(-65%);
+  animation: response-scan 1.9s ease-in-out infinite;
+}
+
+.mission-output-stream {
+  position: relative;
+}
+
+.mission-output-stream.is-typing {
+  text-shadow: 0 0 12px rgba(115, 243, 255, 0.22);
+}
+
+.mission-output-stream.is-typing::after {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 1.05em;
+  margin-left: 4px;
+  vertical-align: -0.16em;
+  border-radius: 999px;
+  background: var(--cyan-hot);
+  box-shadow: 0 0 12px rgba(115, 243, 255, 0.72);
+  animation: stream-caret 620ms steps(2, end) infinite;
+}
+
+.thinking-signal {
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 11px;
+  min-height: 46px;
+  margin: 5px 0 7px;
+  text-transform: none;
+}
+
+.thinking-orbit {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(115, 243, 255, 0.32);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(229, 253, 255, 0.35) 0 8%, rgba(115, 243, 255, 0.12) 12% 28%, transparent 58%);
+  box-shadow: 0 0 24px rgba(115, 243, 255, 0.18), inset 0 0 18px rgba(115, 243, 255, 0.12);
+}
+
+.thinking-orbit i {
+  position: absolute;
+  inset: 4px;
+  width: auto;
+  height: auto;
+  border: 1px solid rgba(115, 243, 255, 0.42);
+  border-top-color: rgba(255, 200, 87, 0.88);
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+  animation: thinking-orbit 1.2s linear infinite;
+}
+
+.thinking-orbit i:nth-child(2) {
+  inset: 9px;
+  border-color: rgba(255, 200, 87, 0.38);
+  border-right-color: rgba(229, 253, 255, 0.85);
+  animation-duration: 860ms;
+  animation-direction: reverse;
+}
+
+.thinking-orbit i:nth-child(3) {
+  inset: 15px;
+  border-color: rgba(136, 255, 202, 0.7);
+  animation-duration: 1.6s;
+}
+
+.thinking-copy {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.thinking-copy b {
+  color: var(--cyan-hot);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.thinking-copy em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.thinking-signal--editing .thinking-orbit,
+.thinking-signal--testing .thinking-orbit {
+  border-color: rgba(136, 255, 202, 0.36);
+  box-shadow: 0 0 28px rgba(136, 255, 202, 0.16), inset 0 0 18px rgba(136, 255, 202, 0.12);
+}
+
+.thinking-signal--streaming .thinking-copy b {
+  color: #fff;
+}
+
+.mission-activity-list p {
+  position: relative;
+  overflow: hidden;
+}
+
+.mission-activity-list p::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: rgba(115, 243, 255, 0.34);
+  box-shadow: 0 0 10px rgba(115, 243, 255, 0.22);
+}
+
+.mission-activity-list p.complete::before {
+  background: rgba(136, 255, 202, 0.78);
+  box-shadow: 0 0 14px rgba(136, 255, 202, 0.36);
+}
+
+.mission-activity-list p.active::before {
+  background: var(--amber-hot);
+  box-shadow: 0 0 18px rgba(255, 200, 87, 0.78);
+  animation: activity-node-pulse 780ms ease-in-out infinite;
+}
+
+.mission-activity-list p.active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 200, 87, 0.18), transparent);
+  transform: translateX(-100%);
+  animation: activity-sweep 1.35s ease-in-out infinite;
+}
+
+.cockpit-shell:has(.command-console.active-view) .operation-channel {
+  display: none;
+}
+
+@keyframes response-scan {
+  0% { transform: translateX(-72%); opacity: 0; }
+  20% { opacity: 0.75; }
+  70% { opacity: 0.35; }
+  100% { transform: translateX(72%); opacity: 0; }
+}
+
+@keyframes stream-text-settle {
+  from { opacity: 0.72; filter: blur(0.8px); }
+  to { opacity: 1; filter: blur(0); }
+}
+
+@keyframes stream-caret {
+  0%, 48% { opacity: 1; }
+  49%, 100% { opacity: 0.18; }
+}
+
+@keyframes thinking-orbit {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes activity-node-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.55); }
+}
+
+@keyframes activity-sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes message-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.command-console.active-view .mission-timeline {
+  grid-template-columns: minmax(0, 1.34fr) minmax(230px, 0.56fr);
+}
+
+.command-console.active-view .mission-event--response {
+  min-height: 344px;
+  grid-row: span 2;
+}
+
+.command-console.active-view .conversation-stream {
+  max-height: min(40vh, 312px);
+}
+
+.command-console.active-view .conversation-message p,
+.command-console.active-view .conversation-message pre {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .command-console.active-view .mission-timeline,
+  .mission-timeline {
+    grid-template-columns: 1fr;
+  }
+
+  .command-console.active-view .mission-event--response,
+  .mission-event--response {
+    grid-row: auto;
+  }
+
+  .conversation-message {
+    width: 100%;
+  }
+}
+
+@media (min-width: 901px) {
+  .command-console.active-view .mission-timeline {
+    position: fixed;
+    z-index: 4;
+    left: 50%;
+    bottom: 94px;
+    width: min(660px, calc(100vw - 560px));
+    min-width: 480px;
+    transform: translateX(-50%);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    gap: 8px;
+    margin: 0;
+  }
+
+  .command-console.active-view .mission-event--response {
+    min-height: 118px;
+    max-height: 172px;
+    padding: 13px 15px;
+  }
+
+  .command-console.active-view .conversation-header strong {
+    font-size: 13px;
+  }
+
+  .command-console.active-view .conversation-stream {
+    max-height: 86px;
+    gap: 7px;
+  }
+
+  .command-console.active-view .conversation-message {
+    width: min(94%, 600px);
+    padding: 8px 10px;
+  }
+
+  .command-console.active-view .conversation-message p,
+  .command-console.active-view .conversation-message pre {
+    font-size: 11px;
+    line-height: 1.42;
+  }
+
+  .command-console.active-view .mission-event--activity {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .command-console.active-view .mission-event--activity > span {
+    display: none;
+  }
+
+  .command-console.active-view .command-dock__main {
+    position: fixed;
+    z-index: 5;
+    left: 50%;
+    bottom: 18px;
+    width: min(700px, calc(100vw - 520px));
+    min-width: 520px;
+    transform: translateX(-50%);
+  }
+}
+
+/* Stable Run chat cockpit layout. This final block intentionally supersedes the
+   older experimental fixed-position Run view rules above. */
+.chat-session-rail {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 10px;
+}
+
+.chat-session-rail__head {
+  min-width: 0;
+}
+
+.chat-session-rail__head strong {
+  display: block;
+  overflow: hidden;
+  color: var(--cyan-hot);
+  font-size: 14px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#new-chat {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+#new-chat.active {
+  border-color: rgba(255, 200, 87, 0.7);
+  background:
+    linear-gradient(90deg, rgba(255, 200, 87, 0.18), rgba(5, 28, 40, 0.72));
+  color: var(--amber-hot);
+  box-shadow: 0 0 28px rgba(255, 200, 87, 0.16);
+}
+
+.chat-session-list {
+  display: grid;
+  min-height: 0;
+  gap: 8px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.chat-session,
+.chat-session-empty {
+  position: relative;
+  min-width: 0;
+  border: 1px solid rgba(115, 243, 255, 0.15);
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 0 0, rgba(115, 243, 255, 0.1), transparent 36%),
+    linear-gradient(135deg, rgba(3, 18, 28, 0.62), rgba(0, 5, 11, 0.48));
+}
+
+.chat-session {
+  display: grid;
+  width: 100%;
+  gap: 4px;
+  padding: 10px 11px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.chat-session:hover {
+  border-color: rgba(229, 253, 255, 0.44);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.22), 0 0 22px rgba(115, 243, 255, 0.08);
+}
+
+.chat-session.active {
+  border-color: rgba(255, 200, 87, 0.58);
+  background:
+    radial-gradient(circle at 100% 0, rgba(255, 200, 87, 0.14), transparent 40%),
+    linear-gradient(135deg, rgba(6, 30, 43, 0.82), rgba(0, 5, 11, 0.56));
+}
+
+.chat-session.is-live::before {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 14px rgba(136, 255, 202, 0.7);
+  content: "";
+}
+
+.chat-session__status {
+  color: var(--amber-hot);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.chat-session strong,
+.chat-session p,
+.chat-session em {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.chat-session strong {
+  display: -webkit-box;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.22;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.chat-session em {
+  color: var(--dim);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.chat-session p {
+  display: -webkit-box;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.chat-session-empty {
+  padding: 14px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+@media (min-width: 901px) {
+  .console-deck {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    transform: none;
+    pointer-events: none;
+  }
+
+  .console-view.active-view:not(.command-console) {
+    pointer-events: auto;
+  }
+
+  .command-console.active-view {
+    overflow: visible;
+    max-height: none;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    clip-path: none;
+    pointer-events: none;
+  }
+
+  .command-console.active-view::before,
+  .command-console.active-view::after {
+    display: none;
+  }
+
+  .command-console.active-view .mission-control {
+    position: fixed;
+    inset: 150px 196px 18px 24px;
+    width: auto;
+    min-width: 0;
+    transform: none;
+    display: grid;
+    grid-template-columns: minmax(218px, 276px) minmax(460px, 1fr) minmax(240px, 300px);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "sessions header header"
+      "sessions timeline side"
+      "sessions composer side";
+    gap: 14px 16px;
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .chat-session-rail,
+  .command-console.active-view .mission-header,
+  .command-console.active-view .mission-grid,
+  .command-console.active-view .mission-timeline,
+  .command-console.active-view .command-dock__main {
+    position: relative;
+    z-index: auto;
+    left: auto;
+    right: auto;
+    top: auto;
+    bottom: auto;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    transform: none;
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .chat-session-rail,
+  .command-console.active-view .mission-header,
+  .command-console.active-view .mission-grid,
+  .command-console.active-view .mission-event--response,
+  .command-console.active-view .command-dock__main {
+    clip-path: none;
+    border: 1px solid rgba(115, 243, 255, 0.18);
+    border-radius: 14px;
+    background:
+      radial-gradient(circle at 14% 0, rgba(115, 243, 255, 0.11), transparent 32%),
+      linear-gradient(135deg, rgba(3, 18, 28, 0.6), rgba(0, 4, 9, 0.42));
+    box-shadow:
+      0 18px 56px rgba(0, 0, 0, 0.28),
+      inset 0 0 30px rgba(115, 243, 255, 0.04);
+    backdrop-filter: blur(8px);
+  }
+
+  .command-console.active-view .chat-session-rail {
+    grid-area: sessions;
+    padding: 14px;
+    overflow: hidden;
+  }
+
+  .command-console.active-view .mission-header {
+    grid-area: header;
+    display: grid;
+    grid-template-columns: minmax(240px, 0.8fr) minmax(360px, 1.2fr) auto;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .command-console.active-view .mission-vitals {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .command-console.active-view .mission-vitals span {
+    min-height: 48px;
+  }
+
+  .command-console.active-view .mission-header .queue-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    align-content: center;
+  }
+
+  .command-console.active-view .mission-grid {
+    grid-area: side;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: minmax(0, auto);
+    align-content: start;
+    gap: 10px;
+    min-height: 0;
+    padding: 12px;
+    overflow: hidden;
+  }
+
+  .command-console.active-view .mission-card {
+    display: grid;
+    max-height: none;
+    min-height: 0;
+    padding: 12px;
+    border-radius: 11px;
+    background: rgba(0, 10, 18, 0.36);
+  }
+
+  .command-console.active-view .mission-card--phase,
+  .command-console.active-view .mission-card--memory,
+  .command-console.active-view .mission-card--artifacts {
+    grid-column: auto;
+    grid-row: auto;
+    align-self: auto;
+    max-height: none;
+  }
+
+  .command-console.active-view .mission-memory-context {
+    max-height: min(31vh, 260px);
+  }
+
+  .command-console.active-view .mission-artifacts {
+    max-height: min(17vh, 150px);
+  }
+
+  .command-console.active-view .mission-timeline {
+    grid-area: timeline;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 10px;
+    min-height: 0;
+    margin: 0;
+  }
+
+  .command-console.active-view .mission-event--response {
+    grid-column: auto;
+    grid-row: auto;
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    min-height: 0;
+    max-height: none;
+    padding: 16px;
+    overflow: hidden;
+  }
+
+  .command-console.active-view .mission-event--activity {
+    display: grid;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+  }
+
+  .command-console.active-view .mission-event--activity > span,
+  .command-console.active-view .mission-event--command,
+  .command-console.active-view .mission-event--signal,
+  .command-console.active-view .workspace-field,
+  .command-console.active-view .mission-status-strip {
+    display: none;
+  }
+
+  .command-console.active-view .mission-activity-list {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 7px;
+  }
+
+  .command-console.active-view .mission-activity-list p {
+    display: grid;
+    grid-template-columns: auto;
+    min-height: 27px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(0, 10, 18, 0.44);
+  }
+
+  .command-console.active-view .mission-activity-list em {
+    display: none;
+  }
+
+  .command-console.active-view .conversation-stream {
+    min-height: 0;
+    max-height: none;
+    padding: 8px 6px 6px 2px;
+    scroll-behavior: smooth;
+  }
+
+  .command-console.active-view .conversation-message {
+    width: min(92%, 820px);
+    padding: 10px 12px;
+  }
+
+  .command-console.active-view .conversation-message p,
+  .command-console.active-view .conversation-message pre {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .command-console.active-view .command-dock__main {
+    grid-area: composer;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 118px;
+    gap: 12px;
+    min-height: 80px;
+    padding: 10px;
+  }
+
+  .command-console.active-view #task-prompt,
+  .command-console.active-view .ignite-button {
+    min-height: 60px;
+    height: 60px;
+    border-radius: 11px;
+  }
+}
+
+@media (max-width: 900px) {
+  .mission-control {
+    display: grid;
+    gap: 10px;
+  }
+
+  .chat-session-rail {
+    padding: 12px;
+    border: 1px solid rgba(115, 243, 255, 0.18);
+    border-radius: 14px;
+    background:
+      radial-gradient(circle at 14% 0, rgba(115, 243, 255, 0.11), transparent 32%),
+      linear-gradient(135deg, rgba(3, 18, 28, 0.6), rgba(0, 4, 9, 0.42));
+  }
+
+  .chat-session-list {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(210px, 74vw);
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+  }
+
+  .mission-timeline {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mission-event--response {
+    min-height: 340px;
+  }
+
+  .conversation-stream {
+    max-height: 260px;
+  }
+}
+
+/* Collapsed chat drawer: the chat list is opt-in, so it no longer consumes the
+   Run cockpit until opened from the Chats button. */
+.chat-sidebar-toggle {
+  position: fixed;
+  z-index: 7;
+  left: 24px;
+  bottom: 18px;
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 15px;
+  border: 1px solid rgba(255, 200, 87, 0.62);
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 50% 0, rgba(255, 200, 87, 0.2), transparent 48%),
+    linear-gradient(135deg, rgba(10, 38, 52, 0.92), rgba(0, 6, 12, 0.86));
+  color: var(--amber-hot);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.42), 0 0 28px rgba(255, 200, 87, 0.12);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, opacity 160ms ease;
+}
+
+.chat-sidebar-toggle:hover {
+  border-color: rgba(255, 226, 162, 0.9);
+  box-shadow: 0 20px 54px rgba(0, 0, 0, 0.48), 0 0 34px rgba(255, 200, 87, 0.22);
+  transform: translateY(-1px);
+}
+
+.chat-sidebar-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.chat-sidebar-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  background: rgba(0, 3, 8, 0.42);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.chat-session-rail {
+  position: fixed;
+  z-index: 8;
+  top: 150px;
+  bottom: 18px;
+  left: 24px;
+  width: min(318px, calc(100vw - 48px));
+  padding: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(115, 243, 255, 0.24);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 12% 0, rgba(229, 253, 255, 0.12), transparent 34%),
+    linear-gradient(135deg, rgba(4, 20, 31, 0.94), rgba(0, 5, 11, 0.86));
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.54), inset 0 0 32px rgba(115, 243, 255, 0.06);
+  backdrop-filter: blur(16px);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(calc(-100% - 36px)) scale(0.985);
+  transform-origin: left center;
+  transition: transform 220ms cubic-bezier(0.19, 1, 0.22, 1), opacity 180ms ease;
+}
+
+.chat-session-rail__head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chat-session-rail__head .hud-button {
+  min-height: 30px;
+  padding-inline: 9px;
+  font-size: 10px;
+}
+
+#app[data-chat-sidebar="open"] .chat-sidebar-scrim {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+#app[data-chat-sidebar="open"] .chat-session-rail {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0) scale(1);
+}
+
+#app[data-chat-sidebar="open"] .chat-sidebar-toggle {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-12px);
+}
+
+@media (min-width: 901px) {
+  .command-console.active-view .mission-control {
+    inset: 150px 196px 18px 316px;
+    grid-template-columns: minmax(460px, 1fr) minmax(240px, 300px);
+    grid-template-areas:
+      "header header"
+      "timeline side"
+      "composer side";
+  }
+
+  .command-console.active-view .chat-session-rail {
+    position: fixed;
+    z-index: 8;
+    left: 24px;
+    width: min(318px, calc(100vw - 48px));
+    padding: 14px;
+  }
+}
+
+@media (max-width: 900px) {
+  .chat-sidebar-toggle {
+    position: relative;
+    z-index: 2;
+    top: auto;
+    bottom: auto;
+    left: auto;
+    width: max-content;
+    margin: 0 0 -2px;
+    min-height: 40px;
+    padding-inline: 12px;
+    border-radius: 10px;
+  }
+
+  .chat-session-rail {
+    top: 84px;
+    bottom: 14px;
+    left: 12px;
+    width: min(344px, calc(100vw - 24px));
+  }
+
+  .chat-session-list {
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-bottom: 0;
+  }
+
+  .command-console.active-view .chat-session-rail,
+  .chat-session-rail {
+    position: fixed;
+  }
+}
+
+/* Desktop EXE cockpit pass: keep Run as one anchored surface instead of loose
+   floating cards scattered across the orb. */
+@media (min-width: 901px) {
+  .command-console.active-view .mission-control {
+    inset: auto 184px 24px auto;
+    width: min(720px, calc(100vw - 420px));
+    height: min(430px, calc(100vh - 190px));
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "header"
+      "timeline"
+      "composer";
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid rgba(115, 243, 255, 0.25);
+    border-radius: 18px;
+    background:
+      radial-gradient(circle at 38% 0, rgba(229, 253, 255, 0.12), transparent 34%),
+      linear-gradient(135deg, rgba(4, 20, 31, 0.86), rgba(0, 5, 11, 0.74));
+    box-shadow: 0 34px 110px rgba(0, 0, 0, 0.52), inset 0 0 48px rgba(115, 243, 255, 0.055);
+    backdrop-filter: blur(14px);
+  }
+
+  .command-console.active-view .mission-header,
+  .command-console.active-view .mission-event--response,
+  .command-console.active-view .command-dock__main {
+    border-color: rgba(115, 243, 255, 0.14);
+    background:
+      radial-gradient(circle at 12% 0, rgba(115, 243, 255, 0.08), transparent 32%),
+      rgba(0, 8, 15, 0.38);
+    box-shadow: inset 0 0 24px rgba(115, 243, 255, 0.035);
+    backdrop-filter: none;
+  }
+
+  .command-console.active-view .mission-header {
+    min-height: 64px;
+    align-items: stretch;
+  }
+
+  .command-console.active-view .mission-title {
+    min-height: 0;
+    padding: 12px 14px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .command-console.active-view .mission-title strong {
+    font-size: 18px;
+  }
+
+  .command-console.active-view .mission-vitals span {
+    min-height: 42px;
+    border-color: rgba(115, 243, 255, 0.12);
+    background: rgba(0, 8, 15, 0.34);
+  }
+
+  .command-console.active-view .mission-timeline {
+    align-self: stretch;
+  }
+
+  .command-console.active-view .mission-event--response {
+    border-radius: 14px;
+  }
+
+  .command-console.active-view .mission-event--activity {
+    align-self: end;
+  }
+
+  .command-console.active-view .command-dock__main {
+    min-height: 68px;
+  }
+
+  .chat-sidebar-toggle {
+    position: absolute;
+    left: 16px;
+    top: 16px;
+    bottom: auto;
+    min-height: 38px;
+    padding-inline: 12px;
+  }
+
+  .command-console.active-view .mission-header {
+    padding-left: 122px;
+  }
+
+  .command-console.active-view .mission-grid {
+    display: none;
+  }
+
+  .command-console.active-view .mission-timeline {
+    grid-area: timeline;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .command-console.active-view .mission-event--response {
+    grid-row: auto;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .command-console.active-view .conversation-stream {
+    max-height: none;
+  }
+
+  .command-console.active-view .mission-event--activity,
+  .command-console.active-view .mission-event--command,
+  .command-console.active-view .mission-event--signal {
+    display: none;
+  }
+}
+
+/* Final packaged desktop HUD override. */
+@media (min-width: 901px) {
+  .radial-nav {
+    right: 24px;
+    top: 50%;
+    display: grid;
+    gap: 8px;
+    width: 52px;
+    transform: translateY(-50%);
+  }
+
+  .radial-nav button {
+    width: 48px;
+    height: 48px;
+    min-height: 48px;
+    justify-content: center;
+    padding: 0;
+    border-radius: 13px;
+    clip-path: none;
+  }
+
+  .radial-nav button span {
+    position: absolute;
+    right: 58px;
+    top: 50%;
+    max-width: 160px;
+    padding: 7px 10px;
+    overflow: hidden;
+    border: 1px solid rgba(115, 243, 255, 0.22);
+    border-radius: 8px;
+    background: rgba(0, 8, 15, 0.88);
+    color: var(--text);
+    font-size: 10px;
+    font-weight: 900;
+    opacity: 0;
+    pointer-events: none;
+    text-overflow: ellipsis;
+    transform: translate(8px, -50%);
+    transition: opacity 140ms ease, transform 140ms ease;
+    white-space: nowrap;
+  }
+
+  .radial-nav button:hover span,
+  .radial-nav button:focus-visible span,
+  .radial-nav button.active span {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+
+  .radial-nav svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .command-console.active-view {
+    overflow: visible;
+    max-height: none;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    clip-path: none;
+    pointer-events: none;
+  }
+
+  .command-console.active-view::before,
+  .command-console.active-view::after {
+    display: none;
+  }
+
+  .command-console.active-view .mission-control {
+    position: static;
+    display: contents;
+    width: auto;
+    height: auto;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    pointer-events: none;
+    transform: none;
+  }
+
+  .command-console.active-view .mission-header {
+    position: fixed;
+    z-index: 4;
+    top: 158px;
+    right: 92px;
+    left: 24px;
+    display: grid;
+    grid-template-columns: minmax(220px, 320px) minmax(360px, 1fr) 176px;
+    gap: 12px;
+    min-height: 72px;
+    padding: 10px 12px;
+    border: 1px solid rgba(115, 243, 255, 0.18);
+    border-radius: 15px;
+    background:
+      radial-gradient(circle at 18% 0, rgba(229, 253, 255, 0.12), transparent 34%),
+      linear-gradient(135deg, rgba(3, 18, 28, 0.48), rgba(0, 5, 11, 0.3));
+    box-shadow: 0 18px 56px rgba(0, 0, 0, 0.22), inset 0 0 30px rgba(115, 243, 255, 0.04);
+    backdrop-filter: blur(8px);
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-title {
+    min-height: 0;
+    padding: 10px 12px;
+    border: 1px solid rgba(115, 243, 255, 0.12);
+    border-radius: 12px;
+    background: rgba(0, 8, 15, 0.28);
+    box-shadow: none;
+  }
+
+  .command-console.active-view .mission-title strong {
+    font-size: 18px;
+  }
+
+  .command-console.active-view .mission-vitals {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .command-console.active-view .mission-vitals span {
+    min-height: 48px;
+    padding: 8px 10px;
+    border: 1px solid rgba(115, 243, 255, 0.12);
+    border-radius: 11px;
+    background: rgba(0, 8, 15, 0.28);
+  }
+
+  .command-console.active-view .mission-header .queue-controls {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    align-content: center;
+  }
+
+  .command-console.active-view .mission-grid {
+    position: fixed;
+    z-index: 4;
+    top: 250px;
+    right: 92px;
+    bottom: 108px;
+    display: grid;
+    width: 286px;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    gap: 10px;
+    min-height: 0;
+    padding: 0;
+    overflow: visible;
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-card {
+    display: grid;
+    grid-column: auto;
+    grid-row: auto;
+    min-height: 0;
+    max-height: none;
+    align-self: auto;
+    padding: 12px;
+    border: 1px solid rgba(115, 243, 255, 0.17);
+    border-radius: 14px;
+    background:
+      radial-gradient(circle at 12% 0, rgba(115, 243, 255, 0.1), transparent 32%),
+      linear-gradient(135deg, rgba(3, 18, 28, 0.5), rgba(0, 5, 11, 0.28));
+    box-shadow: 0 18px 56px rgba(0, 0, 0, 0.22), inset 0 0 24px rgba(115, 243, 255, 0.035);
+    backdrop-filter: blur(8px);
+    clip-path: none;
+  }
+
+  .command-console.active-view .mission-memory-context {
+    max-height: 190px;
+  }
+
+  .command-console.active-view .mission-artifacts {
+    max-height: 118px;
+  }
+
+  .command-console.active-view .mission-timeline {
+    position: fixed;
+    z-index: 4;
+    right: 408px;
+    bottom: 104px;
+    left: 316px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    min-height: 176px;
+    max-height: min(260px, calc(100vh - 410px));
+    margin: 0;
+    pointer-events: auto;
+  }
+
+  .command-console.active-view .mission-event--response {
+    display: grid;
+    grid-row: auto;
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: 0;
+    max-height: none;
+    padding: 14px 16px;
+    border: 1px solid rgba(115, 243, 255, 0.24);
+    border-radius: 16px;
+    background:
+      radial-gradient(circle at 22% 0, rgba(229, 253, 255, 0.12), transparent 32%),
+      linear-gradient(135deg, rgba(4, 20, 31, 0.62), rgba(0, 5, 11, 0.42));
+    box-shadow: 0 24px 76px rgba(0, 0, 0, 0.32), inset 0 0 36px rgba(115, 243, 255, 0.045);
+    backdrop-filter: blur(8px);
+    clip-path: none;
+  }
+
+  .command-console.active-view .conversation-stream {
+    max-height: none;
+  }
+
+  .command-console.active-view .command-dock__main {
+    position: fixed;
+    z-index: 5;
+    right: 408px;
+    bottom: 24px;
+    left: 316px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 116px;
+    gap: 12px;
+    min-height: 64px;
+    padding: 9px;
+    border: 1px solid rgba(115, 243, 255, 0.22);
+    border-radius: 16px;
+    background:
+      radial-gradient(circle at 0 0, rgba(115, 243, 255, 0.1), transparent 34%),
+      rgba(0, 5, 11, 0.56);
+    box-shadow: 0 22px 74px rgba(0, 0, 0, 0.34), inset 0 0 28px rgba(115, 243, 255, 0.04);
+    backdrop-filter: blur(8px);
+    pointer-events: auto;
+  }
+
+  .command-console.active-view #task-prompt,
+  .command-console.active-view .ignite-button {
+    min-height: 48px;
+    height: 48px;
+  }
+
+  .chat-sidebar-toggle {
+    position: fixed;
+    z-index: 7;
+    left: 24px;
+    bottom: 24px;
+    top: auto;
+    min-height: 42px;
+  }
+
+  .command-console.active-view .workspace-field,
+  .command-console.active-view .mission-status-strip,
+  .command-console.active-view .mission-event--activity,
+  .command-console.active-view .mission-event--command,
+  .command-console.active-view .mission-event--signal {
+    display: none;
+  }
+}

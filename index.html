@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>Jarvis Neural Command Interface</title>
+  </head>
+  <body>
+    <div id="app" class="cockpit-shell" data-mode="idle">
+      <canvas id="core" aria-label="Interactive Jarvis neural orb"></canvas>
+
+      <header class="command-mast" aria-label="Assistant telemetry">
+        <div class="brand-lockup">
+          <span class="brand-mark">J</span>
+          <div>
+            <span class="micro-label">Jarvis Neural Command Interface</span>
+            <strong>Neural Command Interface</strong>
+          </div>
+        </div>
+        <div class="telemetry-strip">
+          <article>
+            <span class="micro-label">State</span>
+            <strong id="mode">Idle</strong>
+          </article>
+          <article>
+            <span class="micro-label">Memory</span>
+            <strong id="memory-count">0 nodes</strong>
+          </article>
+          <article>
+            <span class="micro-label">Workspace</span>
+            <strong id="workspace">Loading</strong>
+          </article>
+        </div>
+      </header>
+
+      <section class="voice-dock" aria-label="Voice controls">
+        <button id="voice-toggle" class="hud-button hud-button--primary" type="button" data-icon="mic">
+          <span>Start Dictation</span>
+        </button>
+        <button id="think-demo" class="hud-button" type="button" data-icon="brain">
+          <span>Think</span>
+        </button>
+        <span id="voice-status">Codex app connected locally</span>
+      </section>
+
+      <nav class="radial-nav" aria-label="Console views">
+        <button type="button" data-console-tab="run" class="active" data-icon="terminal-square"><span>Run</span></button>
+        <button type="button" data-console-tab="history" data-icon="history"><span>History</span></button>
+        <button type="button" data-console-tab="artifacts" data-icon="save"><span>Artifacts</span></button>
+        <button type="button" data-console-tab="memory" data-icon="network"><span>Memory</span></button>
+        <button type="button" data-console-tab="settings" data-icon="sliders-horizontal"><span>Settings</span></button>
+        <button type="button" data-console-tab="diagnostics" data-icon="activity"><span>Diagnostics</span></button>
+      </nav>
+
+      <section id="task-hud" class="operation-channel" aria-label="Codex task status"></section>
+
+      <main class="console-deck" aria-label="Jarvis cockpit console">
+        <section class="command-console console-view" data-view="run" aria-label="Codex mission control">
+          <div class="mission-control">
+            <button id="chat-sidebar-toggle" class="chat-sidebar-toggle" type="button" data-icon="history" aria-expanded="false" aria-controls="chat-session-rail">
+              <span>Chats</span>
+            </button>
+            <div id="chat-sidebar-scrim" class="chat-sidebar-scrim" aria-hidden="true"></div>
+            <aside id="chat-session-rail" class="chat-session-rail" aria-label="Chat sessions">
+              <div class="chat-session-rail__head">
+                <div>
+                  <span class="micro-label">Chats</span>
+                  <strong>Session Stack</strong>
+                </div>
+                <button id="chat-sidebar-close" class="hud-button" type="button" data-icon="octagon-x">
+                  <span>Close</span>
+                </button>
+              </div>
+              <button id="new-chat" class="hud-button hud-button--primary" type="button" data-icon="terminal-square">
+                <span>New Chat</span>
+              </button>
+              <div id="chat-session-list" class="chat-session-list" aria-label="Recent chats"></div>
+            </aside>
+
+            <header class="mission-header">
+              <div class="mission-title">
+                <span class="micro-label">Mission Control</span>
+                <strong id="mission-objective">Standing by</strong>
+              </div>
+              <div class="mission-vitals" id="mission-vitals" aria-label="Mission vitals"></div>
+              <div class="queue-controls">
+                <button id="pause-queue" class="hud-button" type="button" data-icon="pause"><span>Pause</span></button>
+                <button id="resume-queue" class="hud-button" type="button" data-icon="play"><span>Resume</span></button>
+              </div>
+            </header>
+
+            <div class="mission-grid">
+              <article class="mission-card mission-card--phase">
+                <div>
+                  <span class="micro-label">Phase</span>
+                  <strong id="mission-phase">Ready</strong>
+                </div>
+                <div class="mission-progress" aria-hidden="true"><span id="mission-progress-fill"></span></div>
+                <p id="mission-next-action">Awaiting operator command.</p>
+              </article>
+
+              <article class="mission-card mission-card--memory">
+                <div>
+                  <span class="micro-label">Memory Context</span>
+                  <strong id="mission-memory-summary">No active recall</strong>
+                </div>
+                <div id="mission-memory-context" class="mission-memory-context"></div>
+              </article>
+
+              <article class="mission-card mission-card--artifacts">
+                <div>
+                  <span class="micro-label">Artifacts</span>
+                  <strong id="mission-artifact-summary">No outputs yet</strong>
+                </div>
+                <div id="mission-artifacts" class="mission-artifacts"></div>
+              </article>
+            </div>
+
+            <div id="command-chat-feed" class="mission-timeline" aria-live="polite"></div>
+
+            <div class="command-dock__main">
+              <textarea id="task-prompt" placeholder="Give Jarvis a concrete coding mission..."></textarea>
+              <button id="run-task" class="ignite-button" type="button" data-icon="rocket">
+                <span>Run</span>
+              </button>
+            </div>
+            <label class="workspace-field">
+              <span class="micro-label">Workspace</span>
+              <input id="task-workspace" aria-label="Workspace path" />
+            </label>
+            <div class="mission-status-strip">
+              <span><span class="micro-label">Agent</span><strong id="api-key-status" class="system-chip">Checking</strong></span>
+              <span><span class="micro-label">Queue</span><strong id="queue-status">Queue ready</strong></span>
+            </div>
+          </div>
+        </section>
+
+        <section class="archive-console console-view" data-view="history" aria-label="Task history">
+          <header class="panel-header">
+            <div>
+              <span class="micro-label">Archive</span>
+              <strong>Task History</strong>
+            </div>
+            <button id="refresh-tasks" class="hud-button" type="button" data-icon="refresh-cw"><span>Refresh</span></button>
+          </header>
+          <div class="split-console">
+            <div id="task-history-list" class="scroll-stream"></div>
+            <aside id="task-history-detail" class="detail-module hidden"></aside>
+          </div>
+        </section>
+
+        <section class="artifacts-console console-view" data-view="artifacts" aria-label="Generated artifacts">
+          <header class="panel-header">
+            <div>
+              <span class="micro-label">Generated Output</span>
+              <strong>Artifact Catalog</strong>
+            </div>
+            <button id="refresh-artifacts" class="hud-button" type="button" data-icon="refresh-cw"><span>Refresh</span></button>
+          </header>
+          <div id="artifact-catalog" class="artifact-catalog"></div>
+        </section>
+
+        <section class="memory-console console-view" data-view="memory" aria-label="Memories">
+          <header class="panel-header">
+            <div>
+              <span class="micro-label">Neural Index</span>
+              <strong>Memory Matrix</strong>
+            </div>
+            <div class="panel-actions">
+              <button id="remember-current" class="hud-button" type="button" data-icon="save"><span>Remember</span></button>
+              <button id="refresh-memory" class="hud-button" type="button" data-icon="refresh-cw"><span>Refresh</span></button>
+              <button id="reset-memory" class="hud-button" type="button" data-icon="rotate-ccw"><span>Reset</span></button>
+            </div>
+          </header>
+          <div class="filter-row">
+            <input id="memory-search" aria-label="Search memories" placeholder="Search memory" />
+            <select id="memory-scope-filter" aria-label="Memory scope">
+              <option value="">All</option>
+              <option value="project">Project</option>
+              <option value="global">Global</option>
+            </select>
+          </div>
+          <div class="split-console">
+            <div id="memory-list" class="scroll-stream"></div>
+            <aside id="memory-detail" class="detail-module hidden"></aside>
+          </div>
+        </section>
+
+        <section class="settings-console console-view" data-view="settings" aria-label="Settings">
+          <header class="panel-header">
+            <div>
+              <span class="micro-label">Configuration</span>
+              <strong>System Settings</strong>
+            </div>
+          </header>
+
+          <!-- Provider & Model -->
+          <div class="settings-section">
+            <span class="section-label">Model Provider</span>
+            <div class="settings-section-grid">
+              <label>Provider
+                <select id="settings-model-provider">
+                  <option value="opencode">OpenCode Zen</option>
+                  <option value="codex">Codex CLI</option>
+                  <option value="lmstudio">LM Studio</option>
+                  <option value="ollama">Ollama</option>
+                </select>
+              </label>
+              <label>Status
+                <input id="model-connection-status" readonly />
+              </label>
+            </div>
+            <!-- Model Presets -->
+            <div id="model-preset-grid" class="model-preset-grid" aria-label="Free model presets"></div>
+            <!-- Endpoint & Model -->
+            <div class="settings-section-grid">
+              <label>Endpoint
+                <input id="settings-model-endpoint" />
+              </label>
+              <label>Model
+                <select id="settings-local-model">
+                  <option value="">Scan to load models</option>
+                </select>
+              </label>
+            </div>
+            <div class="settings-row">
+              <button id="refresh-local-models" class="hud-button" type="button" data-icon="refresh-cw"><span>Scan Models</span></button>
+              <button id="apply-model" class="hud-button hud-button--primary" type="button" data-icon="zap"><span>Apply Model</span></button>
+            </div>
+          </div>
+
+          <!-- API Key -->
+          <div class="settings-section">
+            <span class="section-label">OpenCode API Key</span>
+            <div class="settings-section-grid">
+              <label>API key
+                <input id="settings-model-api-key" type="password" autocomplete="off" placeholder="Paste a new key to save" />
+              </label>
+              <span id="model-key-status" class="key-status"></span>
+            </div>
+            <div class="settings-row">
+              <button id="save-model-key" class="hud-button hud-button--primary" type="button" data-icon="key-round"><span>Save Key</span></button>
+              <button id="clear-model-key" class="hud-button" type="button" data-icon="trash-2"><span>Clear Key</span></button>
+            </div>
+            <p id="model-key-message" aria-live="polite">Key is stored locally for the desktop app.</p>
+          </div>
+
+          <!-- General -->
+          <div class="settings-section">
+            <span class="section-label">General</span>
+            <div class="settings-section-grid">
+              <label>Workspace
+                <input id="settings-workspace" />
+              </label>
+              <label>Data directory
+                <input id="settings-data-dir" readonly />
+              </label>
+              <label>Codex command
+                <input id="settings-codex-command" readonly />
+              </label>
+              <label>Reasoning
+                <input id="settings-reasoning" readonly />
+              </label>
+            </div>
+          </div>
+
+          <!-- Model Profile & Instructions (read-only summary) -->
+          <div class="settings-section">
+            <span class="section-label">Model Profile</span>
+            <div class="model-profile-summary" id="model-profile-summary">OpenCode Zen / MiniMax M2.5 Free</div>
+            <article id="model-connect-instructions" class="model-instructions" aria-live="polite"></article>
+          </div>
+        </section>
+
+        <section class="diagnostics-console console-view" data-view="diagnostics" aria-label="Diagnostics">
+          <header class="panel-header">
+            <div>
+              <span class="micro-label">Telemetry</span>
+              <strong>Diagnostics</strong>
+            </div>
+            <button id="refresh-diagnostics" class="hud-button" type="button" data-icon="scan-line"><span>Refresh</span></button>
+          </header>
+          <div id="diagnostics-list" class="diagnostics-grid"></div>
+        </section>
+      </main>
+
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

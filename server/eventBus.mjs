@@ -9,9 +9,14 @@ export class EventBus {
       'X-Accel-Buffering': 'no'
     });
     res.write('retry: 1000\n\n');
+    res.flushHeaders?.();
     this.#clients.add(res);
     this.emit('connected', { at: new Date().toISOString() });
+    const heartbeat = setInterval(() => {
+      res.write(`event: heartbeat\ndata: ${JSON.stringify({ at: new Date().toISOString() })}\n\n`);
+    }, 15000);
     req.on('close', () => {
+      clearInterval(heartbeat);
       this.#clients.delete(res);
     });
   }

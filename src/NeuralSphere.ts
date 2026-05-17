@@ -1083,6 +1083,9 @@ export class NeuralSphere {
     material.opacity = 0.07 + this.activityLevel * 0.03 + this.learningPulse * 0.028 + this.responsePulse * 0.03;
     const lineMaterial = this.pathLineMesh.material as THREE.LineBasicMaterial;
     lineMaterial.opacity = 0.14 + this.activityLevel * 0.045 + this.learningPulse * 0.035 + this.responsePulse * 0.035;
+    const recallTint = this.recallEmphasisMode === 'semantic'
+      ? MODE_LEARN
+      : this.recallEmphasisMode === 'keyword' ? MEMORY_AMBER : MODE_LISTEN;
 
     if (!force && !this.pathGeometryDirty && !focusChanged && this.pathUpdateAccumulator < interval) {
       return;
@@ -1126,7 +1129,9 @@ export class NeuralSphere {
         this.scratch.scale.set(thickness, len, thickness);
         this.scratch.updateMatrix();
         this.pathMesh.setMatrixAt(segmentCount, this.scratch.matrix);
-        this.pathColor.copy(path.color).lerp(CORE_COLOR, emphasis * 0.22 + this.responsePulse * 0.08);
+        this.pathColor.copy(path.color)
+          .lerp(CORE_COLOR, emphasis * 0.22 + this.responsePulse * 0.08)
+          .lerp(recallTint, recallEmphasisBoost * 0.18);
         this.pathMesh.setColorAt(segmentCount, this.pathColor);
         this.pathGlowColor.copy(this.pathColor).lerp(CORE_COLOR, 0.12 + this.learningPulse * 0.1 + emphasis * 0.1);
         this.pathLinePositions[lineVertexOffset] = a.x;

@@ -11,6 +11,7 @@ jarvis-artifacts/
 .playwright-cli/
 .playwright-mcp/
 .builder-tools/
+.verify-data/
 *.png
 *.jpg
 *.jpeg

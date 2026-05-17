@@ -155,6 +155,10 @@ let streamVisibleOutput = '';
 let streamElement: HTMLElement | null = null;
 let streamScrollContainer: HTMLElement | null = null;
 let streamingActive = false;
+let pendingStreamUpdate: { id: string; output: string; phase: TaskRecord['phase'] } | null = null;
+let streamUpdateFrame = 0;
+let lastStreamChromeRenderAt = 0;
+let lastStreamPulseAt = 0;
 let currentRunningTask: TaskRecord | null = null;
 let lastMissionSignature = '';
 let missionRenderFrame = 0;
@@ -602,20 +606,29 @@ function connectEvents() {
     setMode(modeForTaskPhase(phase));
     scene.setTaskPhase(phase);
     scene.setResponseActive(true);
-    scene.pulseResponse(0.62);
-    scene.pulseMemoryGrowth(0.12);
+    pulseLiveStream();
     if (currentRunningTask && currentRunningTask.id === data.id) {
       currentRunningTask = { ...currentRunningTask, output: data.output, phase: data.phase ?? currentRunningTask.phase };
     }
     const isSelectedStream = selectedTaskId === data.id;
     if (isSelectedStream) {
       lastCommandPhase = phase;
-      startStreamOutput(data.id, data.output);
+      scheduleStreamOutput(data.id, data.output, phase);
     }
     visibleTasks = visibleTasks.map((task) => task.id === data.id
       ? { ...task, output: isSelectedStream ? streamVisibleOutput : data.output, phase: data.phase ?? task.phase }
       : task);
-    renderChatSessions();
+    scheduleStreamChromeRender();
+  });
+  events.addEventListener('task.updated', (event) => {
+    const task = JSON.parse((event as MessageEvent).data) as TaskRecord;
+    const wasSelected = selectedTaskId === task.id;
+    upsertVisibleTask(task, wasSelected);
+    if (wasSelected) {
+      lastCommandPhase = task.phase ?? task.status;
+      lastCommandOutput = task.output;
+      renderCommandChat(true);
+    }
   });
   events.addEventListener('task.finished', (event) => {
     const task = JSON.parse((event as MessageEvent).data) as TaskRecord;
@@ -1301,18 +1314,42 @@ function resetStreamOutput(taskId: string) {
   streamVisibleOutput = '';
   streamElement = null;
   streamScrollContainer = null;
+  pendingStreamUpdate = null;
+  if (streamUpdateFrame) {
+    cancelAnimationFrame(streamUpdateFrame);
+    streamUpdateFrame = 0;
+  }
 }
 
-function startStreamOutput(taskId: string, output: string) {
+function scheduleStreamOutput(taskId: string, output: string, phase: TaskRecord['phase'] = 'streaming') {
+  pendingStreamUpdate = { id: taskId, output, phase };
+  if (streamUpdateFrame) {
+    return;
+  }
+  streamUpdateFrame = requestAnimationFrame(() => {
+    streamUpdateFrame = 0;
+    const update = pendingStreamUpdate;
+    pendingStreamUpdate = null;
+    if (update) {
+      startStreamOutput(update.id, update.output, update.phase);
+    }
+  });
+}
+
+function startStreamOutput(taskId: string, output: string, phase: TaskRecord['phase'] = 'streaming') {
   if (streamTaskId !== taskId) {
     resetStreamOutput(taskId);
   }
   streamVisibleOutput = output;
   streamingActive = true;
   lastCommandOutput = output;
+  lastCommandPhase = phase;
 
   if (selectedTaskId !== taskId) {
     return;
+  }
+  if (!streamElement && !commandChatFeed.querySelector(`[data-stream-task="${taskId}"]`)) {
+    renderCommandChat(true);
   }
   if (!streamElement || !document.body.contains(streamElement)) {
     streamElement = commandChatFeed.querySelector<HTMLElement>(`[data-stream-task="${taskId}"] .mission-output-stream`);
@@ -1333,6 +1370,11 @@ function completeStreamOutput(taskId: string, output: string) {
   streamTaskId = null;
   streamVisibleOutput = output;
   lastCommandOutput = output;
+  pendingStreamUpdate = null;
+  if (streamUpdateFrame) {
+    cancelAnimationFrame(streamUpdateFrame);
+    streamUpdateFrame = 0;
+  }
   streamElement = null;
   streamScrollContainer = null;
   // Do a single clean re-render now that streaming is done
@@ -1346,6 +1388,11 @@ function startNewChat() {
   currentRunningTask = null;
   streamTaskId = null;
   streamingActive = false;
+  pendingStreamUpdate = null;
+  if (streamUpdateFrame) {
+    cancelAnimationFrame(streamUpdateFrame);
+    streamUpdateFrame = 0;
+  }
   lastCommandPrompt = '';
   lastCommandOutput = '';
   lastCommandPhase = 'ready';
@@ -1402,6 +1449,27 @@ function renderChatSessions() {
         selectRunChat(taskId);
       }
     });
+  });
+}
+
+function pulseLiveStream() {
+  const now = performance.now();
+  if (now - lastStreamPulseAt < 160) {
+    return;
+  }
+  lastStreamPulseAt = now;
+  scene.pulseResponse(0.62);
+  scene.pulseMemoryGrowth(0.12);
+}
+
+function scheduleStreamChromeRender() {
+  const now = performance.now();
+  if (now - lastStreamChromeRenderAt < 700) {
+    return;
+  }
+  lastStreamChromeRenderAt = now;
+  requestAnimationFrame(() => {
+    renderChatSessions();
   });
 }
 

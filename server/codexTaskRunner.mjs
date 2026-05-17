@@ -278,37 +278,16 @@ export class CodexTaskRunner {
       task.commandsRun = artifacts.commandsRun;
       task.testsRun = artifacts.testsRun;
       this.#rememberAssistantOutcome(task);
-      try {
-        const extracted = await this.memoryExtractor.extractFromTask(task);
-        task.memorySkipped = extracted.skipped ?? [];
-        for (const memory of extracted.memories) {
-          const inserted = this.memoryStore.create({
-            ...memory,
-            scope: 'project',
-            workspace: task.workspace
-          });
-          if (inserted?.id) {
-            task.createdMemoryIds.push(inserted.id);
-          }
-        }
-        if (task.createdMemoryIds.length === 0 && task.memorySkipped.length === 0) {
-          task.memorySkipped = [{
-            reason: 'No durable memory extracted.',
-            content: task.output.slice(0, 180),
-            confidence: 0
-          }];
-        }
-      } catch (error) {
-        task.memorySkipped = [{
-          reason: `Memory extraction failed: ${error.message}`,
-          content: task.output.slice(0, 180),
-          confidence: 0
-        }];
-      }
+      task.memorySkipped = [{
+        reason: 'Memory extraction is running in the background.',
+        content: task.output.slice(0, 180),
+        confidence: 0
+      }];
       const publicTask = this.#persistTask(task);
       this.tasks.delete(task.id);
       this.eventBus.emit('task.finished', publicTask);
       this.#drainQueue();
+      void this.#extractTaskMemories(task);
     });
 
     setTimeout(() => {
@@ -428,45 +407,16 @@ export class CodexTaskRunner {
       task.exitCode = 0;
       task.finishedAt = new Date().toISOString();
       this.#rememberAssistantOutcome(task);
-
-      try {
-        const extracted = await this.memoryExtractor.extractFromTask(task);
-        task.memorySkipped = extracted.skipped ?? [];
-        
-        // Extract and create memories
-        for (const memory of extracted.memories) {
-          const inserted = this.memoryStore.create({
-            ...memory,
-            scope: 'project',
-            workspace: task.workspace
-          });
-          if (inserted?.id) {
-            pushUnique(task.createdMemoryIds, inserted.id);
-          }
-        }
-        
-        if (task.createdMemoryIds.length === 0 && task.memorySkipped.length === 0) {
-          task.memorySkipped = [{
-            reason: 'No durable memory extracted.',
-            content: task.output.slice(0, 180),
-            confidence: 0
-          }];
-        }
-      } catch (memError) {
-        task.memorySkipped = [{
-          reason: `Memory extraction failed: ${memError.message}`,
-          content: task.output.slice(0, 180),
-          confidence: 0
-        }];
-      }
-      
-      // Get updated task with all memory info
+      task.memorySkipped = [{
+        reason: 'Memory extraction is running in the background.',
+        content: task.output.slice(0, 180),
+        confidence: 0
+      }];
       const publicTask = this.#persistTask(task);
       this.tasks.delete(task.id);
-      
-      // Emit task.finished event - this triggers frontend memory animation
       this.eventBus.emit('task.finished', publicTask);
       this.#drainQueue();
+      void this.#extractTaskMemories(task);
     } catch (error) {
       clearTimeout(timeout);
       task.status = 'failed';
@@ -498,6 +448,38 @@ export class CodexTaskRunner {
       return '';
     }
     return fs.readFileSync(task.outputMessagePath, 'utf8').trim();
+  }
+
+  async #extractTaskMemories(task) {
+    try {
+      const extracted = await this.memoryExtractor.extractFromTask(task);
+      task.memorySkipped = extracted.skipped ?? [];
+      for (const memory of extracted.memories) {
+        const inserted = this.memoryStore.create({
+          ...memory,
+          scope: 'project',
+          workspace: task.workspace
+        });
+        if (inserted?.id) {
+          pushUnique(task.createdMemoryIds, inserted.id);
+        }
+      }
+      if (task.createdMemoryIds.length === 0 && task.memorySkipped.length === 0) {
+        task.memorySkipped = [{
+          reason: 'No durable memory extracted.',
+          content: task.output.slice(0, 180),
+          confidence: 0
+        }];
+      }
+    } catch (error) {
+      task.memorySkipped = [{
+        reason: `Memory extraction failed: ${error.message}`,
+        content: task.output.slice(0, 180),
+        confidence: 0
+      }];
+    }
+    const publicTask = this.#persistTask(task);
+    this.eventBus.emit('task.updated', publicTask);
   }
 
 #spawnCodex(args, cwd) {
@@ -791,30 +773,57 @@ async function* readChatCompletionStream(body) {
   }
 }
 
-function parseChatCompletionStreamLine(line) {
+export function parseChatCompletionStreamLine(line) {
   const trimmed = line.trim();
-  if (!trimmed || !trimmed.startsWith('data:')) {
+  if (!trimmed) {
     return '';
   }
-  const data = trimmed.slice(5).trim();
+  const data = trimmed.startsWith('data:') ? trimmed.slice(5).trim() : trimmed;
   if (!data || data === '[DONE]') {
     return '';
   }
   try {
     const event = JSON.parse(data);
-    return event.choices?.[0]?.delta?.content
-      ?? event.choices?.[0]?.message?.content
-      ?? event.choices?.[0]?.text
-      ?? '';
+    return extractStreamEventText(event);
   } catch {
     return '';
   }
 }
 
 function extractChatCompletionText(data) {
-  return data?.choices?.[0]?.message?.content
-    ?? data?.choices?.[0]?.text
-    ?? '';
+  return textFromContent(data?.choices?.[0]?.message?.content)
+    || textFromContent(data?.choices?.[0]?.text)
+    || textFromContent(data?.output_text)
+    || '';
+}
+
+function extractStreamEventText(event) {
+  const choice = event?.choices?.[0];
+  return textFromContent(choice?.delta?.content)
+    || textFromContent(choice?.delta?.reasoning_content)
+    || textFromContent(choice?.message?.content)
+    || textFromContent(choice?.text)
+    || textFromContent(event?.delta?.text)
+    || textFromContent(event?.delta)
+    || textFromContent(event?.output_text)
+    || textFromContent(event?.content)
+    || '';
+}
+
+function textFromContent(value) {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(textFromContent).join('');
+  }
+  if (value && typeof value === 'object') {
+    return textFromContent(value.text)
+      || textFromContent(value.content)
+      || textFromContent(value.value)
+      || '';
+  }
+  return '';
 }
 
 export function createCodexJsonOutputParser() {

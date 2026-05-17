@@ -1,6 +1,6 @@
 // Local semantic-embedding pipeline for the Jarvis memory store.
 //
-// Uses @xenova/transformers to run a small sentence-embedding model entirely
+// Uses @huggingface/transformers to run a small sentence-embedding model entirely
 // on-device. First call downloads the model (~25 MB) into the transformers
 // cache directory and caches it for subsequent runs. All cosine math is done
 // here so memoryStore.mjs stays small and database-focused.
@@ -59,9 +59,13 @@ export class Embedder {
   async #initPipeline() {
     // Dynamic import so the rest of the server boots cleanly even if the
     // dependency is missing — useful in dev environments without the model.
-    const transformers = await import('@xenova/transformers');
+    const transformers = await import('@huggingface/transformers');
     transformers.env.allowLocalModels = false;
     transformers.env.useBrowserCache = false;
+    transformers.env.useFSCache = true;
+    if (process.env.TRANSFORMERS_CACHE) {
+      transformers.env.cacheDir = process.env.TRANSFORMERS_CACHE;
+    }
     return transformers.pipeline('feature-extraction', this.#modelName, {
       quantized: true
     });

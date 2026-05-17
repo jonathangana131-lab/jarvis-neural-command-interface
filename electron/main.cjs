@@ -6,6 +6,7 @@ const backendPort = Number(process.env.PORT || 8787);
 const bundledUrl = `http://127.0.0.1:${backendPort}`;
 const externalUrl = process.env.JARVIS_CODEX_URL;
 let backend = null;
+let backendLog = '';
 
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) {
@@ -54,7 +55,12 @@ if (singleInstanceLock) {
     const appUrl = externalUrl || bundledUrl;
     if (!externalUrl) {
       startBackend();
-      await waitFor(`${bundledUrl}/api/config`, 30000);
+      try {
+        await waitFor(`${bundledUrl}/api/config`, 45000);
+      } catch (error) {
+        await createStartupErrorWindow(error);
+        return;
+      }
     }
 
     await createWindow(appUrl);
@@ -100,8 +106,74 @@ function startBackend() {
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true
   });
-  backend.stdout.on('data', (data) => process.stdout.write(`[backend] ${data}`));
-  backend.stderr.on('data', (data) => process.stderr.write(`[backend] ${data}`));
+  backend.stdout.on('data', (data) => {
+    appendBackendLog(data);
+    process.stdout.write(`[backend] ${data}`);
+  });
+  backend.stderr.on('data', (data) => {
+    appendBackendLog(data);
+    process.stderr.write(`[backend] ${data}`);
+  });
+}
+
+async function createStartupErrorWindow(error) {
+  nativeTheme.themeSource = 'dark';
+  Menu.setApplicationMenu(null);
+  const window = new BrowserWindow({
+    width: 860,
+    height: 560,
+    minWidth: 720,
+    minHeight: 480,
+    backgroundColor: '#081018',
+    title: 'Jarvis Neural Command Interface - Startup Issue',
+    icon: path.join(__dirname, '..', 'build', 'icon.ico'),
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  });
+  const message = escapeHtml(error instanceof Error ? error.message : String(error));
+  const log = escapeHtml(backendLog.trim() || 'No backend output was captured.');
+  await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Jarvis Startup Issue</title>
+    <style>
+      body { margin: 0; background: #081018; color: #d9fbff; font: 14px/1.5 system-ui, sans-serif; }
+      main { max-width: 760px; margin: 48px auto; padding: 0 24px; }
+      h1 { margin: 0 0 12px; font-size: 24px; }
+      p { color: #9fbac2; }
+      code, pre { background: rgba(115, 243, 255, 0.08); border: 1px solid rgba(115, 243, 255, 0.18); }
+      code { padding: 2px 5px; border-radius: 4px; }
+      pre { overflow: auto; max-height: 240px; padding: 14px; color: #c8f8ff; border-radius: 8px; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Jarvis could not start its local service.</h1>
+      <p>The desktop shell opened, but the backend did not become ready. Restart the app once; if it still fails, check that security software is not blocking the app's local Node process.</p>
+      <p><strong>Error:</strong> <code>${message}</code></p>
+      <h2>Backend log</h2>
+      <pre>${log}</pre>
+    </main>
+  </body>
+</html>`)}`);
+}
+
+function appendBackendLog(data) {
+  backendLog = `${backendLog}${data.toString()}`.slice(-12000);
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (match) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  })[match]);
 }
 
 async function waitFor(url, timeoutMs) {

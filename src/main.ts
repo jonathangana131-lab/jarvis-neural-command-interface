@@ -174,6 +174,14 @@ type ArtifactCatalogItem = {
   files: string[];
 };
 
+type LocalModelScanResult = {
+  provider: ModelProvider;
+  endpoint: string;
+  available: boolean;
+  models: string[];
+  detail: string;
+};
+
 const codexModelPresets = [
   { id: 'gpt-5.5', name: 'GPT-5.5', note: 'Latest model', icon: 'sparkles' },
   { id: 'o3-mini', name: 'O3 Mini', note: 'Fast reasoning', icon: 'zap' },
@@ -192,7 +200,7 @@ scene.start();
 scene.setMemoryPickHandler((memoryId) => selectMemory(memoryId));
 renderIcons();
 animateBoot();
-void boot();
+void boot().catch((error) => renderBootFailure(error));
 
 voiceToggle.addEventListener('click', async () => {
   try {
@@ -492,6 +500,26 @@ async function boot() {
   connectEvents();
 }
 
+function renderBootFailure(error: unknown) {
+  const message = error instanceof Error ? error.message : 'Unable to load the local Jarvis service.';
+  voiceStatus.textContent = message;
+  modeLabel.textContent = 'Startup issue';
+  apiKeyStatus.textContent = 'Service offline';
+  queueStatus.textContent = 'Unavailable';
+  missionObjective.textContent = 'Local service unavailable';
+  missionPhase.textContent = 'Startup issue';
+  missionNextAction.textContent = 'Restart the app, then open Diagnostics if the problem continues.';
+  commandChatFeed.innerHTML = `
+    <article class="mission-entry mission-entry--system">
+      <span>Startup</span>
+      <strong>Jarvis could not connect to its local service.</strong>
+      <p>${escapeHtml(message)}</p>
+    </article>
+  `;
+  setTab('run');
+  renderIcons();
+}
+
 // Debounced fetcher for the semantic-edge endpoint. The backend emits
 // memory.edges.updated whenever the embedding graph changes; this is the
 // listener that turns those notifications into visible orb structure.
@@ -758,13 +786,19 @@ async function scanLocalModels(showScanning: boolean) {
   }
   const previous = settingsLocalModel.value || config?.localModel?.model || '';
   const params = new URLSearchParams({ provider, endpoint });
-  const data = await fetchJson<{
-    provider: ModelProvider;
-    endpoint: string;
-    available: boolean;
-    models: string[];
-    detail: string;
-  }>(`/api/local-models?${params.toString()}`);
+  let data: LocalModelScanResult;
+  try {
+    data = await fetchJson<LocalModelScanResult>(`/api/local-models?${params.toString()}`);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : 'Unable to scan models.';
+    data = {
+      provider,
+      endpoint,
+      available: false,
+      models: provider === 'opencode' ? opencodeZenModelPresets.map((preset) => preset.id) : [],
+      detail
+    };
+  }
   modelConnectionStatus.value = modelConnectionLabel(data.available, data.detail);
   if (data.models.length === 0) {
     settingsLocalModel.innerHTML = '<option value="">No models detected</option>';

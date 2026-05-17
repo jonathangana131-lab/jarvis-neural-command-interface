@@ -1,30 +1,24 @@
-# v0.2.1
+# v0.2.2
 
-Bugfix release for live chat streaming and second-message responsiveness, built on top of the v0.2.0 semantic memory orb update.
+Hardening release for the public Windows build.
 
 ## Download
 
 Attach this file to the GitHub release:
 
-- `Jarvis-Neural-Command-Interface-Setup-0.2.1.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.2.2.exe`
 
-## Fixed
+## Fixed And Improved
 
-- Broadened chat stream parsing for OpenAI-compatible SSE, JSONL, reasoning deltas, Responses-style output deltas, and array content chunks.
-- Batched live token rendering on animation frames so the UI does not re-render heavy panels on every token.
-- Moved task memory extraction to the background after completion so a second message can start without waiting for memory extraction.
-- Added SSE header flushing and heartbeat events to keep the live event connection responsive.
+- Replaced deprecated `@xenova/transformers` with maintained `@huggingface/transformers`, clearing the npm audit report.
+- Added a desktop startup issue window so the app shows backend startup errors instead of silently quitting.
+- Added renderer boot failure recovery so the UI gives a useful service-offline state if `/api/config` cannot load.
+- Added a live stream smoke test that sends two messages through a mock streaming model endpoint.
+- Added a packaged app smoke test that launches the built Windows app with a clean profile and verifies two streamed messages.
+- Split large frontend vendor bundles so the production build no longer emits the oversized chunk warning.
 
-## Included From v0.2.0
+## Still Unsigned
 
-- On-device sentence embeddings via `@xenova/transformers`.
-- Real semantic edges between memory nodes on the orb.
-- Recall flash when Codex pulls memories for a task.
-- New memory endpoints and SSE events for semantic recall and edge updates.
-- Embedding backfill on startup with keyword fallback if the embedding model cannot load.
+The installer is still unsigned. Windows may show a SmartScreen warning until the app is signed with a real code-signing certificate.
 
-## Notes
-
-The installer is unsigned. Windows may show a SmartScreen warning until the app is code signed or establishes reputation.
-
-SHA256: `DE88F87E28A54E892735B4DC909F7FD5AE6BF852450926E457026F029F3A158D`
+SHA256: `CDF649F3246A10DF8079773BE22F63EB858DDFD86B75E09813871ECF2F530C3D`

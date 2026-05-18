@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,6 +13,29 @@ fs.mkdirSync(workspace, { recursive: true });
 fs.mkdirSync(dataDir, { recursive: true });
 
 const mockServer = http.createServer(async (req, res) => {
+  if (req.url === '/github/releases/latest') {
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({
+      tag_name: 'v9.9.9',
+      name: 'Mock update',
+      html_url: `http://127.0.0.1:${mockPort}/release`,
+      published_at: new Date().toISOString(),
+      assets: [{
+        name: 'Jarvis-Neural-Command-Interface-Setup-9.9.9.exe',
+        size: mockInstaller.length,
+        digest: `sha256:${mockInstallerSha256.toLowerCase()}`,
+        browser_download_url: `http://127.0.0.1:${mockPort}/downloads/Jarvis-Neural-Command-Interface-Setup-9.9.9.exe`
+      }]
+    }));
+    return;
+  }
+
+  if (req.url === '/downloads/Jarvis-Neural-Command-Interface-Setup-9.9.9.exe') {
+    res.setHeader('content-type', 'application/octet-stream');
+    res.end(mockInstaller);
+    return;
+  }
+
   if (req.url === '/v1/models') {
     res.setHeader('content-type', 'application/json');
     res.end(JSON.stringify({ data: [{ id: 'mock-stream-model' }] }));
@@ -38,6 +62,8 @@ const mockServer = http.createServer(async (req, res) => {
   res.end('not found');
 });
 
+const mockInstaller = Buffer.from('mock jarvis update installer');
+const mockInstallerSha256 = crypto.createHash('sha256').update(mockInstaller).digest('hex').toUpperCase();
 const mockPort = await listen(mockServer);
 const appPort = await freePort();
 
@@ -73,6 +99,8 @@ const server = spawn(process.execPath, ['--experimental-sqlite', 'server/index.m
     PORT: String(appPort),
     JARVIS_CONFIG: configPath,
     JARVIS_DATA_DIR: dataDir,
+    JARVIS_SECRET_DIR: dataDir,
+    JARVIS_UPDATE_RELEASE_URL: `http://127.0.0.1:${mockPort}/github/releases/latest`,
     OPENCODE_API_KEY: 'mock-key',
     OPENAI_API_KEY: ''
   },
@@ -96,6 +124,16 @@ try {
   const update = await getJson(appPort, '/api/update-check');
   if (!update.currentVersion) {
     throw new Error(`Update endpoint did not report the current version: ${JSON.stringify(update)}`);
+  }
+  if (!update.updateAvailable || update.latestVersion !== '9.9.9' || update.digest !== `sha256:${mockInstallerSha256.toLowerCase()}`) {
+    throw new Error(`Update endpoint did not report the mock release: ${JSON.stringify(update)}`);
+  }
+  const downloadedUpdate = await postJson(appPort, '/api/update/download', {});
+  if (downloadedUpdate.sha256 !== mockInstallerSha256 || !fs.existsSync(downloadedUpdate.installerPath)) {
+    throw new Error(`Update download was not verified: ${JSON.stringify(downloadedUpdate)}`);
+  }
+  if (!downloadedUpdate.backupPath || !fs.existsSync(downloadedUpdate.backupPath)) {
+    throw new Error(`Update backup was not created: ${JSON.stringify(downloadedUpdate)}`);
   }
   const logs = await getJson(appPort, '/api/logs');
   if (typeof logs.tail !== 'string' || !logs.path) {
@@ -121,16 +159,24 @@ try {
 }
 
 async function runTask(port, workspacePath, prompt) {
-  const response = await fetch(`http://127.0.0.1:${port}/api/tasks`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ prompt, workspace: workspacePath })
-  });
-  const data = await response.json();
-  if (!response.ok || !data.task?.id) {
-    throw new Error(data.error ?? `Task create failed with ${response.status}`);
+  const data = await postJson(port, '/api/tasks', { prompt, workspace: workspacePath });
+  if (!data.task?.id) {
+    throw new Error(data.error ?? 'Task create did not return an id.');
   }
   return waitForTask(port, data.task.id);
+}
+
+async function postJson(port, pathname, body) {
+  const response = await fetch(`http://127.0.0.1:${port}${pathname}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error ?? `${pathname} failed with ${response.status}`);
+  }
+  return data;
 }
 
 async function getJson(port, pathname) {

@@ -3184,6 +3184,25 @@ textarea::placeholder {
   font-weight: 850;
 }
 
+.update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.update-actions .hud-button {
+  min-height: 34px;
+  padding: 8px 10px;
+  font-size: 11px;
+}
+
+.diagnostics-grid__note {
+  margin-top: 8px;
+  color: var(--text-muted);
+}
+
 .diagnostics-grid pre {
   max-height: 220px;
   margin: 10px 0 0;

@@ -166,6 +166,7 @@ let streamScrollContainer: HTMLElement | null = null;
 let streamingActive = false;
 let pendingStreamUpdate: { id: string; output: string; phase: TaskRecord['phase'] } | null = null;
 let streamUpdateFrame = 0;
+let updateActionBusy = false;
 let lastStreamChromeRenderAt = 0;
 let lastStreamPulseAt = 0;
 let currentRunningTask: TaskRecord | null = null;
@@ -212,9 +213,24 @@ type UpdateCheck = {
   updateAvailable: boolean;
   url: string | null;
   downloadUrl: string | null;
+  assetName: string | null;
+  assetSize: number | null;
+  digest: string | null;
+  downloaded: { ready: boolean; path: string | null; sha256: string | null; size: number } | null;
   name: string | null;
   publishedAt: string | null;
   error?: string;
+};
+
+type UpdateDownload = {
+  version: string;
+  installerPath: string;
+  fileName: string;
+  size: number;
+  sha256: string;
+  expectedSha256: string | null;
+  backupPath: string;
+  backupFiles: string[];
 };
 
 const codexModelPresets = [
@@ -822,8 +838,9 @@ async function loadDiagnostics() {
   const updateDetail = update.error
     ? `Update check failed: ${update.error}`
     : update.updateAvailable
-      ? `Download ${update.latestVersion} from ${update.downloadUrl ?? update.url ?? 'GitHub releases'}.`
+      ? `Version ${update.latestVersion} is ready${update.assetSize ? ` (${formatBytes(update.assetSize)})` : ''}. ${update.digest ? 'Checksum verification available.' : 'Checksum verification unavailable.'}`
       : `Current version ${update.currentVersion} is up to date.`;
+  const updateActions = renderUpdateActions(update);
   const embeddingDetail = health.memory.embeddings.disabled
     ? `Keyword fallback active${health.memory.embeddings.lastError ? `: ${health.memory.embeddings.lastError}` : '.'}`
     : `Semantic embeddings ready (${health.memory.embeddings.dim} dimensions).`;
@@ -835,14 +852,72 @@ async function loadDiagnostics() {
     <article><strong>OpenCode Key</strong><span>${data.modelKey.present ? 'Ready' : 'Missing'}</span><p>${escapeHtml(data.modelKey.present ? `Loaded from ${data.modelKey.source}.` : 'Save a key in Settings to scan hosted models.')}</p></article>
     <article><strong>Model Router</strong><span>${data.localModel.available ? 'Connected' : 'Offline'}</span><p>${escapeHtml(`${data.localModel.provider} / ${data.localModel.endpoint} / ${data.localModel.detail}`)}</p></article>
     <article><strong>Embeddings</strong><span>${health.memory.embeddings.disabled ? 'Fallback' : 'Ready'}</span><p>${escapeHtml(embeddingDetail)}</p></article>
-    <article><strong>Updates</strong><span>${update.updateAvailable ? 'Available' : update.error ? 'Check failed' : 'Current'}</span><p>${escapeHtml(updateDetail)}</p>${update.downloadUrl ? `<a href="${escapeHtml(update.downloadUrl)}" target="_blank" rel="noreferrer">Download latest</a>` : ''}</article>
+    <article><strong>Updates</strong><span>${update.updateAvailable ? 'Available' : update.error ? 'Check failed' : 'Current'}</span><p>${escapeHtml(updateDetail)}</p>${updateActions}</article>
     <article><strong>Voice</strong><span>Browser scoped</span><p>${escapeHtml(voiceCapabilityLabel())}</p></article>
     <article><strong>SQLite</strong><span>${data.sqlite.exists ? 'Ready' : 'Missing'}</span><p>${escapeHtml(data.sqlite.databasePath)}</p></article>
     <article><strong>Queue</strong><span>${data.queue.paused ? 'Paused' : 'Active'}</span><p>${data.queue.runningTaskId ? `Running ${escapeHtml(data.queue.runningTaskId)}` : 'No active task'}</p></article>
     <article class="diagnostics-grid__wide"><strong>Local Logs</strong><span>${escapeHtml(logs.path)}</span><pre>${escapeHtml(logs.tail || 'No log output yet.')}</pre></article>
   `;
+  wireUpdateActions(update);
   renderIcons();
   renderQueueStatus(data.queue);
+}
+
+function renderUpdateActions(update: UpdateCheck) {
+  if (update.error) {
+    return '';
+  }
+  if (!update.updateAvailable) {
+    return update.url ? `<a href="${escapeHtml(update.url)}" target="_blank" rel="noreferrer">View releases</a>` : '';
+  }
+  const downloadLabel = update.downloaded?.ready ? 'Re-download verified installer' : 'Download update';
+  const verifiedDetail = update.downloaded?.ready
+    ? `<p class="diagnostics-grid__note">Verified installer saved locally: ${escapeHtml(formatBytes(update.downloaded.size))}</p>`
+    : '';
+  return `
+    <div class="update-actions">
+      <button class="hud-button" type="button" data-update-download data-icon="download" ${updateActionBusy ? 'disabled' : ''}><span>${downloadLabel}</span></button>
+      ${update.downloaded?.ready ? `<button class="hud-button hud-button--primary" type="button" data-update-install data-icon="play" ${updateActionBusy ? 'disabled' : ''}><span>Install update</span></button>` : ''}
+      ${update.downloadUrl ? `<a href="${escapeHtml(update.downloadUrl)}" target="_blank" rel="noreferrer">Manual download</a>` : ''}
+    </div>
+    ${verifiedDetail}
+  `;
+}
+
+function wireUpdateActions(_update: UpdateCheck) {
+  diagnosticsList.querySelector<HTMLButtonElement>('[data-update-download]')?.addEventListener('click', async () => {
+    if (updateActionBusy) {
+      return;
+    }
+    updateActionBusy = true;
+    try {
+      const result = await postJson<UpdateDownload>('/api/update/download', {});
+      window.alert(`Update ${result.version} downloaded and verified.\n\nBackup: ${result.backupPath}\nSHA256: ${result.sha256}`);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Unable to download update.');
+    } finally {
+      updateActionBusy = false;
+      await loadDiagnostics();
+    }
+  });
+  diagnosticsList.querySelector<HTMLButtonElement>('[data-update-install]')?.addEventListener('click', async () => {
+    if (updateActionBusy) {
+      return;
+    }
+    if (!window.confirm('Launch the verified Windows installer now? Keep following the installer prompts. Your memories and settings stay in the app profile.')) {
+      return;
+    }
+    updateActionBusy = true;
+    try {
+      const result = await postJson<{ launched: boolean; message: string }>('/api/update/install', {});
+      window.alert(result.message);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Unable to launch installer.');
+    } finally {
+      updateActionBusy = false;
+      await loadDiagnostics();
+    }
+  });
 }
 
 async function refreshQueueStatus() {
@@ -2510,6 +2585,20 @@ function formatDateTime(value: string) {
     return value;
   }
   return date.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0 B';
+  }
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = value;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
 
 function shortId(id: string) {

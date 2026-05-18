@@ -1,7 +1,10 @@
 import express from 'express';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { isPathAllowed, loadConfig, publicConfig } from './config.mjs';
 import { EventBus } from './eventBus.mjs';
 import { Embedder } from './embeddings.mjs';
@@ -26,6 +29,9 @@ const taskRunner = new CodexTaskRunner(config, eventBus, memoryStore, memoryExtr
 const localModelStatePath = path.resolve(config.dataDir, 'local-model.json');
 const secretDir = path.resolve(process.env.JARVIS_SECRET_DIR ?? config.dataDir);
 const modelSecretPath = path.resolve(secretDir, 'model-secrets.json');
+const updateDir = path.resolve(config.dataDir, 'updates');
+const updateBackupDir = path.resolve(config.dataDir, 'update-backups');
+const updateRepository = process.env.JARVIS_UPDATE_REPO || 'jonathangana131-lab/jarvis-neural-command-interface';
 const opencodeFreeModels = [
   'minimax-m2.5-free',
   'big-pickle',
@@ -80,24 +86,19 @@ app.get('/api/health', async (_req, res) => {
 
 app.get('/api/update-check', async (_req, res) => {
   try {
-    const response = await fetch('https://api.github.com/repos/jonathangana131-lab/jarvis-neural-command-interface/releases/latest', {
-      headers: {
-        Accept: 'application/vnd.github+json',
-        'User-Agent': 'Jarvis-Neural-Command-Interface'
-      },
-      signal: AbortSignal.timeout(6000)
-    });
-    if (!response.ok) {
-      throw new Error(`${response.status} ${response.statusText}`);
-    }
-    const release = await response.json();
+    const release = await fetchLatestRelease();
+    const asset = findWindowsInstallerAsset(release);
     const latestVersion = String(release.tag_name ?? '').replace(/^v/i, '');
     res.json({
       currentVersion: packageInfo.version,
       latestVersion,
       updateAvailable: compareVersions(latestVersion, packageInfo.version) > 0,
       url: release.html_url,
-      downloadUrl: release.assets?.find((asset) => String(asset.name ?? '').endsWith('.exe'))?.browser_download_url ?? release.html_url,
+      downloadUrl: asset?.browser_download_url ?? release.html_url,
+      assetName: asset?.name ?? null,
+      assetSize: asset?.size ?? null,
+      digest: asset?.digest ?? null,
+      downloaded: asset ? downloadedInstallerStatus(asset) : null,
       name: release.name ?? release.tag_name,
       publishedAt: release.published_at
     });
@@ -108,10 +109,111 @@ app.get('/api/update-check', async (_req, res) => {
       updateAvailable: false,
       url: null,
       downloadUrl: null,
+      assetName: null,
+      assetSize: null,
+      digest: null,
+      downloaded: null,
       name: null,
       publishedAt: null,
       error: error instanceof Error ? error.message : 'Unable to check for updates.'
     });
+  }
+});
+
+app.post('/api/update/download', async (_req, res, next) => {
+  try {
+    const release = await fetchLatestRelease();
+    const asset = findWindowsInstallerAsset(release);
+    if (!asset?.browser_download_url) {
+      const error = new Error('No Windows installer was found on the latest GitHub release.');
+      error.status = 404;
+      throw error;
+    }
+    const latestVersion = String(release.tag_name ?? '').replace(/^v/i, '');
+    if (compareVersions(latestVersion, packageInfo.version) <= 0) {
+      const error = new Error(`Version ${packageInfo.version} is already current.`);
+      error.status = 409;
+      throw error;
+    }
+
+    fs.mkdirSync(updateDir, { recursive: true });
+    const fileName = safeInstallerFileName(asset.name);
+    const targetPath = path.resolve(updateDir, fileName);
+    const tempPath = `${targetPath}.download`;
+    const response = await fetch(asset.browser_download_url, {
+      headers: { 'User-Agent': 'Jarvis-Neural-Command-Interface' },
+      signal: AbortSignal.timeout(10 * 60 * 1000)
+    });
+    if (!response.ok || !response.body) {
+      throw new Error(`Download failed: ${response.status} ${response.statusText}`);
+    }
+    await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(tempPath));
+    const sha256 = sha256File(tempPath);
+    const expected = normalizeSha256Digest(asset.digest);
+    if (expected && sha256.toLowerCase() !== expected.toLowerCase()) {
+      fs.rmSync(tempPath, { force: true });
+      throw new Error(`Downloaded installer checksum mismatch. Expected ${expected}, got ${sha256}.`);
+    }
+    fs.renameSync(tempPath, targetPath);
+    const backup = backupUserDataForUpdate();
+    res.json({
+      version: latestVersion,
+      installerPath: targetPath,
+      fileName,
+      size: fs.statSync(targetPath).size,
+      sha256,
+      expectedSha256: expected,
+      backupPath: backup.path,
+      backupFiles: backup.files
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/update/install', async (req, res, next) => {
+  try {
+    if (process.platform !== 'win32') {
+      const error = new Error('In-app installer launch is only supported by the Windows build.');
+      error.status = 400;
+      throw error;
+    }
+    const requestedPath = String(req.body?.installerPath ?? '').trim();
+    const installerPath = requestedPath
+      ? path.resolve(requestedPath)
+      : latestDownloadedInstallerPath();
+    if (!installerPath) {
+      const error = new Error('Download the update before installing it.');
+      error.status = 400;
+      throw error;
+    }
+    if (!isSubpath(updateDir, installerPath) || path.extname(installerPath).toLowerCase() !== '.exe' || !fs.existsSync(installerPath)) {
+      const error = new Error('Installer path is not a verified Jarvis update download.');
+      error.status = 403;
+      throw error;
+    }
+    const release = await fetchLatestRelease();
+    const asset = findWindowsInstallerAsset(release);
+    const expected = normalizeSha256Digest(asset?.digest);
+    const sha256 = sha256File(installerPath);
+    if (expected && sha256.toLowerCase() !== expected.toLowerCase()) {
+      const error = new Error('Installer checksum changed after download. Download the update again.');
+      error.status = 409;
+      throw error;
+    }
+    const child = spawn(installerPath, [], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false
+    });
+    child.unref();
+    res.json({
+      launched: true,
+      installerPath,
+      message: 'Installer launched. Follow the Windows installer prompts; memories and settings stay in the app profile.'
+    });
+  } catch (error) {
+    next(error);
   }
 });
 
@@ -487,6 +589,108 @@ function readLogTail(targetPath, maxBytes) {
     fs.closeSync(fd);
   }
   return buffer.toString('utf8');
+}
+
+async function fetchLatestRelease() {
+  const releaseUrl = process.env.JARVIS_UPDATE_RELEASE_URL || `https://api.github.com/repos/${updateRepository}/releases/latest`;
+  const response = await fetch(releaseUrl, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      'User-Agent': 'Jarvis-Neural-Command-Interface'
+    },
+    signal: AbortSignal.timeout(6000)
+  });
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}`);
+  }
+  return response.json();
+}
+
+function findWindowsInstallerAsset(release) {
+  const assets = Array.isArray(release.assets) ? release.assets : [];
+  return assets.find((asset) => /^Jarvis-Neural-Command-Interface-Setup-.*\.exe$/i.test(String(asset.name ?? '')))
+    ?? assets.find((asset) => String(asset.name ?? '').toLowerCase().endsWith('.exe'))
+    ?? null;
+}
+
+function downloadedInstallerStatus(asset) {
+  try {
+    const fileName = safeInstallerFileName(asset.name);
+    const installerPath = path.resolve(updateDir, fileName);
+    if (!fs.existsSync(installerPath)) {
+      return { ready: false, path: null, sha256: null, size: 0 };
+    }
+    const sha256 = sha256File(installerPath);
+    const expected = normalizeSha256Digest(asset.digest);
+    return {
+      ready: !expected || sha256.toLowerCase() === expected.toLowerCase(),
+      path: installerPath,
+      sha256,
+      size: fs.statSync(installerPath).size
+    };
+  } catch {
+    return { ready: false, path: null, sha256: null, size: 0 };
+  }
+}
+
+function latestDownloadedInstallerPath() {
+  if (!fs.existsSync(updateDir)) {
+    return '';
+  }
+  const candidates = fs.readdirSync(updateDir)
+    .filter((name) => /^Jarvis-Neural-Command-Interface-Setup-.*\.exe$/i.test(name))
+    .map((name) => {
+      const installerPath = path.resolve(updateDir, name);
+      return { installerPath, mtimeMs: fs.statSync(installerPath).mtimeMs };
+    })
+    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return candidates[0]?.installerPath ?? '';
+}
+
+function safeInstallerFileName(value) {
+  const fileName = path.basename(String(value ?? 'Jarvis-Neural-Command-Interface-Setup.exe'));
+  if (!/^[-_. A-Za-z0-9]+\.exe$/i.test(fileName)) {
+    throw new Error('Installer asset name is not safe to download.');
+  }
+  return fileName;
+}
+
+function normalizeSha256Digest(value) {
+  const digest = String(value ?? '').trim();
+  if (!digest) {
+    return '';
+  }
+  return digest.replace(/^sha256:/i, '');
+}
+
+function sha256File(targetPath) {
+  const hash = crypto.createHash('sha256');
+  hash.update(fs.readFileSync(targetPath));
+  return hash.digest('hex').toUpperCase();
+}
+
+function backupUserDataForUpdate() {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupPath = path.resolve(updateBackupDir, stamp);
+  fs.mkdirSync(backupPath, { recursive: true });
+  const files = [];
+  const candidates = [
+    config.memory.databasePath,
+    `${config.memory.databasePath}-wal`,
+    `${config.memory.databasePath}-shm`,
+    localModelStatePath,
+    modelSecretPath
+  ];
+  for (const candidate of candidates) {
+    if (!candidate || !fs.existsSync(candidate)) {
+      continue;
+    }
+    const safeName = path.basename(candidate);
+    const destination = path.resolve(backupPath, safeName);
+    fs.copyFileSync(candidate, destination);
+    files.push(safeName);
+  }
+  return { path: backupPath, files };
 }
 
 function compareVersions(a, b) {

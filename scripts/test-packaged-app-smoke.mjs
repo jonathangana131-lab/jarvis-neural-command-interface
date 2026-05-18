@@ -91,7 +91,7 @@ try {
 } finally {
   await stopChild(appProcess);
   await closeServer(mockServer);
-  removeTempRoot(tempRoot);
+  await removeTempRoot(tempRoot);
 }
 
 async function runTask(port, workspacePath, prompt) {
@@ -189,13 +189,14 @@ function stopChild(child) {
   });
 }
 
-function removeTempRoot(target) {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
+async function removeTempRoot(target) {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
     try {
       fs.rmSync(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 150 });
       return;
     } catch (error) {
-      if (attempt === 4) {
+      await delay(300 + attempt * 150);
+      if (attempt === 9) {
         console.warn(`Unable to remove temporary packaged smoke directory ${target}: ${error.message}`);
       }
     }

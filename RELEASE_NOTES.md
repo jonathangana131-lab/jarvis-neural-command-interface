@@ -1,32 +1,34 @@
-# v0.3.1
+# v0.4.0
 
-In-app updater release for the public Windows build.
+Trust, recovery, and backup release for the public Windows build.
 
 ## Download
 
 Attach this file to the GitHub release:
 
-- `Jarvis-Neural-Command-Interface-Setup-0.3.1.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.4.0.exe`
 
 ## Added
 
-- In-app update download flow in Diagnostics when a newer GitHub release is available.
-- SHA256 verification for downloaded installers using the GitHub release asset digest.
-- One-click installer launch after a verified update download.
-- Automatic update backup folder for memories, local model settings, and saved model secrets before installation.
-- Update status now shows asset name, size, checksum availability, and whether a verified installer is already downloaded.
+- Update banner on the main app surface when a newer release is available.
+- Progress-aware update download state with polling from the renderer.
+- Backup manager in Diagnostics for creating and inspecting app-profile backups.
+- Restore action for backed-up model settings and saved model secrets.
+- Recovery controls to reset bad model settings, clear saved secrets, and export a local log bundle.
+- Tray menu plus `Ctrl+Alt+J` global hotkey to show or hide Jarvis.
+- Update downloads still verify SHA256 before install and create a profile backup before launch.
+- Task startup now uses fast keyword memory recall so slow embedding startup cannot leave missions stuck in the queue.
 
 ## Preserved Data
 
-Memories, saved model settings, model secrets, and logs remain in the Electron user profile, separate from the installed app folder. Updating the Windows installer should not erase them.
+Memories, saved model settings, model secrets, logs, update downloads, and backups remain in the Electron user profile, separate from the installed app folder. Updating the Windows installer should not erase them.
+
+## Signing
+
+The app is ready for a real code-signing certificate, but this build is still unsigned because no trusted certificate/private key is available in the workspace.
 
 ## Verified
 
-- Source build and all parser, memory, artifact, live stream, packaged app, and installed UI smoke tests.
-- The Windows installer launches the packaged app and preserves user profile data outside the install folder.
+- Source build and parser, memory, artifact, live stream, packaged app, and installed UI smoke tests.
 
-## Still Unsigned
-
-The installer is still unsigned. Windows may show a SmartScreen warning until the app is signed with a real code-signing certificate.
-
-SHA256: `0391A69A2979A9E8F2965166473B6712E0F226B6DB157C098C1FD8A11CDD34F5`
+SHA256: `8EE700AE4DB754441CD7AEB37E76616D0AC219B721AD2AB30119437EBC098F5E`

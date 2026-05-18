@@ -55,6 +55,20 @@
 
       <section id="task-hud" class="operation-channel" aria-label="Codex task status"></section>
 
+      <section id="update-banner" class="update-banner hidden" aria-label="Update available">
+        <div>
+          <span class="micro-label">Update</span>
+          <strong id="update-banner-title">New version available</strong>
+          <p id="update-banner-detail">A verified installer can be downloaded from GitHub.</p>
+          <div class="update-progress hidden" id="update-progress" aria-hidden="true"><span id="update-progress-fill"></span></div>
+        </div>
+        <div class="update-banner__actions">
+          <button id="update-banner-download" class="hud-button hud-button--primary" type="button" data-icon="download"><span>Download</span></button>
+          <button id="update-banner-install" class="hud-button hidden" type="button" data-icon="play"><span>Install</span></button>
+          <button id="update-banner-details" class="hud-button" type="button" data-icon="activity"><span>Details</span></button>
+        </div>
+      </section>
+
       <section id="setup-wizard" class="setup-wizard hidden" aria-label="First-run setup" aria-live="polite">
         <div class="setup-wizard__panel">
           <header>

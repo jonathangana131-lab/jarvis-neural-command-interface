@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, nativeTheme } = require('electron');
+const { app, BrowserWindow, Menu, Tray, globalShortcut, nativeTheme } = require('electron');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -8,6 +8,8 @@ const bundledUrl = `http://127.0.0.1:${backendPort}`;
 const externalUrl = process.env.JARVIS_CODEX_URL;
 let backend = null;
 let backendLog = '';
+let mainWindow = null;
+let tray = null;
 
 const userDataOverride = process.env.JARVIS_USER_DATA_DIR;
 if (userDataOverride) {
@@ -55,7 +57,14 @@ async function createWindow(appUrl) {
   window.once('ready-to-show', () => {
     window.show();
   });
+  window.on('closed', () => {
+    if (mainWindow === window) {
+      mainWindow = null;
+    }
+  });
   await window.loadURL(appUrl);
+  mainWindow = window;
+  return window;
 }
 
 if (singleInstanceLock) {
@@ -72,6 +81,8 @@ if (singleInstanceLock) {
     }
 
     await createWindow(appUrl);
+    setupTray(appUrl);
+    setupGlobalShortcuts();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
@@ -85,6 +96,7 @@ if (singleInstanceLock) {
 }
 
 app.on('before-quit', () => {
+  globalShortcut.unregisterAll();
   backend?.kill();
 });
 
@@ -122,6 +134,46 @@ function startBackend() {
     appendBackendLog(data);
     process.stderr.write(`[backend] ${data}`);
   });
+}
+
+function setupTray(appUrl) {
+  if (tray) {
+    return;
+  }
+  const iconPath = path.join(__dirname, '..', 'build', 'icon.ico');
+  tray = new Tray(iconPath);
+  tray.setToolTip('Jarvis Neural Command Interface');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Show Jarvis', click: () => showMainWindow(appUrl) },
+    { label: 'Hide Jarvis', click: () => mainWindow?.hide() },
+    { type: 'separator' },
+    { label: 'Quit', click: () => app.quit() }
+  ]));
+  tray.on('click', () => toggleMainWindow(appUrl));
+}
+
+function setupGlobalShortcuts() {
+  globalShortcut.register('CommandOrControl+Alt+J', () => toggleMainWindow(externalUrl || bundledUrl));
+}
+
+function showMainWindow(appUrl) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    void createWindow(appUrl);
+    return;
+  }
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function toggleMainWindow(appUrl) {
+  if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) {
+    showMainWindow(appUrl);
+    return;
+  }
+  mainWindow.hide();
 }
 
 async function createStartupErrorWindow(error) {

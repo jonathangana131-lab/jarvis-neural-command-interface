@@ -128,7 +128,8 @@ try {
   if (!update.updateAvailable || update.latestVersion !== '9.9.9' || update.digest !== `sha256:${mockInstallerSha256.toLowerCase()}`) {
     throw new Error(`Update endpoint did not report the mock release: ${JSON.stringify(update)}`);
   }
-  const downloadedUpdate = await postJson(appPort, '/api/update/download', {});
+  await postJson(appPort, '/api/update/download', {});
+  const downloadedUpdate = await waitForUpdateReady(appPort);
   if (downloadedUpdate.sha256 !== mockInstallerSha256 || !fs.existsSync(downloadedUpdate.installerPath)) {
     throw new Error(`Update download was not verified: ${JSON.stringify(downloadedUpdate)}`);
   }
@@ -199,6 +200,18 @@ async function waitForTask(port, taskId) {
     await delay(120);
   }
   throw new Error(`Task ${taskId} timed out. Server output:\n${serverOutput}`);
+}
+
+async function waitForUpdateReady(port) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 10000) {
+    const status = await getJson(port, '/api/update/status');
+    if (status.status === 'ready' || status.status === 'failed') {
+      return status;
+    }
+    await delay(100);
+  }
+  throw new Error(`Update download timed out. Server output:\n${serverOutput}`);
 }
 
 async function waitFor(url, timeoutMs) {

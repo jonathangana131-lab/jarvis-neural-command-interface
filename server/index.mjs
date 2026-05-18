@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 import { isPathAllowed, loadConfig, publicConfig } from './config.mjs';
 import { EventBus } from './eventBus.mjs';
 import { Embedder } from './embeddings.mjs';
@@ -32,6 +31,20 @@ const modelSecretPath = path.resolve(secretDir, 'model-secrets.json');
 const updateDir = path.resolve(config.dataDir, 'updates');
 const updateBackupDir = path.resolve(config.dataDir, 'update-backups');
 const updateRepository = process.env.JARVIS_UPDATE_REPO || 'jonathangana131-lab/jarvis-neural-command-interface';
+let updateDownloadState = {
+  status: 'idle',
+  version: null,
+  fileName: null,
+  installerPath: null,
+  receivedBytes: 0,
+  totalBytes: 0,
+  sha256: null,
+  expectedSha256: null,
+  backupPath: null,
+  backupFiles: [],
+  error: null,
+  updatedAt: new Date().toISOString()
+};
 const opencodeFreeModels = [
   'minimax-m2.5-free',
   'big-pickle',
@@ -122,6 +135,10 @@ app.get('/api/update-check', async (_req, res) => {
 
 app.post('/api/update/download', async (_req, res, next) => {
   try {
+    if (updateDownloadState.status === 'downloading') {
+      res.status(202).json(updateDownloadState);
+      return;
+    }
     const release = await fetchLatestRelease();
     const asset = findWindowsInstallerAsset(release);
     if (!asset?.browser_download_url) {
@@ -136,8 +153,110 @@ app.post('/api/update/download', async (_req, res, next) => {
       throw error;
     }
 
+    startUpdateDownload(release, asset);
+    res.status(202).json(updateDownloadState);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/update/status', (_req, res) => {
+  res.json(updateDownloadState);
+});
+
+app.post('/api/backups/create', (_req, res, next) => {
+  try {
+    res.status(201).json(backupUserDataForUpdate('manual'));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/backups', (_req, res, next) => {
+  try {
+    res.json({ backups: listUpdateBackups() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/logs/export', (_req, res, next) => {
+  try {
+    const bundle = exportLogBundle();
+    res.json(bundle);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/recovery/reset-model', (_req, res, next) => {
+  try {
+    config.localModel = {
+      provider: 'opencode',
+      endpoint: defaultEndpoint('opencode'),
+      model: defaultModel('opencode')
+    };
+    config.codex.model = 'gpt-5.5';
+    fs.rmSync(localModelStatePath, { force: true });
+    res.json({ localModel: config.localModel, message: 'Model settings reset to safe defaults.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/recovery/clear-secrets', (_req, res, next) => {
+  try {
+    if (fs.existsSync(modelSecretPath)) {
+      fs.rmSync(modelSecretPath, { force: true });
+    }
+    delete process.env.OPENCODE_API_KEY;
+    res.json({ modelKey: modelKeyStatus(), message: 'Saved model secrets cleared.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/backups/:id/restore-settings', (req, res, next) => {
+  try {
+    const backup = backupById(req.params.id);
+    if (!backup) {
+      const error = new Error('Backup not found.');
+      error.status = 404;
+      throw error;
+    }
+    const restored = restoreSettingsFromBackup(backup.path);
+    loadModelSecrets(modelSecretPath);
+    loadLocalModelState(config, localModelStatePath);
+    res.json({ restored, localModel: config.localModel, modelKey: modelKeyStatus() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+function startUpdateDownload(release, asset) {
+  const latestVersion = String(release.tag_name ?? '').replace(/^v/i, '');
+  const fileName = safeInstallerFileName(asset.name);
+  const expected = normalizeSha256Digest(asset.digest);
+  updateDownloadState = {
+    status: 'downloading',
+    version: latestVersion,
+    fileName,
+    installerPath: null,
+    receivedBytes: 0,
+    totalBytes: Number(asset.size ?? 0),
+    sha256: null,
+    expectedSha256: expected || null,
+    backupPath: null,
+    backupFiles: [],
+    error: null,
+    updatedAt: new Date().toISOString()
+  };
+  void runUpdateDownload(asset, latestVersion, fileName, expected);
+}
+
+async function runUpdateDownload(asset, latestVersion, fileName, expected) {
+  try {
     fs.mkdirSync(updateDir, { recursive: true });
-    const fileName = safeInstallerFileName(asset.name);
     const targetPath = path.resolve(updateDir, fileName);
     const tempPath = `${targetPath}.download`;
     const response = await fetch(asset.browser_download_url, {
@@ -147,29 +266,48 @@ app.post('/api/update/download', async (_req, res, next) => {
     if (!response.ok || !response.body) {
       throw new Error(`Download failed: ${response.status} ${response.statusText}`);
     }
-    await pipeline(Readable.fromWeb(response.body), fs.createWriteStream(tempPath));
+    const fileStream = fs.createWriteStream(tempPath);
+    for await (const chunk of Readable.fromWeb(response.body)) {
+      updateDownloadState.receivedBytes += chunk.length;
+      updateDownloadState.updatedAt = new Date().toISOString();
+      if (!fileStream.write(chunk)) {
+        await new Promise((resolve) => fileStream.once('drain', resolve));
+      }
+    }
+    await new Promise((resolve, reject) => {
+      fileStream.end(resolve);
+      fileStream.on('error', reject);
+    });
     const sha256 = sha256File(tempPath);
-    const expected = normalizeSha256Digest(asset.digest);
     if (expected && sha256.toLowerCase() !== expected.toLowerCase()) {
       fs.rmSync(tempPath, { force: true });
       throw new Error(`Downloaded installer checksum mismatch. Expected ${expected}, got ${sha256}.`);
     }
     fs.renameSync(tempPath, targetPath);
-    const backup = backupUserDataForUpdate();
-    res.json({
+    const backup = backupUserDataForUpdate('update');
+    updateDownloadState = {
+      status: 'ready',
       version: latestVersion,
       installerPath: targetPath,
       fileName,
-      size: fs.statSync(targetPath).size,
+      receivedBytes: fs.statSync(targetPath).size,
+      totalBytes: fs.statSync(targetPath).size,
       sha256,
-      expectedSha256: expected,
+      expectedSha256: expected || null,
       backupPath: backup.path,
-      backupFiles: backup.files
-    });
+      backupFiles: backup.files,
+      error: null,
+      updatedAt: new Date().toISOString()
+    };
   } catch (error) {
-    next(error);
+    updateDownloadState = {
+      ...updateDownloadState,
+      status: 'failed',
+      error: error instanceof Error ? error.message : 'Update download failed.',
+      updatedAt: new Date().toISOString()
+    };
   }
-});
+}
 
 app.post('/api/update/install', async (req, res, next) => {
   try {
@@ -669,8 +807,8 @@ function sha256File(targetPath) {
   return hash.digest('hex').toUpperCase();
 }
 
-function backupUserDataForUpdate() {
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+function backupUserDataForUpdate(reason = 'manual') {
+  const stamp = `${new Date().toISOString().replace(/[:.]/g, '-')}-${safeBackupId(reason)}`;
   const backupPath = path.resolve(updateBackupDir, stamp);
   fs.mkdirSync(backupPath, { recursive: true });
   const files = [];
@@ -690,7 +828,88 @@ function backupUserDataForUpdate() {
     fs.copyFileSync(candidate, destination);
     files.push(safeName);
   }
-  return { path: backupPath, files };
+  const manifest = {
+    id: path.basename(backupPath),
+    reason,
+    createdAt: new Date().toISOString(),
+    files,
+    dataDir: config.dataDir,
+    memoryDatabase: config.memory.databasePath
+  };
+  fs.writeFileSync(path.resolve(backupPath, 'manifest.json'), JSON.stringify(manifest, null, 2));
+  return { ...manifest, path: backupPath };
+}
+
+function listUpdateBackups() {
+  if (!fs.existsSync(updateBackupDir)) {
+    return [];
+  }
+  return fs.readdirSync(updateBackupDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => {
+      const backupPath = path.resolve(updateBackupDir, entry.name);
+      const manifestPath = path.resolve(backupPath, 'manifest.json');
+      let manifest = {};
+      try {
+        manifest = fs.existsSync(manifestPath)
+          ? JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+          : {};
+      } catch {
+        manifest = {};
+      }
+      const files = fs.readdirSync(backupPath).filter((name) => name !== 'manifest.json');
+      return {
+        id: entry.name,
+        path: backupPath,
+        reason: manifest.reason ?? 'manual',
+        createdAt: manifest.createdAt ?? fs.statSync(backupPath).birthtime.toISOString(),
+        files,
+        restartRequiredForMemoryRestore: files.some((name) => /^memory\.sqlite/i.test(name))
+      };
+    })
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+function backupById(id) {
+  const safeId = safeBackupId(id);
+  return listUpdateBackups().find((backup) => backup.id === safeId) ?? null;
+}
+
+function restoreSettingsFromBackup(backupPath) {
+  const restored = [];
+  const localModelBackup = path.resolve(backupPath, path.basename(localModelStatePath));
+  const modelSecretBackup = path.resolve(backupPath, path.basename(modelSecretPath));
+  if (fs.existsSync(localModelBackup)) {
+    fs.mkdirSync(path.dirname(localModelStatePath), { recursive: true });
+    fs.copyFileSync(localModelBackup, localModelStatePath);
+    restored.push('local-model.json');
+  }
+  if (fs.existsSync(modelSecretBackup)) {
+    fs.mkdirSync(path.dirname(modelSecretPath), { recursive: true });
+    fs.copyFileSync(modelSecretBackup, modelSecretPath);
+    restored.push('model-secrets.json');
+  }
+  return restored;
+}
+
+function exportLogBundle() {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const bundlePath = path.resolve(config.dataDir, `jarvis-log-bundle-${stamp}.txt`);
+  const lines = [
+    `Jarvis Neural Command Interface ${packageInfo.version}`,
+    `Created: ${new Date().toISOString()}`,
+    `Data directory: ${config.dataDir}`,
+    `Memory database: ${config.memory.databasePath}`,
+    '',
+    '--- Local log tail ---',
+    readLogTail(logPath, 64000) || 'No log output yet.'
+  ];
+  fs.writeFileSync(bundlePath, lines.join('\n'));
+  return { path: bundlePath, size: fs.statSync(bundlePath).size };
+}
+
+function safeBackupId(value) {
+  return String(value ?? 'backup').replace(/[^A-Za-z0-9_.-]/g, '-').slice(0, 120) || 'backup';
 }
 
 function compareVersions(a, b) {

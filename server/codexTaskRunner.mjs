@@ -175,7 +175,7 @@ export class CodexTaskRunner {
       return this.#runOpenCodeApiTask(queued);
     }
 
-    const relevantMemories = await this.memoryStore.relevantForAsync({ prompt: queued.prompt, workspace: queued.workspace, limit: 6 });
+    const relevantMemories = await this.#relevantMemoriesForTask(queued);
     const executionPrompt = buildPromptWithMemories(queued.prompt, relevantMemories);
     const outputMessagePath = this.#outputMessagePath(queued.id);
     const task = {
@@ -310,7 +310,7 @@ export class CodexTaskRunner {
   }
 
   async #runOpenCodeApiTask(queued) {
-    const relevantMemories = await this.memoryStore.relevantForAsync({ prompt: queued.prompt, workspace: queued.workspace, limit: 6 });
+    const relevantMemories = await this.#relevantMemoriesForTask(queued);
     const executionPrompt = buildPromptWithMemories(queued.prompt, relevantMemories, { materializeArtifacts: true });
     const task = {
       ...queued,
@@ -448,6 +448,19 @@ export class CodexTaskRunner {
       return '';
     }
     return fs.readFileSync(task.outputMessagePath, 'utf8').trim();
+  }
+
+  async #relevantMemoriesForTask(task) {
+    try {
+      return this.memoryStore.relevantForKeyword({
+        prompt: task.prompt,
+        workspace: task.workspace,
+        limit: 6
+      });
+    } catch (error) {
+      console.warn(`[codexTaskRunner] memory recall skipped: ${error?.message ?? error}`);
+      return [];
+    }
   }
 
   async #extractTaskMemories(task) {

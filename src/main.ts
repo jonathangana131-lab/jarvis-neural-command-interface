@@ -2,6 +2,7 @@ import './style.css';
 import gsap from 'gsap';
 import {
   Activity,
+  Download,
   Brain,
   Cloud,
   Cpu,
@@ -34,6 +35,7 @@ import type { AppConfig, AssistantMode, MemoryRecord, ModelKeyStatus, TaskRecord
 
 const jarvisIcons = {
   Activity,
+  Download,
   Brain,
   Cloud,
   Cpu,
@@ -88,6 +90,14 @@ const apiKeyStatus = required<HTMLElement>('#api-key-status');
 const pauseQueue = required<HTMLButtonElement>('#pause-queue');
 const resumeQueue = required<HTMLButtonElement>('#resume-queue');
 const queueStatus = required<HTMLElement>('#queue-status');
+const updateBanner = required<HTMLElement>('#update-banner');
+const updateBannerTitle = required<HTMLElement>('#update-banner-title');
+const updateBannerDetail = required<HTMLElement>('#update-banner-detail');
+const updateProgress = required<HTMLElement>('#update-progress');
+const updateProgressFill = required<HTMLElement>('#update-progress-fill');
+const updateBannerDownload = required<HTMLButtonElement>('#update-banner-download');
+const updateBannerInstall = required<HTMLButtonElement>('#update-banner-install');
+const updateBannerDetails = required<HTMLButtonElement>('#update-banner-details');
 const setupWizard = required<HTMLElement>('#setup-wizard');
 const setupProvider = required<HTMLSelectElement>('#setup-provider');
 const setupEndpoint = required<HTMLInputElement>('#setup-endpoint');
@@ -167,6 +177,7 @@ let streamingActive = false;
 let pendingStreamUpdate: { id: string; output: string; phase: TaskRecord['phase'] } | null = null;
 let streamUpdateFrame = 0;
 let updateActionBusy = false;
+let lastUpdateCheck: UpdateCheck | null = null;
 let lastStreamChromeRenderAt = 0;
 let lastStreamPulseAt = 0;
 let currentRunningTask: TaskRecord | null = null;
@@ -222,15 +233,28 @@ type UpdateCheck = {
   error?: string;
 };
 
-type UpdateDownload = {
-  version: string;
-  installerPath: string;
-  fileName: string;
-  size: number;
-  sha256: string;
+type UpdateStatus = {
+  status: 'idle' | 'downloading' | 'ready' | 'failed';
+  version: string | null;
+  fileName: string | null;
+  installerPath: string | null;
+  receivedBytes: number;
+  totalBytes: number;
+  sha256: string | null;
   expectedSha256: string | null;
-  backupPath: string;
+  backupPath: string | null;
   backupFiles: string[];
+  error: string | null;
+  updatedAt: string;
+};
+
+type BackupRecord = {
+  id: string;
+  path: string;
+  reason: string;
+  createdAt: string;
+  files: string[];
+  restartRequiredForMemoryRestore: boolean;
 };
 
 const codexModelPresets = [
@@ -456,6 +480,18 @@ refreshDiagnostics.addEventListener('click', () => {
   void loadDiagnostics();
 });
 
+updateBannerDetails.addEventListener('click', () => {
+  setTab('diagnostics');
+});
+
+updateBannerDownload.addEventListener('click', () => {
+  void downloadUpdateWithProgress();
+});
+
+updateBannerInstall.addEventListener('click', () => {
+  void installDownloadedUpdate();
+});
+
 settingsModelProvider.addEventListener('change', () => {
   settingsModelEndpoint.value = defaultLocalEndpoint(settingsModelProvider.value);
   settingsLocalModel.innerHTML = providerDefaultModel(localProvider())
@@ -533,6 +569,32 @@ resetMemory.addEventListener('click', async () => {
 async function boot() {
   config = await fetchJson<AppConfig>('/api/config');
   setTab('run');
+  hydrateSettingsFromConfig();
+  memoryCount.textContent = formatMemoryCount(config.memoryCount);
+  apiKeyStatus.textContent = config.openAiApiKeyPresent ? 'API key ready' : 'Local login';
+  hydrateSetupWizard();
+  renderModelPresets();
+  renderModelProfile();
+  renderModelInstructions();
+  void scanLocalModels(false);
+  void refreshCodexStatus();
+  void refreshUpdateBanner();
+  await loadMemories(true);
+  void loadSemanticEdges();
+  await loadTasks();
+  try {
+    await loadDiagnostics();
+  } catch (error) {
+    voiceStatus.textContent = error instanceof Error ? error.message : 'Diagnostics unavailable';
+  }
+  renderCommandChat();
+  connectEvents();
+}
+
+function hydrateSettingsFromConfig() {
+  if (!config) {
+    return;
+  }
   workspaceLabel.textContent = compactPath(config.defaultWorkspace);
   taskWorkspace.value = config.defaultWorkspace;
   settingsWorkspace.value = config.defaultWorkspace;
@@ -545,30 +607,15 @@ async function boot() {
     settingsLocalModel.innerHTML = `<option value="${escapeHtml(config.localModel.model)}">${escapeHtml(config.localModel.model)}</option>`;
     settingsLocalModel.value = config.localModel.model;
   }
-  memoryCount.textContent = formatMemoryCount(config.memoryCount);
-  apiKeyStatus.textContent = config.openAiApiKeyPresent ? 'API key ready' : 'Local login';
-  const providerDisplay = settingsModelProvider.value === 'codex' ? 'Codex CLI' : 
-                     settingsModelProvider.value === 'opencode' ? 'OpenCode Zen' : 
-                     settingsModelProvider.value === 'ollama' ? 'Ollama' : 
-                     settingsModelProvider.value === 'lmstudio' ? 'LM Studio' : 'Unknown';
+  const providerDisplay = settingsModelProvider.value === 'codex' ? 'Codex CLI'
+    : settingsModelProvider.value === 'opencode' ? 'OpenCode Zen'
+      : settingsModelProvider.value === 'ollama' ? 'Ollama'
+        : settingsModelProvider.value === 'lmstudio' ? 'LM Studio' : 'Unknown';
   const modelDisplay = config.localModel?.model ?? config.codexModel ?? '';
   voiceStatus.textContent = `${providerDisplay} / ${modelDisplay}`;
-  hydrateSetupWizard();
   renderModelPresets();
   renderModelProfile();
   renderModelInstructions();
-  void scanLocalModels(false);
-  void refreshCodexStatus();
-  await loadMemories(true);
-  void loadSemanticEdges();
-  await loadTasks();
-  try {
-    await loadDiagnostics();
-  } catch (error) {
-    voiceStatus.textContent = error instanceof Error ? error.message : 'Diagnostics unavailable';
-  }
-  renderCommandChat();
-  connectEvents();
 }
 
 function renderBootFailure(error: unknown) {
@@ -821,7 +868,7 @@ async function loadTasks() {
 }
 
 async function loadDiagnostics() {
-  const [data, health, update, logs] = await Promise.all([
+  const [data, health, update, updateStatus, backups, logs] = await Promise.all([
     fetchJson<{
       codex: { available: boolean; detail: string };
       localModel: { available: boolean; detail: string; provider: string; endpoint: string; models: string[] };
@@ -833,14 +880,18 @@ async function loadDiagnostics() {
     }>('/api/diagnostics'),
     fetchJson<HealthReport>('/api/health'),
     fetchJson<UpdateCheck>('/api/update-check'),
+    fetchJson<UpdateStatus>('/api/update/status'),
+    fetchJson<{ backups: BackupRecord[] }>('/api/backups'),
     fetchJson<{ path: string; tail: string }>('/api/logs')
   ]);
+  lastUpdateCheck = update;
+  renderUpdateBanner(update, updateStatus);
   const updateDetail = update.error
     ? `Update check failed: ${update.error}`
     : update.updateAvailable
       ? `Version ${update.latestVersion} is ready${update.assetSize ? ` (${formatBytes(update.assetSize)})` : ''}. ${update.digest ? 'Checksum verification available.' : 'Checksum verification unavailable.'}`
       : `Current version ${update.currentVersion} is up to date.`;
-  const updateActions = renderUpdateActions(update);
+  const updateActions = renderUpdateActions(update, updateStatus);
   const embeddingDetail = health.memory.embeddings.disabled
     ? `Keyword fallback active${health.memory.embeddings.lastError ? `: ${health.memory.embeddings.lastError}` : '.'}`
     : `Semantic embeddings ready (${health.memory.embeddings.dim} dimensions).`;
@@ -852,71 +903,229 @@ async function loadDiagnostics() {
     <article><strong>OpenCode Key</strong><span>${data.modelKey.present ? 'Ready' : 'Missing'}</span><p>${escapeHtml(data.modelKey.present ? `Loaded from ${data.modelKey.source}.` : 'Save a key in Settings to scan hosted models.')}</p></article>
     <article><strong>Model Router</strong><span>${data.localModel.available ? 'Connected' : 'Offline'}</span><p>${escapeHtml(`${data.localModel.provider} / ${data.localModel.endpoint} / ${data.localModel.detail}`)}</p></article>
     <article><strong>Embeddings</strong><span>${health.memory.embeddings.disabled ? 'Fallback' : 'Ready'}</span><p>${escapeHtml(embeddingDetail)}</p></article>
-    <article><strong>Updates</strong><span>${update.updateAvailable ? 'Available' : update.error ? 'Check failed' : 'Current'}</span><p>${escapeHtml(updateDetail)}</p>${updateActions}</article>
+    <article><strong>Updates</strong><span>${updateStatus.status === 'downloading' ? 'Downloading' : update.updateAvailable ? 'Available' : update.error ? 'Check failed' : 'Current'}</span><p>${escapeHtml(updateDetail)}</p>${updateActions}</article>
     <article><strong>Voice</strong><span>Browser scoped</span><p>${escapeHtml(voiceCapabilityLabel())}</p></article>
     <article><strong>SQLite</strong><span>${data.sqlite.exists ? 'Ready' : 'Missing'}</span><p>${escapeHtml(data.sqlite.databasePath)}</p></article>
     <article><strong>Queue</strong><span>${data.queue.paused ? 'Paused' : 'Active'}</span><p>${data.queue.runningTaskId ? `Running ${escapeHtml(data.queue.runningTaskId)}` : 'No active task'}</p></article>
+    <article class="diagnostics-grid__wide"><strong>Recovery</strong><span>Safe controls</span><p>Reset bad model settings, clear saved model secrets, or export a log bundle for bug reports.</p>${renderRecoveryActions()}</article>
+    <article class="diagnostics-grid__wide"><strong>Backups</strong><span>${backups.backups.length} saved</span><p>Backups include memory database files, saved provider settings, and local model secrets. Memory database restore requires a restart-safe manual recovery step.</p>${renderBackupManager(backups.backups)}</article>
     <article class="diagnostics-grid__wide"><strong>Local Logs</strong><span>${escapeHtml(logs.path)}</span><pre>${escapeHtml(logs.tail || 'No log output yet.')}</pre></article>
   `;
-  wireUpdateActions(update);
+  wireUpdateActions(update, updateStatus);
+  wireRecoveryActions();
+  wireBackupActions();
   renderIcons();
   renderQueueStatus(data.queue);
 }
 
-function renderUpdateActions(update: UpdateCheck) {
+function renderUpdateActions(update: UpdateCheck, status?: UpdateStatus) {
   if (update.error) {
     return '';
   }
   if (!update.updateAvailable) {
     return update.url ? `<a href="${escapeHtml(update.url)}" target="_blank" rel="noreferrer">View releases</a>` : '';
   }
+  const percent = updatePercent(status);
   const downloadLabel = update.downloaded?.ready ? 'Re-download verified installer' : 'Download update';
   const verifiedDetail = update.downloaded?.ready
     ? `<p class="diagnostics-grid__note">Verified installer saved locally: ${escapeHtml(formatBytes(update.downloaded.size))}</p>`
     : '';
   return `
     <div class="update-actions">
-      <button class="hud-button" type="button" data-update-download data-icon="download" ${updateActionBusy ? 'disabled' : ''}><span>${downloadLabel}</span></button>
-      ${update.downloaded?.ready ? `<button class="hud-button hud-button--primary" type="button" data-update-install data-icon="play" ${updateActionBusy ? 'disabled' : ''}><span>Install update</span></button>` : ''}
+      <button class="hud-button" type="button" data-update-download data-icon="download" ${updateActionBusy || status?.status === 'downloading' ? 'disabled' : ''}><span>${status?.status === 'downloading' ? `Downloading ${percent}%` : downloadLabel}</span></button>
+      ${(update.downloaded?.ready || status?.status === 'ready') ? `<button class="hud-button hud-button--primary" type="button" data-update-install data-icon="play" ${updateActionBusy ? 'disabled' : ''}><span>Install update</span></button>` : ''}
       ${update.downloadUrl ? `<a href="${escapeHtml(update.downloadUrl)}" target="_blank" rel="noreferrer">Manual download</a>` : ''}
     </div>
+    ${status?.status === 'downloading' ? `<div class="update-progress update-progress--inline"><span style="width: ${percent}%"></span></div>` : ''}
+    ${status?.status === 'failed' ? `<p class="diagnostics-grid__note">Download failed: ${escapeHtml(status.error ?? 'unknown error')}</p>` : ''}
     ${verifiedDetail}
   `;
 }
 
-function wireUpdateActions(_update: UpdateCheck) {
+function wireUpdateActions(_update: UpdateCheck, _status?: UpdateStatus) {
   diagnosticsList.querySelector<HTMLButtonElement>('[data-update-download]')?.addEventListener('click', async () => {
-    if (updateActionBusy) {
-      return;
-    }
-    updateActionBusy = true;
-    try {
-      const result = await postJson<UpdateDownload>('/api/update/download', {});
-      window.alert(`Update ${result.version} downloaded and verified.\n\nBackup: ${result.backupPath}\nSHA256: ${result.sha256}`);
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'Unable to download update.');
-    } finally {
-      updateActionBusy = false;
-      await loadDiagnostics();
-    }
+    await downloadUpdateWithProgress();
   });
   diagnosticsList.querySelector<HTMLButtonElement>('[data-update-install]')?.addEventListener('click', async () => {
-    if (updateActionBusy) {
-      return;
+    await installDownloadedUpdate();
+  });
+}
+
+async function refreshUpdateBanner() {
+  try {
+    const [update, status] = await Promise.all([
+      fetchJson<UpdateCheck>('/api/update-check'),
+      fetchJson<UpdateStatus>('/api/update/status')
+    ]);
+    lastUpdateCheck = update;
+    renderUpdateBanner(update, status);
+  } catch {
+    updateBanner.classList.add('hidden');
+  }
+}
+
+function renderUpdateBanner(update: UpdateCheck, status?: UpdateStatus) {
+  const show = update.updateAvailable || status?.status === 'downloading' || status?.status === 'ready' || status?.status === 'failed';
+  updateBanner.classList.toggle('hidden', !show);
+  if (!show) {
+    return;
+  }
+  const percent = updatePercent(status);
+  updateBannerTitle.textContent = status?.status === 'ready'
+    ? `Update ${status.version ?? update.latestVersion} verified`
+    : status?.status === 'downloading'
+      ? `Downloading ${status.version ?? update.latestVersion}`
+      : status?.status === 'failed'
+        ? 'Update download failed'
+        : `Update ${update.latestVersion} available`;
+  updateBannerDetail.textContent = status?.status === 'ready'
+    ? `Installer verified. Backup saved at ${status.backupPath ?? 'the app profile'}.`
+    : status?.status === 'downloading'
+      ? `${formatBytes(status.receivedBytes)} / ${formatBytes(status.totalBytes)}`
+      : status?.status === 'failed'
+        ? status.error ?? 'Try the download again.'
+        : `${update.assetName ?? 'Windows installer'}${update.assetSize ? ` / ${formatBytes(update.assetSize)}` : ''}`;
+  updateProgress.classList.toggle('hidden', status?.status !== 'downloading');
+  updateProgressFill.style.width = `${percent}%`;
+  updateBannerDownload.disabled = updateActionBusy || status?.status === 'downloading';
+  updateBannerDownload.querySelector('span')!.textContent = status?.status === 'downloading' ? `${percent}%` : status?.status === 'failed' ? 'Retry' : 'Download';
+  updateBannerInstall.classList.toggle('hidden', status?.status !== 'ready' && !update.downloaded?.ready);
+}
+
+async function downloadUpdateWithProgress() {
+  if (updateActionBusy) {
+    return;
+  }
+  updateActionBusy = true;
+  try {
+    await postJson<UpdateStatus>('/api/update/download', {});
+    const status = await pollUpdateDownload();
+    if (status.status !== 'ready') {
+      throw new Error(status.error ?? 'Update download did not finish.');
     }
-    if (!window.confirm('Launch the verified Windows installer now? Keep following the installer prompts. Your memories and settings stay in the app profile.')) {
-      return;
+    window.alert(`Update ${status.version} downloaded and verified.\n\nBackup: ${status.backupPath}\nSHA256: ${status.sha256}`);
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : 'Unable to download update.');
+  } finally {
+    updateActionBusy = false;
+    await loadDiagnostics();
+  }
+}
+
+async function pollUpdateDownload() {
+  let status = await fetchJson<UpdateStatus>('/api/update/status');
+  const startedAt = Date.now();
+  while (status.status === 'downloading' && Date.now() - startedAt < 10 * 60 * 1000) {
+    if (lastUpdateCheck) {
+      renderUpdateBanner(lastUpdateCheck, status);
     }
-    updateActionBusy = true;
-    try {
-      const result = await postJson<{ launched: boolean; message: string }>('/api/update/install', {});
-      window.alert(result.message);
-    } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'Unable to launch installer.');
-    } finally {
-      updateActionBusy = false;
+    await delay(500);
+    status = await fetchJson<UpdateStatus>('/api/update/status');
+  }
+  if (lastUpdateCheck) {
+    renderUpdateBanner(lastUpdateCheck, status);
+  }
+  return status;
+}
+
+async function installDownloadedUpdate() {
+  if (updateActionBusy) {
+    return;
+  }
+  if (!window.confirm('Launch the verified Windows installer now? Keep following the installer prompts. Your memories and settings stay in the app profile.')) {
+    return;
+  }
+  updateActionBusy = true;
+  try {
+    const result = await postJson<{ launched: boolean; message: string }>('/api/update/install', {});
+    window.alert(result.message);
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : 'Unable to launch installer.');
+  } finally {
+    updateActionBusy = false;
+    await loadDiagnostics();
+  }
+}
+
+function updatePercent(status?: UpdateStatus) {
+  if (!status || status.totalBytes <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, Math.round((status.receivedBytes / status.totalBytes) * 100)));
+}
+
+function renderRecoveryActions() {
+  return `
+    <div class="update-actions">
+      <button class="hud-button" type="button" data-recovery-reset-model data-icon="rotate-ccw"><span>Reset Model</span></button>
+      <button class="hud-button" type="button" data-recovery-clear-secrets data-icon="trash-2"><span>Clear Secrets</span></button>
+      <button class="hud-button" type="button" data-log-export data-icon="save"><span>Export Logs</span></button>
+    </div>
+  `;
+}
+
+function renderBackupManager(backups: BackupRecord[]) {
+  const rows = backups.length === 0
+    ? '<p class="diagnostics-grid__note">No backups yet.</p>'
+    : backups.slice(0, 8).map((backup) => `
+      <article class="backup-row">
+        <div>
+          <strong>${escapeHtml(formatDateTime(backup.createdAt))}</strong>
+          <span>${escapeHtml(backup.reason)} / ${backup.files.length} files</span>
+          <p>${escapeHtml(backup.path)}</p>
+        </div>
+        <button class="hud-button" type="button" data-backup-restore-settings="${escapeHtml(backup.id)}" data-icon="rotate-ccw"><span>Restore Settings</span></button>
+      </article>
+    `).join('');
+  return `
+    <div class="update-actions">
+      <button class="hud-button hud-button--primary" type="button" data-backup-create data-icon="save"><span>Create Backup</span></button>
+    </div>
+    <div class="backup-list">${rows}</div>
+  `;
+}
+
+function wireRecoveryActions() {
+  diagnosticsList.querySelector<HTMLButtonElement>('[data-recovery-reset-model]')?.addEventListener('click', async () => {
+    if (!window.confirm('Reset model provider, endpoint, and model to safe defaults?')) return;
+    const result = await postJson<{ message: string; localModel: AppConfig['localModel'] }>('/api/recovery/reset-model', {});
+    window.alert(result.message);
+    config = await fetchJson<AppConfig>('/api/config');
+    hydrateSettingsFromConfig();
+    await loadDiagnostics();
+  });
+  diagnosticsList.querySelector<HTMLButtonElement>('[data-recovery-clear-secrets]')?.addEventListener('click', async () => {
+    if (!window.confirm('Clear saved model secrets from this app profile?')) return;
+    const result = await postJson<{ message: string; modelKey: ModelKeyStatus }>('/api/recovery/clear-secrets', {});
+    window.alert(result.message);
+    updateModelKeyStatus(result.modelKey);
+    await loadDiagnostics();
+  });
+  diagnosticsList.querySelector<HTMLButtonElement>('[data-log-export]')?.addEventListener('click', async () => {
+    const result = await fetchJson<{ path: string; size: number }>('/api/logs/export');
+    window.alert(`Log bundle exported:\n${result.path}`);
+  });
+}
+
+function wireBackupActions() {
+  diagnosticsList.querySelector<HTMLButtonElement>('[data-backup-create]')?.addEventListener('click', async () => {
+    const backup = await postJson<BackupRecord>('/api/backups/create', {});
+    window.alert(`Backup created:\n${backup.path}`);
+    await loadDiagnostics();
+  });
+  diagnosticsList.querySelectorAll<HTMLButtonElement>('[data-backup-restore-settings]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const backupId = button.dataset.backupRestoreSettings;
+      if (!backupId || !window.confirm('Restore model settings and saved model secrets from this backup? Memory database restore is intentionally not hot-swapped while the app is running.')) {
+        return;
+      }
+      const result = await postJson<{ restored: string[]; localModel: AppConfig['localModel']; modelKey: ModelKeyStatus }>(`/api/backups/${encodeURIComponent(backupId)}/restore-settings`, {});
+      updateModelKeyStatus(result.modelKey);
+      config = await fetchJson<AppConfig>('/api/config');
+      window.alert(`Restored: ${result.restored.length ? result.restored.join(', ') : 'No settings files found in backup.'}`);
+      hydrateSettingsFromConfig();
       await loadDiagnostics();
-    }
+    });
   });
 }
 

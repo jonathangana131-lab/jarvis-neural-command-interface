@@ -3168,6 +3168,70 @@ textarea::placeholder {
   gap: 12px;
 }
 
+.update-banner {
+  position: fixed;
+  left: clamp(18px, 3vw, 42px);
+  right: clamp(18px, 3vw, 42px);
+  bottom: 22px;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(115, 243, 255, 0.32);
+  border-radius: 8px;
+  background: rgba(7, 18, 28, 0.94);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.42), inset 0 0 24px rgba(115, 243, 255, 0.06);
+  backdrop-filter: blur(18px);
+}
+
+.update-banner.hidden {
+  display: none;
+}
+
+.update-banner strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-strong);
+}
+
+.update-banner p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.update-banner__actions,
+.update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.update-progress {
+  width: min(360px, 100%);
+  height: 6px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(115, 243, 255, 0.12);
+}
+
+.update-progress.hidden {
+  display: none;
+}
+
+.update-progress span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--cyan-hot), var(--green-hot));
+  transition: width 180ms ease;
+}
+
 .diagnostics-grid article {
   padding: 12px;
 }
@@ -3184,23 +3248,44 @@ textarea::placeholder {
   font-weight: 850;
 }
 
-.update-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin-top: 10px;
-}
-
 .update-actions .hud-button {
   min-height: 34px;
   padding: 8px 10px;
   font-size: 11px;
 }
 
+.update-actions {
+  margin-top: 10px;
+}
+
+.update-progress--inline {
+  width: 100%;
+}
+
 .diagnostics-grid__note {
   margin-top: 8px;
   color: var(--text-muted);
+}
+
+.backup-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.backup-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(115, 243, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.backup-row p {
+  margin: 4px 0 0;
 }
 
 .diagnostics-grid pre {

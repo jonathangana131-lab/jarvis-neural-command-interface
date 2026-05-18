@@ -1,15 +1,26 @@
-const { app, BrowserWindow, Menu, Tray, globalShortcut, nativeTheme } = require('electron');
+const { app, BrowserWindow, Menu, Tray, dialog, globalShortcut, nativeTheme } = require('electron');
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 
+let autoUpdater = null;
+try {
+  ({ autoUpdater } = require('electron-updater'));
+} catch (error) {
+  console.warn(`Auto updater is unavailable: ${error.message}`);
+}
+
 const backendPort = Number(process.env.PORT || 8787);
 const bundledUrl = `http://127.0.0.1:${backendPort}`;
 const externalUrl = process.env.JARVIS_CODEX_URL;
+const appUserModelId = 'local.jarvis.neural-command-interface';
+const updateRepository = process.env.JARVIS_UPDATE_REPO || 'jonathangana131-lab/jarvis-neural-command-interface';
 let backend = null;
 let backendLog = '';
 let mainWindow = null;
 let tray = null;
+
+app.setAppUserModelId(appUserModelId);
 
 const userDataOverride = process.env.JARVIS_USER_DATA_DIR;
 if (userDataOverride) {
@@ -80,9 +91,10 @@ if (singleInstanceLock) {
       }
     }
 
-    await createWindow(appUrl);
+    const window = await createWindow(appUrl);
     setupTray(appUrl);
     setupGlobalShortcuts();
+    setupAutoUpdates(window);
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
@@ -105,6 +117,56 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
+function setupAutoUpdates(window) {
+  if (!autoUpdater || !app.isPackaged || process.env.JARVIS_DISABLE_AUTO_UPDATE === '1') {
+    return;
+  }
+
+  const [owner, repo] = updateRepository.split('/');
+  if (!owner || !repo) {
+    console.warn(`[updater] Invalid update repository: ${updateRepository}`);
+    return;
+  }
+
+  autoUpdater.setFeedURL({ provider: 'github', owner, repo });
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[updater] Checking for update');
+  });
+  autoUpdater.on('update-available', (info) => {
+    console.log(`[updater] Downloading ${info.version}`);
+  });
+  autoUpdater.on('update-not-available', () => {
+    console.log('[updater] App is up to date');
+  });
+  autoUpdater.on('error', (error) => {
+    console.warn(`[updater] ${error.message}`);
+  });
+  autoUpdater.on('update-downloaded', async (info) => {
+    const result = await dialog.showMessageBox(window, {
+      type: 'info',
+      buttons: ['Restart and update', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+      title: 'Update ready',
+      message: `Jarvis Neural Command Interface ${info.version} is ready.`,
+      detail: 'Restart now to replace the current app with the new version. Choosing Later installs it when you quit.'
+    });
+
+    if (result.response === 0) {
+      autoUpdater.quitAndInstall(false, true);
+    }
+  });
+
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch((error) => {
+      console.warn(`[updater] Update check failed: ${error.message}`);
+    });
+  }, 5000);
+}
 
 function startBackend() {
   const rootDir = path.resolve(__dirname, '..');

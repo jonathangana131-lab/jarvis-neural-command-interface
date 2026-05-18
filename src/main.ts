@@ -1237,7 +1237,7 @@ async function installDownloadedUpdate() {
   if (updateActionBusy) {
     return;
   }
-  if (!window.confirm('Launch the verified Windows installer now? Keep following the installer prompts. Your memories and settings stay in the app profile.')) {
+  if (!window.confirm('Run the verified update now? Jarvis will update in place without opening the installer wizard. Your memories and settings stay in the app profile.')) {
     return;
   }
   updateActionBusy = true;

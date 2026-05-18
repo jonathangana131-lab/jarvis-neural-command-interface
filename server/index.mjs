@@ -376,16 +376,16 @@ app.post('/api/update/install', async (req, res, next) => {
       error.status = 409;
       throw error;
     }
-    const child = spawn(installerPath, [], {
+    const child = spawn(installerPath, ['/S'], {
       detached: true,
       stdio: 'ignore',
-      windowsHide: false
+      windowsHide: true
     });
     child.unref();
     res.json({
       launched: true,
       installerPath,
-      message: 'Installer launched. Follow the Windows installer prompts; memories and settings stay in the app profile.'
+      message: 'Update installer is running silently. Restart Jarvis after it finishes; memories and settings stay in the app profile.'
     });
   } catch (error) {
     next(error);

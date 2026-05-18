@@ -88,6 +88,15 @@ const apiKeyStatus = required<HTMLElement>('#api-key-status');
 const pauseQueue = required<HTMLButtonElement>('#pause-queue');
 const resumeQueue = required<HTMLButtonElement>('#resume-queue');
 const queueStatus = required<HTMLElement>('#queue-status');
+const setupWizard = required<HTMLElement>('#setup-wizard');
+const setupProvider = required<HTMLSelectElement>('#setup-provider');
+const setupEndpoint = required<HTMLInputElement>('#setup-endpoint');
+const setupModel = required<HTMLSelectElement>('#setup-model');
+const setupApiKey = required<HTMLInputElement>('#setup-api-key');
+const setupStatus = required<HTMLElement>('#setup-status');
+const setupScan = required<HTMLButtonElement>('#setup-scan');
+const setupTest = required<HTMLButtonElement>('#setup-test');
+const setupFinish = required<HTMLButtonElement>('#setup-finish');
 const memoryList = required<HTMLElement>('#memory-list');
 const refreshMemory = required<HTMLButtonElement>('#refresh-memory');
 const resetMemory = required<HTMLButtonElement>('#reset-memory');
@@ -180,6 +189,32 @@ type LocalModelScanResult = {
   available: boolean;
   models: string[];
   detail: string;
+};
+
+type HealthReport = {
+  app: { version: string; dataDir: string; logPath: string };
+  backend: { available: boolean; startedAt: string; port: number };
+  modelKey: ModelKeyStatus;
+  localModel: LocalModelScanResult;
+  memory: {
+    databasePath: string;
+    exists: boolean;
+    count: number;
+    embeddings: { disabled: boolean; dim: number; lastError: string | null };
+  };
+  codex: { available: boolean; detail: string };
+  queue: { paused: boolean; runningTaskId: string | null };
+};
+
+type UpdateCheck = {
+  currentVersion: string;
+  latestVersion: string;
+  updateAvailable: boolean;
+  url: string | null;
+  downloadUrl: string | null;
+  name: string | null;
+  publishedAt: string | null;
+  error?: string;
 };
 
 const codexModelPresets = [
@@ -449,6 +484,25 @@ settingsWorkspace.addEventListener('change', () => {
   taskWorkspace.value = settingsWorkspace.value;
 });
 
+setupProvider.addEventListener('change', () => {
+  setupEndpoint.value = defaultLocalEndpoint(setupProvider.value);
+  setupModel.innerHTML = providerDefaultModel(setupProviderValue())
+    ? `<option value="${providerDefaultModel(setupProviderValue())}">${modelDisplayName(providerDefaultModel(setupProviderValue()))}</option>`
+    : '<option value="">Scan to load models</option>';
+});
+
+setupScan.addEventListener('click', () => {
+  void runSetupScan();
+});
+
+setupTest.addEventListener('click', () => {
+  void runSetupTest();
+});
+
+setupFinish.addEventListener('click', () => {
+  completeSetupWizard();
+});
+
 resetMemory.addEventListener('click', async () => {
   if (!window.confirm('Reset all visible neural memories?')) {
     return;
@@ -483,6 +537,7 @@ async function boot() {
                      settingsModelProvider.value === 'lmstudio' ? 'LM Studio' : 'Unknown';
   const modelDisplay = config.localModel?.model ?? config.codexModel ?? '';
   voiceStatus.textContent = `${providerDisplay} / ${modelDisplay}`;
+  hydrateSetupWizard();
   renderModelPresets();
   renderModelProfile();
   renderModelInstructions();
@@ -750,23 +805,41 @@ async function loadTasks() {
 }
 
 async function loadDiagnostics() {
-  const data = await fetchJson<{
-    codex: { available: boolean; detail: string };
-    localModel: { available: boolean; detail: string; provider: string; endpoint: string; models: string[] };
-    modelKey: ModelKeyStatus;
-    voice: { speechRecognition: string; microphone: string; detail: string };
-    config: AppConfig;
-    sqlite: { databasePath: string; exists: boolean; memoryCount: number; taskCount: number };
-    queue: { paused: boolean; runningTaskId: string | null };
-  }>('/api/diagnostics');
+  const [data, health, update, logs] = await Promise.all([
+    fetchJson<{
+      codex: { available: boolean; detail: string };
+      localModel: { available: boolean; detail: string; provider: string; endpoint: string; models: string[] };
+      modelKey: ModelKeyStatus;
+      voice: { speechRecognition: string; microphone: string; detail: string };
+      config: AppConfig;
+      sqlite: { databasePath: string; exists: boolean; memoryCount: number; taskCount: number };
+      queue: { paused: boolean; runningTaskId: string | null };
+    }>('/api/diagnostics'),
+    fetchJson<HealthReport>('/api/health'),
+    fetchJson<UpdateCheck>('/api/update-check'),
+    fetchJson<{ path: string; tail: string }>('/api/logs')
+  ]);
+  const updateDetail = update.error
+    ? `Update check failed: ${update.error}`
+    : update.updateAvailable
+      ? `Download ${update.latestVersion} from ${update.downloadUrl ?? update.url ?? 'GitHub releases'}.`
+      : `Current version ${update.currentVersion} is up to date.`;
+  const embeddingDetail = health.memory.embeddings.disabled
+    ? `Keyword fallback active${health.memory.embeddings.lastError ? `: ${health.memory.embeddings.lastError}` : '.'}`
+    : `Semantic embeddings ready (${health.memory.embeddings.dim} dimensions).`;
   diagnosticsList.innerHTML = `
+    <article><strong>App</strong><span>${escapeHtml(health.app.version)}</span><p>${escapeHtml(health.app.dataDir)}</p></article>
+    <article><strong>Backend</strong><span>${health.backend.available ? 'Running' : 'Offline'}</span><p>${escapeHtml(`Started ${formatDateTime(health.backend.startedAt)} on port ${health.backend.port}`)}</p></article>
     <article><strong>Codex</strong><span>${data.codex.available ? 'Available' : 'Unavailable'}</span><p>${escapeHtml(data.codex.detail)}</p></article>
     <article><strong>Model</strong><span>${escapeHtml(data.config.codexModel ?? 'default')}</span><p>${escapeHtml([data.config.codexCommand, data.config.codexReasoningEffort, data.config.codexEphemeral ? 'ephemeral' : 'persistent'].filter(Boolean).join(' / '))}</p></article>
     <article><strong>OpenCode Key</strong><span>${data.modelKey.present ? 'Ready' : 'Missing'}</span><p>${escapeHtml(data.modelKey.present ? `Loaded from ${data.modelKey.source}.` : 'Save a key in Settings to scan hosted models.')}</p></article>
     <article><strong>Model Router</strong><span>${data.localModel.available ? 'Connected' : 'Offline'}</span><p>${escapeHtml(`${data.localModel.provider} / ${data.localModel.endpoint} / ${data.localModel.detail}`)}</p></article>
+    <article><strong>Embeddings</strong><span>${health.memory.embeddings.disabled ? 'Fallback' : 'Ready'}</span><p>${escapeHtml(embeddingDetail)}</p></article>
+    <article><strong>Updates</strong><span>${update.updateAvailable ? 'Available' : update.error ? 'Check failed' : 'Current'}</span><p>${escapeHtml(updateDetail)}</p>${update.downloadUrl ? `<a href="${escapeHtml(update.downloadUrl)}" target="_blank" rel="noreferrer">Download latest</a>` : ''}</article>
     <article><strong>Voice</strong><span>Browser scoped</span><p>${escapeHtml(voiceCapabilityLabel())}</p></article>
     <article><strong>SQLite</strong><span>${data.sqlite.exists ? 'Ready' : 'Missing'}</span><p>${escapeHtml(data.sqlite.databasePath)}</p></article>
     <article><strong>Queue</strong><span>${data.queue.paused ? 'Paused' : 'Active'}</span><p>${data.queue.runningTaskId ? `Running ${escapeHtml(data.queue.runningTaskId)}` : 'No active task'}</p></article>
+    <article class="diagnostics-grid__wide"><strong>Local Logs</strong><span>${escapeHtml(logs.path)}</span><pre>${escapeHtml(logs.tail || 'No log output yet.')}</pre></article>
   `;
   renderIcons();
   renderQueueStatus(data.queue);
@@ -777,7 +850,7 @@ async function refreshQueueStatus() {
   renderQueueStatus(data.queue);
 }
 
-async function scanLocalModels(showScanning: boolean) {
+async function scanLocalModels(showScanning: boolean, persistSelection = showScanning) {
   const provider = localProvider();
   const endpoint = settingsModelEndpoint.value.trim() || defaultLocalEndpoint(provider);
   settingsModelEndpoint.value = endpoint;
@@ -808,7 +881,9 @@ async function scanLocalModels(showScanning: boolean) {
       .join('');
     settingsLocalModel.value = data.models.includes(previous) ? previous : data.models[0];
   }
-  await saveLocalModelSelection();
+  if (persistSelection) {
+    await saveLocalModelSelection();
+  }
   renderModelPresets();
   renderModelProfile();
   renderModelInstructions();
@@ -886,6 +961,135 @@ async function applySelectedModel() {
   voiceStatus.textContent = `${providerDisplay} / ${modelDisplay}`;
   renderModelProfile();
   void loadDiagnostics();
+}
+
+function hydrateSetupWizard() {
+  const provider = config?.localModel?.provider ?? 'opencode';
+  setupProvider.value = provider;
+  setupEndpoint.value = config?.localModel?.endpoint ?? defaultLocalEndpoint(provider);
+  if (config?.localModel?.model) {
+    setupModel.innerHTML = `<option value="${escapeHtml(config.localModel.model)}">${escapeHtml(modelDisplayName(config.localModel.model))}</option>`;
+    setupModel.value = config.localModel.model;
+  }
+  const needsSetup = window.localStorage.getItem('jarvis.setup.v1.complete') !== 'true'
+    || (provider === 'opencode' && !config?.modelKey?.present && !config?.modelApiKeyPresent);
+  setupWizard.classList.toggle('hidden', !needsSetup);
+  setupStatus.textContent = needsSetup
+    ? 'Choose a provider, scan models, then send the setup test.'
+    : 'Setup complete.';
+}
+
+async function runSetupScan() {
+  setupScan.disabled = true;
+  setupStatus.textContent = 'Scanning model provider...';
+  try {
+    const provider = setupProviderValue();
+    const apiKey = setupApiKey.value.trim();
+    if (provider === 'opencode' && apiKey) {
+      const status = await postJson<ModelKeyStatus>('/api/model-key', { apiKey });
+      setupApiKey.value = '';
+      updateModelKeyStatus(status);
+    }
+    const endpoint = setupEndpoint.value.trim() || defaultLocalEndpoint(provider);
+    const scan = await fetchJson<LocalModelScanResult>(`/api/local-models?${new URLSearchParams({ provider, endpoint })}`);
+    const models = scan.models.length > 0
+      ? scan.models
+      : provider === 'opencode' ? opencodeZenModelPresets.map((preset) => preset.id) : [];
+    setupModel.innerHTML = models.length > 0
+      ? models.map((model) => `<option value="${escapeHtml(model)}">${escapeHtml(modelDisplayName(model))}</option>`).join('')
+      : '<option value="">No models detected</option>';
+    const selected = models.includes(config?.localModel?.model ?? '') ? config?.localModel?.model ?? '' : models[0] ?? '';
+    setupModel.value = selected;
+    await postJson<{ localModel: AppConfig['localModel'] }>('/api/local-model-selection', {
+      provider,
+      endpoint,
+      model: selected
+    });
+    config = await fetchJson<AppConfig>('/api/config');
+    settingsModelProvider.value = provider;
+    settingsModelEndpoint.value = endpoint;
+    settingsLocalModel.innerHTML = setupModel.innerHTML;
+    settingsLocalModel.value = selected;
+    setupStatus.textContent = scan.available ? scan.detail : modelConnectionLabel(false, scan.detail);
+    renderModelPresets();
+    renderModelProfile();
+    renderModelInstructions();
+  } catch (error) {
+    setupStatus.textContent = error instanceof Error ? error.message : 'Unable to scan models.';
+  } finally {
+    setupScan.disabled = false;
+    renderIcons();
+  }
+}
+
+async function runSetupTest() {
+  setupTest.disabled = true;
+  setupStatus.textContent = 'Sending setup test message...';
+  try {
+    const provider = setupProviderValue();
+    const endpoint = setupEndpoint.value.trim() || defaultLocalEndpoint(provider);
+    const apiKey = setupApiKey.value.trim();
+    if (provider === 'opencode' && apiKey) {
+      const status = await postJson<ModelKeyStatus>('/api/model-key', { apiKey });
+      setupApiKey.value = '';
+      updateModelKeyStatus(status);
+    }
+    const model = setupModel.value || providerDefaultModel(provider);
+    await postJson<{ localModel: AppConfig['localModel'] }>('/api/local-model-selection', {
+      provider,
+      endpoint,
+      model
+    });
+    config = await fetchJson<AppConfig>('/api/config');
+    const response = await postJson<{ task?: TaskRecord; error?: string }>('/api/tasks', {
+      prompt: 'Reply with exactly: Jarvis setup test complete.',
+      workspace: taskWorkspace.value
+    });
+    if (!response.task?.id) {
+      throw new Error(response.error ?? 'Setup test did not start.');
+    }
+    const task = await waitForTaskTerminal(response.task.id, 45000);
+    if (task.status !== 'completed') {
+      throw new Error(`Setup test ended with status ${task.status}.`);
+    }
+    lastCommandPrompt = task.prompt;
+    lastCommandPhase = task.phase ?? task.status;
+    lastCommandOutput = task.output;
+    upsertVisibleTask(task, true);
+    renderCommandChat(true);
+    completeSetupWizard();
+    setupStatus.textContent = 'Setup test complete. Jarvis is ready.';
+  } catch (error) {
+    setupStatus.textContent = error instanceof Error ? error.message : 'Setup test failed.';
+  } finally {
+    setupTest.disabled = false;
+    renderIcons();
+  }
+}
+
+function completeSetupWizard() {
+  window.localStorage.setItem('jarvis.setup.v1.complete', 'true');
+  setupWizard.classList.add('hidden');
+  setTab('run');
+}
+
+async function waitForTaskTerminal(taskId: string, timeoutMs: number) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const data = await fetchJson<{ task: TaskRecord }>(`/api/tasks/${encodeURIComponent(taskId)}`);
+    if (['completed', 'failed', 'timed_out', 'cancelled'].includes(data.task.status)) {
+      return data.task;
+    }
+    await delay(250);
+  }
+  throw new Error('Setup test timed out.');
+}
+
+function setupProviderValue(): ModelProvider {
+  if (setupProvider.value === 'ollama') return 'ollama';
+  if (setupProvider.value === 'lmstudio') return 'lmstudio';
+  if (setupProvider.value === 'codex') return 'codex';
+  return 'opencode';
 }
 
 function renderModelInstructions() {
@@ -2272,6 +2476,10 @@ async function readError(response: Response, fallback: string) {
   }
 }
 
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 function required<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);
   if (!element) {
@@ -2294,6 +2502,14 @@ function formatTime(value: string) {
     return value;
   }
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDateTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
 }
 
 function shortId(id: string) {

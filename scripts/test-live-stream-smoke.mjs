@@ -89,6 +89,18 @@ server.stderr.on('data', (chunk) => {
 
 try {
   await waitFor(`http://127.0.0.1:${appPort}/api/config`, 15000);
+  const health = await getJson(appPort, '/api/health');
+  if (!health.backend?.available || !health.app?.logPath) {
+    throw new Error(`Health endpoint did not report a running backend: ${JSON.stringify(health)}`);
+  }
+  const update = await getJson(appPort, '/api/update-check');
+  if (!update.currentVersion) {
+    throw new Error(`Update endpoint did not report the current version: ${JSON.stringify(update)}`);
+  }
+  const logs = await getJson(appPort, '/api/logs');
+  if (typeof logs.tail !== 'string' || !logs.path) {
+    throw new Error(`Logs endpoint did not return a log path and tail: ${JSON.stringify(logs)}`);
+  }
   const first = await runTask(appPort, workspace, 'first live smoke message');
   const second = await runTask(appPort, workspace, 'second live smoke message');
 
@@ -119,6 +131,15 @@ async function runTask(port, workspacePath, prompt) {
     throw new Error(data.error ?? `Task create failed with ${response.status}`);
   }
   return waitForTask(port, data.task.id);
+}
+
+async function getJson(port, pathname) {
+  const response = await fetch(`http://127.0.0.1:${port}${pathname}`);
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error ?? `${pathname} failed with ${response.status}`);
+  }
+  return data;
 }
 
 async function waitForTask(port, taskId) {

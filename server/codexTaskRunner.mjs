@@ -693,16 +693,22 @@ async function runChatCompletion({ endpoint, apiKey, model, prompt, signal, onCh
     Authorization: `Bearer ${apiKey}`,
     'Content-Type': 'application/json'
   };
-  const streamResponse = await fetch(`${endpoint}/chat/completions`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model,
-      messages: [{ role: 'user', content: prompt }],
-      stream: true
-    }),
-    signal
-  });
+  const target = `${endpoint}/chat/completions`;
+  let streamResponse;
+  try {
+    streamResponse = await fetch(target, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        stream: true
+      }),
+      signal
+    });
+  } catch (error) {
+    throw new Error(`Model request failed for ${redactUrl(target)}: ${formatFetchFailure(error)}`);
+  }
 
   if (!streamResponse.ok) {
     onFallback?.();
@@ -725,20 +731,44 @@ async function runChatCompletion({ endpoint, apiKey, model, prompt, signal, onCh
 }
 
 async function runJsonChatCompletion({ endpoint, headers, model, prompt, signal }) {
-  const response = await fetch(`${endpoint}/chat/completions`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model,
-      messages: [{ role: 'user', content: prompt }],
-      stream: false
-    }),
-    signal
-  });
+  const target = `${endpoint}/chat/completions`;
+  let response;
+  try {
+    response = await fetch(target, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        stream: false
+      }),
+      signal
+    });
+  } catch (error) {
+    throw new Error(`Model request failed for ${redactUrl(target)}: ${formatFetchFailure(error)}`);
+  }
   if (!response.ok) {
     throw new Error(`OpenCode API error: ${response.status} ${response.statusText}`);
   }
   return extractChatCompletionText(await response.json());
+}
+
+function formatFetchFailure(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const cause = error?.cause instanceof Error ? ` (${error.cause.message})` : '';
+  return `${message}${cause}`;
+}
+
+function redactUrl(value) {
+  try {
+    const url = new URL(value);
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    return url.toString();
+  } catch {
+    return String(value).replace(/\?.*$/, '');
+  }
 }
 
 async function* readChatCompletionStream(body) {

@@ -12,6 +12,9 @@ import { TaskStore } from './taskStore.mjs';
 
 const app = express();
 const config = loadConfig();
+const packageInfo = JSON.parse(fs.readFileSync(path.resolve(config.rootDir, 'package.json'), 'utf8'));
+const logPath = path.resolve(config.dataDir, 'jarvis.log');
+initLocalLogging(logPath);
 const eventBus = new EventBus();
 const memoryExtractor = new MemoryExtractor(config.memory);
 const embedder = new Embedder({
@@ -38,8 +41,84 @@ app.use(express.json({ limit: '1mb' }));
 app.get('/api/config', (_req, res) => {
   res.json({
     ...publicConfig(config),
+    appVersion: packageInfo.version,
     modelKey: modelKeyStatus(),
     memoryCount: memoryStore.count()
+  });
+});
+
+app.get('/api/health', async (_req, res) => {
+  const codex = await checkCodexStatus(config.codex.command);
+  const localModel = await listLocalModels(config.localModel?.provider, config.localModel?.endpoint);
+  res.json({
+    app: {
+      version: packageInfo.version,
+      dataDir: config.dataDir,
+      logPath
+    },
+    backend: {
+      available: true,
+      startedAt,
+      port
+    },
+    modelKey: modelKeyStatus(),
+    localModel,
+    memory: {
+      databasePath: config.memory.databasePath,
+      exists: fs.existsSync(config.memory.databasePath),
+      count: memoryStore.count(),
+      embeddings: {
+        disabled: embedder.disabled,
+        dim: embedder.dim,
+        lastError: embedder.lastError
+      }
+    },
+    codex,
+    queue: taskRunner.queueStatus()
+  });
+});
+
+app.get('/api/update-check', async (_req, res) => {
+  try {
+    const response = await fetch('https://api.github.com/repos/jonathangana131-lab/jarvis-neural-command-interface/releases/latest', {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'Jarvis-Neural-Command-Interface'
+      },
+      signal: AbortSignal.timeout(6000)
+    });
+    if (!response.ok) {
+      throw new Error(`${response.status} ${response.statusText}`);
+    }
+    const release = await response.json();
+    const latestVersion = String(release.tag_name ?? '').replace(/^v/i, '');
+    res.json({
+      currentVersion: packageInfo.version,
+      latestVersion,
+      updateAvailable: compareVersions(latestVersion, packageInfo.version) > 0,
+      url: release.html_url,
+      downloadUrl: release.assets?.find((asset) => String(asset.name ?? '').endsWith('.exe'))?.browser_download_url ?? release.html_url,
+      name: release.name ?? release.tag_name,
+      publishedAt: release.published_at
+    });
+  } catch (error) {
+    res.json({
+      currentVersion: packageInfo.version,
+      latestVersion: packageInfo.version,
+      updateAvailable: false,
+      url: null,
+      downloadUrl: null,
+      name: null,
+      publishedAt: null,
+      error: error instanceof Error ? error.message : 'Unable to check for updates.'
+    });
+  }
+});
+
+app.get('/api/logs', (_req, res) => {
+  res.json({
+    path: logPath,
+    tail: readLogTail(logPath, 24000)
   });
 });
 
@@ -96,27 +175,11 @@ app.post('/api/local-model-selection', (req, res, next) => {
     }
     fs.mkdirSync(path.dirname(localModelStatePath), { recursive: true });
     fs.writeFileSync(localModelStatePath, JSON.stringify(config.localModel, null, 2));
-    updateConfigFile(model, provider);
     res.json({ localModel: config.localModel });
   } catch (error) {
     next(error);
   }
 });
-
-function updateConfigFile(model, provider) {
-  try {
-    const configPath = path.resolve(config.rootDir, 'jarvis.config.json');
-    const jarvisConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    jarvisConfig.localModel = config.localModel;
-    if (provider === 'codex') {
-      jarvisConfig.codex = jarvisConfig.codex || {};
-      jarvisConfig.codex.model = model;
-    }
-    fs.writeFileSync(configPath, JSON.stringify(jarvisConfig, null, 2));
-  } catch (error) {
-    console.warn(`Unable to update config file: ${error.message}`);
-  }
-}
 
 function isSubpath(parent, child) {
   const relative = path.relative(parent, child);
@@ -366,9 +429,78 @@ app.use((error, _req, res, _next) => {
 });
 
 const port = Number(process.env.PORT ?? 8787);
+const startedAt = new Date().toISOString();
 app.listen(port, '127.0.0.1', () => {
   console.log(`Jarvis Neural Command Interface backend listening on http://127.0.0.1:${port}`);
 });
+
+function initLocalLogging(targetPath) {
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  const original = {
+    log: console.log.bind(console),
+    warn: console.warn.bind(console),
+    error: console.error.bind(console)
+  };
+  const write = (level, args) => {
+    const line = `[${new Date().toISOString()}] ${level} ${args.map(formatLogArg).join(' ')}\n`;
+    fs.appendFile(targetPath, line, () => {});
+  };
+  console.log = (...args) => {
+    write('INFO', args);
+    original.log(...args);
+  };
+  console.warn = (...args) => {
+    write('WARN', args);
+    original.warn(...args);
+  };
+  console.error = (...args) => {
+    write('ERROR', args);
+    original.error(...args);
+  };
+}
+
+function formatLogArg(value) {
+  if (value instanceof Error) {
+    return value.stack ?? value.message;
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function readLogTail(targetPath, maxBytes) {
+  if (!fs.existsSync(targetPath)) {
+    return '';
+  }
+  const stat = fs.statSync(targetPath);
+  const length = Math.min(maxBytes, stat.size);
+  const buffer = Buffer.alloc(length);
+  const fd = fs.openSync(targetPath, 'r');
+  try {
+    fs.readSync(fd, buffer, 0, length, stat.size - length);
+  } finally {
+    fs.closeSync(fd);
+  }
+  return buffer.toString('utf8');
+}
+
+function compareVersions(a, b) {
+  const left = String(a ?? '').split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const right = String(b ?? '').split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const length = Math.max(left.length, right.length);
+  for (let i = 0; i < length; i += 1) {
+    const diff = (left[i] ?? 0) - (right[i] ?? 0);
+    if (diff !== 0) {
+      return diff;
+    }
+  }
+  return 0;
+}
 
 function uniqueById(rows) {
   const seen = new Set();

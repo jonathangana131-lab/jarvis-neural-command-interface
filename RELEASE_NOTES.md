@@ -1,24 +1,28 @@
-# v0.2.2
+# v0.3.0
 
-Hardening release for the public Windows build.
+First-run and reliability release for the public Windows build.
 
 ## Download
 
 Attach this file to the GitHub release:
 
-- `Jarvis-Neural-Command-Interface-Setup-0.2.2.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.3.0.exe`
 
-## Fixed And Improved
+## Added
 
-- Replaced deprecated `@xenova/transformers` with maintained `@huggingface/transformers`, clearing the npm audit report.
-- Added a desktop startup issue window so the app shows backend startup errors instead of silently quitting.
-- Added renderer boot failure recovery so the UI gives a useful service-offline state if `/api/config` cannot load.
-- Added a live stream smoke test that sends two messages through a mock streaming model endpoint.
-- Added a packaged app smoke test that launches the built Windows app with a clean profile and verifies two streamed messages.
-- Split large frontend vendor bundles so the production build no longer emits the oversized chunk warning.
+- First-run setup wizard for provider, endpoint, API key, model scan, and a real setup test message.
+- Expanded health diagnostics for backend, model router, OpenCode key, memory database, embeddings, queue, and app version.
+- GitHub release update check with a latest-download link when a newer version exists.
+- Local backend log file plus diagnostics log tail so users can report problems without cloud telemetry.
+- Installed-app UI smoke test that drives the first-run wizard through the packaged Electron UI.
+
+## Verified
+
+- Source build and all parser, memory, artifact, live stream, packaged app, and installed UI smoke tests.
+- The Windows installer launches an installed app, saves first-run model settings, and streams two messages through a mock model endpoint.
 
 ## Still Unsigned
 
 The installer is still unsigned. Windows may show a SmartScreen warning until the app is signed with a real code-signing certificate.
 
-SHA256: `CDF649F3246A10DF8079773BE22F63EB858DDFD86B75E09813871ECF2F530C3D`
+SHA256: `E1E5BDF625DC28B892E4DBB392B462818AC948E09B7105AD3379DB8BF4FBD2B4`

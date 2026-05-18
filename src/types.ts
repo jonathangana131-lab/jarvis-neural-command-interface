@@ -6,6 +6,7 @@ export type AppConfig = {
   workspaceAllowlist: string[];
   dataDir: string;
   memoryAutomatic: boolean;
+  appVersion?: string;
   codexCommand: string;
   codexModel?: string;
   codexReasoningEffort?: string;

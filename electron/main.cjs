@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Menu, nativeTheme } = require('electron');
 const { spawn } = require('node:child_process');
+const fs = require('node:fs');
 const path = require('node:path');
 
 const backendPort = Number(process.env.PORT || 8787);
@@ -7,6 +8,13 @@ const bundledUrl = `http://127.0.0.1:${backendPort}`;
 const externalUrl = process.env.JARVIS_CODEX_URL;
 let backend = null;
 let backendLog = '';
+
+const userDataOverride = process.env.JARVIS_USER_DATA_DIR;
+if (userDataOverride) {
+  const userDataDir = path.resolve(userDataOverride);
+  fs.mkdirSync(userDataDir, { recursive: true });
+  app.setPath('userData', userDataDir);
+}
 
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) {

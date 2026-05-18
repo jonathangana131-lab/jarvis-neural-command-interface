@@ -3172,9 +3172,105 @@ textarea::placeholder {
   padding: 12px;
 }
 
+.diagnostics-grid__wide {
+  grid-column: 1 / -1;
+}
+
+.diagnostics-grid a {
+  display: inline-block;
+  margin-top: 8px;
+  color: var(--cyan-hot);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.diagnostics-grid pre {
+  max-height: 220px;
+  margin: 10px 0 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #c9f8ff;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .diagnostics-grid p {
   overflow-wrap: anywhere;
   -webkit-line-clamp: 4;
+}
+
+.setup-wizard {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(2, 8, 14, 0.76);
+  backdrop-filter: blur(12px);
+}
+
+.setup-wizard.hidden {
+  display: none;
+}
+
+.setup-wizard__panel {
+  width: min(760px, 100%);
+  padding: 18px;
+  background:
+    radial-gradient(circle at 18% 12%, rgba(115, 243, 255, 0.13), transparent 32%),
+    linear-gradient(135deg, rgba(9, 31, 44, 0.96), rgba(3, 9, 16, 0.96));
+  border: 1px solid var(--line);
+  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.46);
+}
+
+.setup-wizard__panel header {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+
+.setup-wizard__panel header strong {
+  color: var(--text);
+  font-size: 18px;
+}
+
+.setup-wizard__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.setup-wizard__grid label {
+  color: #8aa3ab;
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.setup-wizard__grid input,
+.setup-wizard__grid select {
+  min-height: 38px;
+  margin-top: 6px;
+  padding: 0 11px;
+  font-size: 12px;
+  text-transform: none;
+}
+
+.setup-wizard__panel p {
+  min-height: 22px;
+  margin: 12px 0 0;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.setup-wizard__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
 }
 
 .film-grain {

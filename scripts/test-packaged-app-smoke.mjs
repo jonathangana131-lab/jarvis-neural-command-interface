@@ -11,7 +11,9 @@ if (!fs.existsSync(exePath)) {
 
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-packaged-smoke-'));
 const appData = path.join(tempRoot, 'roaming');
+const userData = path.join(tempRoot, 'user-data');
 fs.mkdirSync(appData, { recursive: true });
+fs.mkdirSync(userData, { recursive: true });
 
 const mockServer = http.createServer(async (req, res) => {
   if (req.url === '/v1/models') {
@@ -46,6 +48,7 @@ const appProcess = spawn(exePath, [], {
   env: {
     ...process.env,
     APPDATA: appData,
+    JARVIS_USER_DATA_DIR: userData,
     PORT: String(appPort),
     OPENCODE_API_KEY: 'mock-key',
     OPENAI_API_KEY: ''
@@ -100,7 +103,7 @@ async function runTask(port, workspacePath, prompt) {
 }
 
 async function postJson(port, pathname, body) {
-  const response = await fetch(`http://127.0.0.1:${port}${pathname}`, {
+  const response = await retryFetch(`http://127.0.0.1:${port}${pathname}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body)
@@ -115,7 +118,7 @@ async function postJson(port, pathname, body) {
 async function waitForTask(port, taskId) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < 25000) {
-    const response = await fetch(`http://127.0.0.1:${port}/api/tasks/${taskId}`);
+    const response = await retryFetch(`http://127.0.0.1:${port}/api/tasks/${taskId}`);
     const data = await response.json();
     if (['completed', 'failed', 'timed_out', 'cancelled'].includes(data.task?.status)) {
       return data.task;
@@ -138,6 +141,19 @@ async function waitForJson(url, timeoutMs) {
     }
   }
   throw new Error(`Timed out waiting for ${url}. App output:\n${output}`);
+}
+
+async function retryFetch(url, options = {}, attempts = 5) {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await fetch(url, options);
+    } catch (error) {
+      lastError = error;
+      await delay(180 + attempt * 120);
+    }
+  }
+  throw lastError;
 }
 
 function listen(serverInstance) {

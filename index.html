@@ -55,6 +55,42 @@
 
       <section id="task-hud" class="operation-channel" aria-label="Codex task status"></section>
 
+      <section id="setup-wizard" class="setup-wizard hidden" aria-label="First-run setup" aria-live="polite">
+        <div class="setup-wizard__panel">
+          <header>
+            <span class="micro-label">First Run</span>
+            <strong>Connect Jarvis to a model</strong>
+          </header>
+          <div class="setup-wizard__grid">
+            <label>Provider
+              <select id="setup-provider">
+                <option value="opencode">OpenCode Zen</option>
+                <option value="codex">Codex CLI</option>
+                <option value="lmstudio">LM Studio</option>
+                <option value="ollama">Ollama</option>
+              </select>
+            </label>
+            <label>Endpoint
+              <input id="setup-endpoint" />
+            </label>
+            <label>Model
+              <select id="setup-model">
+                <option value="">Scan to load models</option>
+              </select>
+            </label>
+            <label>OpenCode API key
+              <input id="setup-api-key" type="password" autocomplete="off" placeholder="Only needed for OpenCode Zen" />
+            </label>
+          </div>
+          <p id="setup-status">Choose a provider, scan models, then send the setup test.</p>
+          <div class="setup-wizard__actions">
+            <button id="setup-scan" class="hud-button" type="button" data-icon="scan-line"><span>Scan</span></button>
+            <button id="setup-test" class="hud-button hud-button--primary" type="button" data-icon="zap"><span>Test Message</span></button>
+            <button id="setup-finish" class="hud-button" type="button" data-icon="play"><span>Finish</span></button>
+          </div>
+        </div>
+      </section>
+
       <main class="console-deck" aria-label="Jarvis cockpit console">
         <section class="command-console console-view" data-view="run" aria-label="Codex mission control">
           <div class="mission-control">

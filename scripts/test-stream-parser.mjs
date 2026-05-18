@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { parseChatCompletionStreamLine } from '../server/codexTaskRunner.mjs';
+import { parseChatCompletionStreamLine, runChatCompletion } from '../server/codexTaskRunner.mjs';
 
 assert.equal(
   parseChatCompletionStreamLine('data: {"choices":[{"delta":{"content":"hel"}}]}'),
@@ -28,3 +28,23 @@ assert.equal(
 assert.equal(parseChatCompletionStreamLine('data: [DONE]'), '', 'done marker should not render');
 
 console.log('stream parser tests passed');
+
+globalThis.fetch = async () => new Response(JSON.stringify({ error: 'too many requests' }), {
+  status: 429,
+  statusText: 'Too Many Requests',
+  headers: {
+    'content-type': 'application/json',
+    'retry-after': '60'
+  }
+});
+await assert.rejects(
+  () => runChatCompletion({
+    endpoint: 'https://mock.local/v1',
+    apiKey: 'test-key',
+    model: 'mock-model',
+    prompt: 'hello'
+  }),
+  /rate limit: 429 Too Many Requests.*60/
+);
+
+console.log('rate limit error test passed');

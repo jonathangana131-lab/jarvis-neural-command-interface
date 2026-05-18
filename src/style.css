@@ -2995,7 +2995,37 @@ textarea::placeholder {
 
 .settings-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+  margin-top: 10px;
+}
+
+.settings-row--toggles {
+  align-items: center;
+}
+
+.settings-toggle {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid rgba(115, 243, 255, 0.16);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.settings-toggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--cyan-hot);
+}
+
+.task-actions--inline {
+  justify-content: flex-start;
   margin-top: 10px;
 }
 

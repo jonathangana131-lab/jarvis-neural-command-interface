@@ -29,6 +29,29 @@ export type LocalModelConfig = {
   model: string;
 };
 
+export type VoiceSettings = {
+  voiceEnabled: boolean;
+  spokenResponses: boolean;
+  selectedVoiceName: string;
+  autoSendAfterFinalTranscript: boolean;
+  summaryMaxLength: number;
+};
+
+export type SessionRecoveryState = {
+  startedAt: string;
+  pid: number;
+  previousCrashed: boolean;
+  previousCrashAcknowledged: boolean;
+  previous: {
+    active: boolean;
+    cleanExit: boolean;
+    startedAt: string | null;
+    endedAt: string | null;
+    reason: string | null;
+    pid: number | null;
+  } | null;
+};
+
 export type MemoryRecord = {
   id: number;
   kind: string;

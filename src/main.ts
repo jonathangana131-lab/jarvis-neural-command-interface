@@ -24,6 +24,7 @@ import {
   Sparkles,
   TerminalSquare,
   Trash2,
+  Volume2,
   Zap,
   createIcons
 } from 'lucide';
@@ -31,7 +32,7 @@ import { JarvisScene } from './JarvisScene';
 import { MemoryAnimator } from './MemoryAnimator';
 import { TaskHud } from './TaskHud';
 import { VoiceSession } from './VoiceSession';
-import type { AppConfig, AssistantMode, MemoryRecord, ModelKeyStatus, TaskRecord } from './types';
+import type { AppConfig, AssistantMode, MemoryRecord, ModelKeyStatus, SessionRecoveryState, TaskRecord, VoiceSettings } from './types';
 
 const jarvisIcons = {
   Activity,
@@ -57,6 +58,7 @@ const jarvisIcons = {
   Sparkles,
   TerminalSquare,
   Trash2,
+  Volume2,
   Zap
 };
 
@@ -136,6 +138,14 @@ const refreshLocalModels = required<HTMLButtonElement>('#refresh-local-models');
 const saveModelKey = required<HTMLButtonElement>('#save-model-key');
 const clearModelKey = required<HTMLButtonElement>('#clear-model-key');
 const modelKeyMessage = required<HTMLElement>('#model-key-message');
+const settingsVoiceName = required<HTMLSelectElement>('#settings-voice-name');
+const settingsVoiceSummaryLength = required<HTMLInputElement>('#settings-voice-summary-length');
+const settingsVoiceEnabled = required<HTMLInputElement>('#settings-voice-enabled');
+const settingsSpokenResponses = required<HTMLInputElement>('#settings-spoken-responses');
+const settingsVoiceAutoSend = required<HTMLInputElement>('#settings-voice-auto-send');
+const saveVoiceSettings = required<HTMLButtonElement>('#save-voice-settings');
+const testVoiceSummary = required<HTMLButtonElement>('#test-voice-summary');
+const voiceSettingsMessage = required<HTMLElement>('#voice-settings-message');
 const applyModel = required<HTMLButtonElement>('#apply-model');
 const refreshDiagnostics = required<HTMLButtonElement>('#refresh-diagnostics');
 const diagnosticsList = required<HTMLElement>('#diagnostics-list');
@@ -154,6 +164,7 @@ const voiceSession = new VoiceSession({
   onAudioLevel: (level) => scene.setAudioLevel(level),
   onTranscript: (text) => {
     appendPromptText(text);
+    scheduleVoiceAutoSend(text);
     void rememberText(text, 'voice');
   }
 });
@@ -186,6 +197,18 @@ let missionRenderFrame = 0;
 let lastMissionRenderAt = 0;
 let missionQueueLabel = 'Queue ready';
 let taskDispatchInFlight = false;
+let voiceSettings: VoiceSettings = {
+  voiceEnabled: true,
+  spokenResponses: true,
+  selectedVoiceName: '',
+  autoSendAfterFinalTranscript: true,
+  summaryMaxLength: 180
+};
+let voiceSubmitTimer = 0;
+let eventsReconnectTimer = 0;
+let eventsReconnectAttempts = 0;
+let eventsConnected = false;
+const queuedWatchTimers = new Map<string, number>();
 
 type ModelProvider = NonNullable<AppConfig['localModel']>['provider'];
 type ArtifactCatalogItem = {
@@ -206,6 +229,7 @@ type LocalModelScanResult = {
 type HealthReport = {
   app: { version: string; dataDir: string; logPath: string };
   backend: { available: boolean; startedAt: string; port: number };
+  session: SessionRecoveryState;
   modelKey: ModelKeyStatus;
   localModel: LocalModelScanResult;
   memory: {
@@ -285,6 +309,11 @@ voiceToggle.addEventListener('click', async () => {
       voiceToggle.textContent = 'Start Dictation';
       return;
     }
+    if (!voiceSettings.voiceEnabled) {
+      voiceStatus.textContent = 'Voice input is disabled in Settings.';
+      setTab('settings');
+      return;
+    }
     voiceToggle.textContent = 'Starting...';
     await voiceSession.start();
     voiceToggle.textContent = 'Stop Dictation';
@@ -358,12 +387,14 @@ async function dispatchTask() {
     taskPrompt.focus();
     return;
   }
+  window.clearTimeout(voiceSubmitTimer);
   taskDispatchInFlight = true;
   runTask.disabled = true;
   lastCommandPrompt = prompt;
   lastCommandOutput = '';
   lastCommandPhase = 'queued';
   setMode('executing');
+  voiceSession.speakSummary('I am working on it.');
   scene.setResponseActive(true);
   scene.pulseResponse(1.25);
   scene.pulseMemoryGrowth(0.5);
@@ -528,6 +559,18 @@ clearModelKey.addEventListener('click', () => {
   void clearOpencodeKey();
 });
 
+saveVoiceSettings.addEventListener('click', () => {
+  void persistVoiceSettingsFromForm();
+});
+
+testVoiceSummary.addEventListener('click', () => {
+  voiceSession.speakSummary('Voice summaries are enabled. I will keep spoken updates short while long code and logs stay on screen.');
+});
+
+settingsVoiceName.addEventListener('change', () => {
+  void persistVoiceSettingsFromForm();
+});
+
 applyModel.addEventListener('click', () => {
   void applySelectedModel();
 });
@@ -541,6 +584,7 @@ setupProvider.addEventListener('change', () => {
   setupModel.innerHTML = providerDefaultModel(setupProviderValue())
     ? `<option value="${providerDefaultModel(setupProviderValue())}">${modelDisplayName(providerDefaultModel(setupProviderValue()))}</option>`
     : '<option value="">Scan to load models</option>';
+  setupStatus.textContent = setupProviderHealthMessage(setupProviderValue());
 });
 
 setupScan.addEventListener('click', () => {
@@ -567,9 +611,16 @@ resetMemory.addEventListener('click', async () => {
 });
 
 async function boot() {
-  config = await fetchJson<AppConfig>('/api/config');
+  const [loadedConfig, loadedVoiceSettings, session] = await Promise.all([
+    fetchJson<AppConfig>('/api/config'),
+    fetchJson<VoiceSettings>('/api/voice-settings'),
+    fetchJson<SessionRecoveryState>('/api/session')
+  ]);
+  config = loadedConfig;
+  applyVoiceSettings(loadedVoiceSettings);
   setTab('run');
   hydrateSettingsFromConfig();
+  hydrateVoiceSettingsForm();
   memoryCount.textContent = formatMemoryCount(config.memoryCount);
   apiKeyStatus.textContent = config.openAiApiKeyPresent ? 'API key ready' : 'Local login';
   hydrateSetupWizard();
@@ -589,6 +640,7 @@ async function boot() {
   }
   renderCommandChat();
   connectEvents();
+  renderSessionRecoveryNotice(session);
 }
 
 function hydrateSettingsFromConfig() {
@@ -616,6 +668,90 @@ function hydrateSettingsFromConfig() {
   renderModelPresets();
   renderModelProfile();
   renderModelInstructions();
+}
+
+function applyVoiceSettings(settings: VoiceSettings) {
+  voiceSettings = {
+    voiceEnabled: settings.voiceEnabled !== false,
+    spokenResponses: settings.spokenResponses !== false,
+    selectedVoiceName: settings.selectedVoiceName ?? '',
+    autoSendAfterFinalTranscript: settings.autoSendAfterFinalTranscript !== false,
+    summaryMaxLength: Math.max(80, Math.min(420, Number(settings.summaryMaxLength ?? 180)))
+  };
+  voiceSession.configure(voiceSettings);
+  voiceToggle.disabled = !voiceSettings.voiceEnabled;
+  voiceToggle.querySelector('span')!.textContent = voiceSettings.voiceEnabled ? 'Start Dictation' : 'Voice Disabled';
+}
+
+function hydrateVoiceSettingsForm() {
+  refreshVoiceList();
+  settingsVoiceEnabled.checked = voiceSettings.voiceEnabled;
+  settingsSpokenResponses.checked = voiceSettings.spokenResponses;
+  settingsVoiceAutoSend.checked = voiceSettings.autoSendAfterFinalTranscript;
+  settingsVoiceSummaryLength.value = String(voiceSettings.summaryMaxLength);
+  settingsVoiceName.value = voiceSettings.selectedVoiceName;
+  voiceSettingsMessage.textContent = voiceCapabilityLabel();
+}
+
+function refreshVoiceList() {
+  const voices = voiceSession.availableVoices();
+  const current = settingsVoiceName.value || voiceSettings.selectedVoiceName;
+  settingsVoiceName.innerHTML = '<option value="">Best available voice</option>'
+    + voices.map((voice) => `<option value="${escapeHtml(voice.name)}">${escapeHtml(`${voice.name} / ${voice.lang}`)}</option>`).join('');
+  settingsVoiceName.value = voices.some((voice) => voice.name === current) ? current : '';
+}
+
+if ('speechSynthesis' in window) {
+  window.speechSynthesis.onvoiceschanged = () => {
+    refreshVoiceList();
+  };
+}
+
+async function persistVoiceSettingsFromForm() {
+  const next: VoiceSettings = {
+    voiceEnabled: settingsVoiceEnabled.checked,
+    spokenResponses: settingsSpokenResponses.checked,
+    selectedVoiceName: settingsVoiceName.value,
+    autoSendAfterFinalTranscript: settingsVoiceAutoSend.checked,
+    summaryMaxLength: Math.max(80, Math.min(420, Number(settingsVoiceSummaryLength.value || 180)))
+  };
+  voiceSettingsMessage.textContent = 'Saving voice settings...';
+  const saved = await postJson<VoiceSettings>('/api/voice-settings', next);
+  applyVoiceSettings(saved);
+  hydrateVoiceSettingsForm();
+  voiceSettingsMessage.textContent = 'Voice settings saved locally.';
+}
+
+function renderSessionRecoveryNotice(session: SessionRecoveryState) {
+  if (!session.previousCrashed) {
+    return;
+  }
+  const previousStart = session.previous?.startedAt ? formatDateTime(session.previous.startedAt) : 'the previous run';
+  voiceStatus.textContent = `Recovered after an unclean shutdown from ${previousStart}.`;
+  commandChatFeed.innerHTML = `
+    <article class="mission-event mission-event--response mission-event--failed">
+      <div class="conversation-header">
+        <span>Recovery</span>
+        <strong>Previous session did not close cleanly</strong>
+      </div>
+      <div class="conversation-stream">
+        <section class="conversation-message conversation-message--assistant">
+          <div class="conversation-message__meta"><span>Jarvis</span><em>Recovery ready</em></div>
+          <p>The last app session ended without a clean shutdown. Memories and settings are still stored in the app profile. Open Diagnostics to export logs or use recovery controls.</p>
+          <div class="task-actions">
+            <button type="button" data-session-open-diagnostics data-icon="activity"><span>Open Diagnostics</span></button>
+            <button type="button" data-session-ack-crash data-icon="save"><span>Dismiss</span></button>
+          </div>
+        </section>
+      </div>
+    </article>
+  `;
+  commandChatFeed.querySelector<HTMLButtonElement>('[data-session-open-diagnostics]')?.addEventListener('click', () => setTab('diagnostics'));
+  commandChatFeed.querySelector<HTMLButtonElement>('[data-session-ack-crash]')?.addEventListener('click', async () => {
+    await postJson<SessionRecoveryState>('/api/session/acknowledge-crash', {});
+    renderCommandChat(true);
+  });
+  renderIcons();
 }
 
 function renderBootFailure(error: unknown) {
@@ -672,7 +808,28 @@ function scheduleSemanticEdgeRefresh(delay = 500) {
 }
 
 function connectEvents() {
+  if (eventsConnected) {
+    return;
+  }
+  eventsConnected = true;
   const events = new EventSource('/api/events');
+  events.onopen = () => {
+    eventsReconnectAttempts = 0;
+    voiceStatus.textContent = 'Live event stream connected.';
+  };
+  events.onerror = () => {
+    events.close();
+    eventsConnected = false;
+    const waitMs = Math.min(12000, 1000 * 2 ** eventsReconnectAttempts);
+    eventsReconnectAttempts += 1;
+    voiceStatus.textContent = `Live updates disconnected. Reconnecting in ${Math.round(waitMs / 1000)}s.`;
+    window.clearTimeout(eventsReconnectTimer);
+    eventsReconnectTimer = window.setTimeout(() => {
+      void refreshQueueStatus();
+      void loadTasks();
+      connectEvents();
+    }, waitMs);
+  };
   events.addEventListener('memory.created', (event) => {
     const memory = JSON.parse((event as MessageEvent).data) as MemoryRecord;
     scene.pulseMemoryGrowth(1.25);
@@ -725,6 +882,7 @@ function connectEvents() {
     resetStreamOutput(task.id);
     currentRunningTask = task;
     selectedTaskId = task.id;
+    clearTaskWatch(task.id);
     renderCommandChat(true);
     taskHud.upsert(task);
     renderIcons();
@@ -741,6 +899,7 @@ function connectEvents() {
     lastCommandPhase = task.phase ?? task.status;
     currentRunningTask = task;
     selectedTaskId = task.id;
+    scheduleQueuedTaskWatch(task);
     renderCommandChat(true);
     renderChatSessions();
     void refreshQueueStatus();
@@ -769,6 +928,9 @@ function connectEvents() {
   events.addEventListener('task.updated', (event) => {
     const task = JSON.parse((event as MessageEvent).data) as TaskRecord;
     const wasSelected = selectedTaskId === task.id;
+    if (['completed', 'failed', 'timed_out', 'cancelled'].includes(task.status)) {
+      clearTaskWatch(task.id);
+    }
     upsertVisibleTask(task, wasSelected);
     if (wasSelected) {
       lastCommandPhase = task.phase ?? task.status;
@@ -779,6 +941,7 @@ function connectEvents() {
   events.addEventListener('task.finished', (event) => {
     const task = JSON.parse((event as MessageEvent).data) as TaskRecord;
     const wasSelected = selectedTaskId === task.id;
+    clearTaskWatch(task.id);
     currentRunningTask = null;
     taskHud.upsert(task);
     completeStreamOutput(task.id, task.output);
@@ -795,8 +958,15 @@ function connectEvents() {
     upsertVisibleTask(task, wasSelected);
     if (/requires a newer version of Codex/i.test(task.output)) {
       voiceStatus.textContent = 'Codex CLI update required for gpt-5.5';
-    } else if (/usage limit/i.test(task.output)) {
-      voiceStatus.textContent = 'Codex usage limit reached; retry after the reset time.';
+    } else if (isRateLimitOutput(task.output)) {
+      voiceStatus.textContent = 'OpenCode rate limit hit. Retry later or switch provider/model in Settings.';
+      voiceSession.speakSummary('OpenCode is rate limited. Retry later or switch providers in Settings.');
+    } else if (task.status === 'completed') {
+      voiceStatus.textContent = 'Task finished.';
+      voiceSession.speakSummary(shortTaskSpeechSummary(task));
+    } else {
+      voiceStatus.textContent = `Task ${task.status}.`;
+      voiceSession.speakSummary(`Task ${task.status}. Check the response for details.`);
     }
     void loadMemories(false);
     void loadTasks();
@@ -873,7 +1043,8 @@ async function loadDiagnostics() {
       codex: { available: boolean; detail: string };
       localModel: { available: boolean; detail: string; provider: string; endpoint: string; models: string[] };
       modelKey: ModelKeyStatus;
-      voice: { speechRecognition: string; microphone: string; detail: string };
+      voice: { speechRecognition: string; microphone: string; detail: string; settings: VoiceSettings };
+      session: SessionRecoveryState;
       config: AppConfig;
       sqlite: { databasePath: string; exists: boolean; memoryCount: number; taskCount: number };
       queue: { paused: boolean; runningTaskId: string | null };
@@ -904,14 +1075,16 @@ async function loadDiagnostics() {
     <article><strong>Model Router</strong><span>${data.localModel.available ? 'Connected' : 'Offline'}</span><p>${escapeHtml(`${data.localModel.provider} / ${data.localModel.endpoint} / ${data.localModel.detail}`)}</p></article>
     <article><strong>Embeddings</strong><span>${health.memory.embeddings.disabled ? 'Fallback' : 'Ready'}</span><p>${escapeHtml(embeddingDetail)}</p></article>
     <article><strong>Updates</strong><span>${updateStatus.status === 'downloading' ? 'Downloading' : update.updateAvailable ? 'Available' : update.error ? 'Check failed' : 'Current'}</span><p>${escapeHtml(updateDetail)}</p>${updateActions}</article>
-    <article><strong>Voice</strong><span>Browser scoped</span><p>${escapeHtml(voiceCapabilityLabel())}</p></article>
+    <article><strong>Voice</strong><span>${data.voice.settings.voiceEnabled ? 'Enabled' : 'Disabled'}</span><p>${escapeHtml(`${voiceCapabilityLabel()} Spoken summaries ${data.voice.settings.spokenResponses ? 'on' : 'off'}.`)}</p></article>
     <article><strong>SQLite</strong><span>${data.sqlite.exists ? 'Ready' : 'Missing'}</span><p>${escapeHtml(data.sqlite.databasePath)}</p></article>
     <article><strong>Queue</strong><span>${data.queue.paused ? 'Paused' : 'Active'}</span><p>${data.queue.runningTaskId ? `Running ${escapeHtml(data.queue.runningTaskId)}` : 'No active task'}</p></article>
+    <article class="diagnostics-grid__wide"><strong>Session Recovery</strong><span>${data.session.previousCrashed ? 'Previous crash detected' : 'Clean'}</span><p>${escapeHtml(sessionRecoveryDetail(data.session))}</p>${renderSessionRecoveryActions(data.session)}</article>
     <article class="diagnostics-grid__wide"><strong>Recovery</strong><span>Safe controls</span><p>Reset bad model settings, clear saved model secrets, or export a log bundle for bug reports.</p>${renderRecoveryActions()}</article>
     <article class="diagnostics-grid__wide"><strong>Backups</strong><span>${backups.backups.length} saved</span><p>Backups include memory database files, saved provider settings, and local model secrets. Memory database restore requires a restart-safe manual recovery step.</p>${renderBackupManager(backups.backups)}</article>
     <article class="diagnostics-grid__wide"><strong>Local Logs</strong><span>${escapeHtml(logs.path)}</span><pre>${escapeHtml(logs.tail || 'No log output yet.')}</pre></article>
   `;
   wireUpdateActions(update, updateStatus);
+  wireSessionRecoveryActions();
   wireRecoveryActions();
   wireBackupActions();
   renderIcons();
@@ -920,7 +1093,12 @@ async function loadDiagnostics() {
 
 function renderUpdateActions(update: UpdateCheck, status?: UpdateStatus) {
   if (update.error) {
-    return '';
+    return `
+      <div class="update-actions">
+        <button class="hud-button" type="button" data-update-download data-icon="download"><span>Retry download</span></button>
+        <button class="hud-button" type="button" data-log-export data-icon="save"><span>Export Logs</span></button>
+      </div>
+    `;
   }
   if (!update.updateAvailable) {
     return update.url ? `<a href="${escapeHtml(update.url)}" target="_blank" rel="noreferrer">View releases</a>` : '';
@@ -937,9 +1115,36 @@ function renderUpdateActions(update: UpdateCheck, status?: UpdateStatus) {
       ${update.downloadUrl ? `<a href="${escapeHtml(update.downloadUrl)}" target="_blank" rel="noreferrer">Manual download</a>` : ''}
     </div>
     ${status?.status === 'downloading' ? `<div class="update-progress update-progress--inline"><span style="width: ${percent}%"></span></div>` : ''}
-    ${status?.status === 'failed' ? `<p class="diagnostics-grid__note">Download failed: ${escapeHtml(status.error ?? 'unknown error')}</p>` : ''}
+    ${status?.status === 'failed' ? `<p class="diagnostics-grid__note">Download failed: ${escapeHtml(status.error ?? 'unknown error')}</p><div class="update-actions"><button class="hud-button" type="button" data-log-export data-icon="save"><span>Export Logs</span></button></div>` : ''}
     ${verifiedDetail}
   `;
+}
+
+function sessionRecoveryDetail(session: SessionRecoveryState) {
+  if (!session.previousCrashed) {
+    return `Current session started ${formatDateTime(session.startedAt)}. Previous session closed cleanly or has already been acknowledged.`;
+  }
+  const previousStart = session.previous?.startedAt ? formatDateTime(session.previous.startedAt) : 'unknown start time';
+  return `The previous session from ${previousStart} ended without a clean shutdown. Export logs if the app froze or closed unexpectedly.`;
+}
+
+function renderSessionRecoveryActions(session: SessionRecoveryState) {
+  if (!session.previousCrashed) {
+    return '';
+  }
+  return `
+    <div class="update-actions">
+      <button class="hud-button hud-button--primary" type="button" data-log-export data-icon="save"><span>Export Logs</span></button>
+      <button class="hud-button" type="button" data-session-ack-crash data-icon="save"><span>Dismiss Notice</span></button>
+    </div>
+  `;
+}
+
+function wireSessionRecoveryActions() {
+  diagnosticsList.querySelector<HTMLButtonElement>('[data-session-ack-crash]')?.addEventListener('click', async () => {
+    await postJson<SessionRecoveryState>('/api/session/acknowledge-crash', {});
+    await loadDiagnostics();
+  });
 }
 
 function wireUpdateActions(_update: UpdateCheck, _status?: UpdateStatus) {
@@ -1101,9 +1306,11 @@ function wireRecoveryActions() {
     updateModelKeyStatus(result.modelKey);
     await loadDiagnostics();
   });
-  diagnosticsList.querySelector<HTMLButtonElement>('[data-log-export]')?.addEventListener('click', async () => {
-    const result = await fetchJson<{ path: string; size: number }>('/api/logs/export');
-    window.alert(`Log bundle exported:\n${result.path}`);
+  diagnosticsList.querySelectorAll<HTMLButtonElement>('[data-log-export]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const result = await fetchJson<{ path: string; size: number }>('/api/logs/export');
+      window.alert(`Log bundle exported:\n${result.path}`);
+    });
   });
 }
 
@@ -1259,13 +1466,13 @@ function hydrateSetupWizard() {
     || (provider === 'opencode' && !config?.modelKey?.present && !config?.modelApiKeyPresent);
   setupWizard.classList.toggle('hidden', !needsSetup);
   setupStatus.textContent = needsSetup
-    ? 'Choose a provider, scan models, then send the setup test.'
+    ? setupProviderHealthMessage(provider)
     : 'Setup complete.';
 }
 
 async function runSetupScan() {
   setupScan.disabled = true;
-  setupStatus.textContent = 'Scanning model provider...';
+  setupStatus.textContent = `Scanning ${providerLabel(setupProviderValue())}...`;
   try {
     const provider = setupProviderValue();
     const apiKey = setupApiKey.value.trim();
@@ -1294,7 +1501,9 @@ async function runSetupScan() {
     settingsModelEndpoint.value = endpoint;
     settingsLocalModel.innerHTML = setupModel.innerHTML;
     settingsLocalModel.value = selected;
-    setupStatus.textContent = scan.available ? scan.detail : modelConnectionLabel(false, scan.detail);
+    setupStatus.textContent = scan.available
+      ? `${providerLabel(provider)} connected. ${scan.detail} Send the setup test to finish.`
+      : `${providerLabel(provider)} needs attention. ${modelConnectionLabel(false, scan.detail)}`;
     renderModelPresets();
     renderModelProfile();
     renderModelInstructions();
@@ -1308,7 +1517,7 @@ async function runSetupScan() {
 
 async function runSetupTest() {
   setupTest.disabled = true;
-  setupStatus.textContent = 'Sending setup test message...';
+  setupStatus.textContent = `Sending setup test through ${providerLabel(setupProviderValue())}...`;
   try {
     const provider = setupProviderValue();
     const endpoint = setupEndpoint.value.trim() || defaultLocalEndpoint(provider);
@@ -1374,6 +1583,19 @@ function setupProviderValue(): ModelProvider {
   if (setupProvider.value === 'lmstudio') return 'lmstudio';
   if (setupProvider.value === 'codex') return 'codex';
   return 'opencode';
+}
+
+function setupProviderHealthMessage(provider: ModelProvider) {
+  if (provider === 'opencode') {
+    return 'OpenCode Zen uses the saved local key. Paste a key if needed, scan models, then send the setup test.';
+  }
+  if (provider === 'lmstudio') {
+    return 'Start the LM Studio local server, scan models, then send the setup test.';
+  }
+  if (provider === 'ollama') {
+    return 'Start Ollama, pull a chat model, scan models, then send the setup test.';
+  }
+  return 'Codex CLI uses your local Codex login and selected model. Send the setup test to confirm it works.';
 }
 
 function renderModelInstructions() {
@@ -1535,6 +1757,9 @@ function modelConnectionLabel(available: boolean, detail: string) {
   if (/missing opencode api key/i.test(detail)) {
     return 'Missing key';
   }
+  if (/429|too many requests|rate limit/i.test(detail)) {
+    return 'Rate limited. Wait before retrying or switch provider/model.';
+  }
   if (/unauthorized|401|forbidden|403|api key/i.test(detail)) {
     return `Scan failed: ${detail}`;
   }
@@ -1657,7 +1882,16 @@ async function cancelTask(taskId: string) {
     taskHud.upsert(data.task);
     scene.pulseResponse(0.62);
     scene.setResponseActive(false);
+    currentRunningTask = currentRunningTask?.id === data.task.id ? null : currentRunningTask;
+    streamingActive = false;
+    pendingStreamUpdate = null;
+    lastCommandPhase = data.task.phase ?? data.task.status;
+    lastCommandOutput = data.task.output;
+    voiceStatus.textContent = 'Task stopped.';
+    voiceSession.speakSummary('Task stopped.');
     upsertVisibleTask(data.task, true);
+    renderCommandChat(true);
+    void refreshQueueStatus();
   }
 }
 
@@ -2142,6 +2376,7 @@ function renderCommandChat(immediate = false) {
   missionArtifactSummary.textContent = artifactCount > 0 ? `${artifactCount} captured` : 'No outputs yet';
   missionArtifacts.innerHTML = artifactMarkup;
   commandChatFeed.innerHTML = timeline;
+  wireActiveTaskActions();
 
   missionMemoryContext.querySelectorAll<HTMLButtonElement>('[data-memory-jump]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -2190,7 +2425,22 @@ function renderMissionTimeline(
       <div class="conversation-stream ${live ? 'is-live' : ''}" ${task ? `data-stream-task="${escapeHtml(task.id)}"` : ''}>
         ${conversation}
       </div>
+      ${renderActiveTaskActions(task, output)}
     </article>
+  `;
+}
+
+function renderActiveTaskActions(task: TaskRecord | null, output: string) {
+  if (!task) {
+    return '';
+  }
+  const live = task.status === 'running' || task.status === 'queued';
+  return `
+    <div class="task-actions task-actions--inline">
+      ${live ? `<button type="button" data-icon="octagon-x" data-cancel-active-task="${escapeHtml(task.id)}"><span>Stop</span></button>` : ''}
+      ${!live ? `<button type="button" data-icon="rotate-cw" data-retry-active-task="${escapeHtml(task.id)}"><span>Retry</span></button>` : ''}
+      ${output.trim() ? `<button type="button" data-icon="save" data-copy-task-summary="${escapeHtml(task.id)}"><span>Copy summary</span></button>` : ''}
+    </div>
   `;
 }
 
@@ -2238,6 +2488,58 @@ function renderMissionConversation(
   }
 
   return messages.join('');
+}
+
+function wireActiveTaskActions() {
+  commandChatFeed.querySelector<HTMLButtonElement>('[data-cancel-active-task]')?.addEventListener('click', async (event) => {
+    const taskId = (event.currentTarget as HTMLButtonElement).dataset.cancelActiveTask;
+    if (taskId) {
+      await cancelTask(taskId);
+    }
+  });
+  commandChatFeed.querySelector<HTMLButtonElement>('[data-retry-active-task]')?.addEventListener('click', async (event) => {
+    const taskId = (event.currentTarget as HTMLButtonElement).dataset.retryActiveTask;
+    if (!taskId) {
+      return;
+    }
+    const data = await postJson<{ task: TaskRecord }>(`/api/tasks/${taskId}/retry`, {});
+    upsertVisibleTask(data.task, true);
+    setTab('run');
+  });
+  commandChatFeed.querySelector<HTMLButtonElement>('[data-copy-task-summary]')?.addEventListener('click', async (event) => {
+    const taskId = (event.currentTarget as HTMLButtonElement).dataset.copyTaskSummary;
+    const task = taskId ? visibleTasks.find((entry) => entry.id === taskId) ?? selectedTask() : selectedTask();
+    if (!task) {
+      return;
+    }
+    const summary = summarizeTaskForCopy(task);
+    await navigator.clipboard.writeText(summary);
+    voiceStatus.textContent = 'Task summary copied.';
+  });
+}
+
+function summarizeTaskForCopy(task: TaskRecord) {
+  const output = stripUiArtifactBlocks(task.output || '').replace(/\s+/g, ' ').trim();
+  const shortOutput = output.length > 600 ? `${output.slice(0, 597).trim()}...` : output || 'No response captured.';
+  return [
+    `Prompt: ${task.prompt}`,
+    `Status: ${task.status}${task.phase ? ` / ${task.phase}` : ''}`,
+    `Summary: ${shortOutput}`
+  ].join('\n');
+}
+
+function shortTaskSpeechSummary(task: TaskRecord) {
+  const output = stripUiArtifactBlocks(task.output || '').replace(/\s+/g, ' ').trim();
+  if (task.filesChanged?.length) {
+    return `Task finished. I changed ${task.filesChanged.length} file${task.filesChanged.length === 1 ? '' : 's'}.`;
+  }
+  if (task.testsRun?.length) {
+    return `Task finished. I ran ${task.testsRun.length} check${task.testsRun.length === 1 ? '' : 's'}.`;
+  }
+  if (!output) {
+    return 'Task finished.';
+  }
+  return output;
 }
 
 function renderConversationMessage(
@@ -2510,6 +2812,9 @@ function missionNextActionFor(task: TaskRecord | null, output: string) {
   if (!task) {
     return taskPrompt.value.trim() ? 'Command drafted. Run when ready.' : 'Awaiting operator command.';
   }
+  if (isRateLimitOutput(task.output || output)) {
+    return 'OpenCode rate-limited this request. Wait, retry, or switch to LM Studio, Ollama, or Codex in Settings.';
+  }
   if (task.status === 'queued') {
     return 'Queued. Jarvis will launch when the lane is clear.';
   }
@@ -2526,6 +2831,10 @@ function missionNextActionFor(task: TaskRecord | null, output: string) {
     return 'Task timed out. Retry with a smaller objective or check diagnostics.';
   }
   return 'Task needs attention. Review output, provider status, then retry.';
+}
+
+function isRateLimitOutput(value: string) {
+  return /429|too many requests|rate limit|usage limit/i.test(value);
 }
 
 function memoryReason(memory: MemoryRecord) {
@@ -2654,6 +2963,34 @@ function renderQueueStatus(queue: { paused: boolean; runningTaskId: string | nul
   renderCommandChat();
 }
 
+function scheduleQueuedTaskWatch(task: TaskRecord) {
+  clearTaskWatch(task.id);
+  queuedWatchTimers.set(task.id, window.setTimeout(async () => {
+    queuedWatchTimers.delete(task.id);
+    try {
+      const data = await fetchJson<{ task: TaskRecord }>(`/api/tasks/${encodeURIComponent(task.id)}`);
+      if ((data.task.status === 'queued' || data.task.status === 'running') && !data.task.output.trim()) {
+        voiceStatus.textContent = data.task.status === 'queued'
+          ? 'Task is still queued. Open Diagnostics if it does not start soon.'
+          : 'Task is running but has not streamed output yet.';
+        upsertVisibleTask(data.task, selectedTaskId === data.task.id);
+        renderCommandChat(true);
+      }
+    } catch {
+      voiceStatus.textContent = 'Task status check failed. Reconnecting live updates.';
+      connectEvents();
+    }
+  }, 30000));
+}
+
+function clearTaskWatch(taskId: string) {
+  const timer = queuedWatchTimers.get(taskId);
+  if (timer) {
+    window.clearTimeout(timer);
+    queuedWatchTimers.delete(taskId);
+  }
+}
+
 function renderArtifactList(label: string, values: string[] | undefined, workspace?: string) {
   if (!values?.length) {
     return '';
@@ -2717,6 +3054,25 @@ function appendPromptText(text: string) {
   const separator = taskPrompt.value.trim() ? '\n' : '';
   taskPrompt.value = `${taskPrompt.value.trimEnd()}${separator}${trimmed}`;
   taskPrompt.focus();
+}
+
+function scheduleVoiceAutoSend(transcript: string) {
+  window.clearTimeout(voiceSubmitTimer);
+  if (!voiceSettings.autoSendAfterFinalTranscript || !voiceSettings.voiceEnabled) {
+    voiceStatus.textContent = 'Voice captured. Review the prompt, then send.';
+    return;
+  }
+  voiceStatus.textContent = 'Voice captured. Sending in one second.';
+  voiceSubmitTimer = window.setTimeout(() => {
+    if (taskDispatchInFlight || !taskPrompt.value.trim()) {
+      return;
+    }
+    const current = taskPrompt.value.trim().toLowerCase();
+    if (!current.includes(transcript.trim().toLowerCase().slice(0, 24))) {
+      return;
+    }
+    void dispatchTask();
+  }, 1000);
 }
 
 async function fetchJson<T>(url: string): Promise<T> {

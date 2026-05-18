@@ -30,7 +30,18 @@ const secretDir = path.resolve(process.env.JARVIS_SECRET_DIR ?? config.dataDir);
 const modelSecretPath = path.resolve(secretDir, 'model-secrets.json');
 const updateDir = path.resolve(config.dataDir, 'updates');
 const updateBackupDir = path.resolve(config.dataDir, 'update-backups');
+const voiceSettingsPath = path.resolve(config.dataDir, 'voice-settings.json');
+const sessionStatePath = path.resolve(config.dataDir, 'session-state.json');
 const updateRepository = process.env.JARVIS_UPDATE_REPO || 'jonathangana131-lab/jarvis-neural-command-interface';
+const startedAt = new Date().toISOString();
+const defaultVoiceSettings = {
+  voiceEnabled: true,
+  spokenResponses: true,
+  selectedVoiceName: '',
+  autoSendAfterFinalTranscript: true,
+  summaryMaxLength: 180
+};
+const sessionState = initSessionState(sessionStatePath, startedAt);
 let updateDownloadState = {
   status: 'idle',
   version: null,
@@ -45,6 +56,7 @@ let updateDownloadState = {
   error: null,
   updatedAt: new Date().toISOString()
 };
+let voiceSettings = loadVoiceSettings(voiceSettingsPath);
 const opencodeFreeModels = [
   'minimax-m2.5-free',
   'big-pickle',
@@ -80,6 +92,7 @@ app.get('/api/health', async (_req, res) => {
       startedAt,
       port
     },
+    session: publicSessionState(),
     modelKey: modelKeyStatus(),
     localModel,
     memory: {
@@ -95,6 +108,30 @@ app.get('/api/health', async (_req, res) => {
     codex,
     queue: taskRunner.queueStatus()
   });
+});
+
+app.get('/api/session', (_req, res) => {
+  res.json(publicSessionState());
+});
+
+app.post('/api/session/acknowledge-crash', (_req, res) => {
+  sessionState.previousCrashAcknowledged = true;
+  writeJsonFile(sessionStatePath, sessionState);
+  res.json(publicSessionState());
+});
+
+app.get('/api/voice-settings', (_req, res) => {
+  res.json(voiceSettings);
+});
+
+app.post('/api/voice-settings', (req, res, next) => {
+  try {
+    voiceSettings = normalizeVoiceSettings(req.body ?? {});
+    writeJsonFile(voiceSettingsPath, voiceSettings);
+    res.json(voiceSettings);
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get('/api/update-check', async (_req, res) => {
@@ -451,8 +488,10 @@ app.get('/api/diagnostics', async (_req, res) => {
     voice: {
       speechRecognition: 'browser',
       microphone: 'browser',
-      detail: 'Voice capability is verified in the renderer because microphone APIs are browser-scoped.'
+      detail: 'Voice capability is verified in the renderer because microphone APIs are browser-scoped.',
+      settings: voiceSettings
     },
+    session: publicSessionState(),
     config: publicConfig(config),
     sqlite: {
       databasePath: config.memory.databasePath,
@@ -669,9 +708,24 @@ app.use((error, _req, res, _next) => {
 });
 
 const port = Number(process.env.PORT ?? 8787);
-const startedAt = new Date().toISOString();
 app.listen(port, '127.0.0.1', () => {
   console.log(`Jarvis Neural Command Interface backend listening on http://127.0.0.1:${port}`);
+});
+
+process.once('SIGINT', () => {
+  markSessionClean('SIGINT');
+  process.exit(0);
+});
+
+process.once('SIGTERM', () => {
+  markSessionClean('SIGTERM');
+  process.exit(0);
+});
+
+process.once('exit', (code) => {
+  if (code === 0) {
+    markSessionClean('exit');
+  }
 });
 
 function initLocalLogging(targetPath) {
@@ -697,6 +751,91 @@ function initLocalLogging(targetPath) {
     write('ERROR', args);
     original.error(...args);
   };
+}
+
+function loadVoiceSettings(targetPath) {
+  if (!fs.existsSync(targetPath)) {
+    return { ...defaultVoiceSettings };
+  }
+  try {
+    const parsed = JSON.parse(fs.readFileSync(targetPath, 'utf8'));
+    return normalizeVoiceSettings(parsed);
+  } catch (error) {
+    console.warn(`Unable to load voice settings: ${error.message}`);
+    return { ...defaultVoiceSettings };
+  }
+}
+
+function normalizeVoiceSettings(value) {
+  const summaryMaxLength = Math.max(80, Math.min(420, Number(value.summaryMaxLength ?? defaultVoiceSettings.summaryMaxLength)));
+  return {
+    voiceEnabled: value.voiceEnabled !== false,
+    spokenResponses: value.spokenResponses !== false,
+    selectedVoiceName: String(value.selectedVoiceName ?? '').slice(0, 160),
+    autoSendAfterFinalTranscript: value.autoSendAfterFinalTranscript !== false,
+    summaryMaxLength
+  };
+}
+
+function initSessionState(targetPath, currentStartedAt) {
+  const previous = readJsonFile(targetPath);
+  const previousCrashed = Boolean(previous?.active && !previous?.cleanExit);
+  const next = {
+    active: true,
+    cleanExit: false,
+    startedAt: currentStartedAt,
+    pid: process.pid,
+    previous: previous ? {
+      active: Boolean(previous.active),
+      cleanExit: Boolean(previous.cleanExit),
+      startedAt: previous.startedAt ?? null,
+      endedAt: previous.endedAt ?? null,
+      reason: previous.reason ?? null,
+      pid: previous.pid ?? null
+    } : null,
+    previousCrashed,
+    previousCrashAcknowledged: false
+  };
+  writeJsonFile(targetPath, next);
+  return next;
+}
+
+function publicSessionState() {
+  return {
+    startedAt: sessionState.startedAt,
+    pid: sessionState.pid,
+    previousCrashed: Boolean(sessionState.previousCrashed && !sessionState.previousCrashAcknowledged),
+    previousCrashAcknowledged: Boolean(sessionState.previousCrashAcknowledged),
+    previous: sessionState.previous
+  };
+}
+
+function markSessionClean(reason) {
+  if (!sessionState.active && sessionState.cleanExit) {
+    return;
+  }
+  sessionState.active = false;
+  sessionState.cleanExit = true;
+  sessionState.reason = reason;
+  sessionState.endedAt = new Date().toISOString();
+  writeJsonFile(sessionStatePath, sessionState);
+}
+
+function readJsonFile(targetPath) {
+  try {
+    if (!fs.existsSync(targetPath)) {
+      return null;
+    }
+    return JSON.parse(fs.readFileSync(targetPath, 'utf8'));
+  } catch (error) {
+    console.warn(`Unable to read ${targetPath}: ${error.message}`);
+    return null;
+  }
+}
+
+function writeJsonFile(targetPath, value) {
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+  fs.writeFileSync(targetPath, JSON.stringify(value, null, 2));
 }
 
 function formatLogArg(value) {

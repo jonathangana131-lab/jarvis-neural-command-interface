@@ -296,6 +296,40 @@
             <p id="model-key-message" aria-live="polite">Key is stored locally for the desktop app.</p>
           </div>
 
+          <!-- Voice Mode -->
+          <div class="settings-section">
+            <span class="section-label">Voice Mode</span>
+            <div class="settings-section-grid">
+              <label>System voice
+                <select id="settings-voice-name">
+                  <option value="">Best available voice</option>
+                </select>
+              </label>
+              <label>Summary length
+                <input id="settings-voice-summary-length" type="number" min="80" max="420" step="10" />
+              </label>
+            </div>
+            <div class="settings-row settings-row--toggles">
+              <label class="settings-toggle">
+                <input id="settings-voice-enabled" type="checkbox" />
+                <span>Voice input</span>
+              </label>
+              <label class="settings-toggle">
+                <input id="settings-spoken-responses" type="checkbox" />
+                <span>Spoken summaries</span>
+              </label>
+              <label class="settings-toggle">
+                <input id="settings-voice-auto-send" type="checkbox" />
+                <span>Auto-send after speech</span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <button id="save-voice-settings" class="hud-button hud-button--primary" type="button" data-icon="save"><span>Save Voice</span></button>
+              <button id="test-voice-summary" class="hud-button" type="button" data-icon="volume-2"><span>Test Voice</span></button>
+            </div>
+            <p id="voice-settings-message" aria-live="polite">Voice uses Windows/browser speech APIs and speaks short summaries only.</p>
+          </div>
+
           <!-- General -->
           <div class="settings-section">
             <span class="section-label">General</span>

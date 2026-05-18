@@ -1,6 +1,6 @@
 {
   "name": "jarvis-neural-command-interface",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": false,
   "type": "module",
   "main": "electron/main.cjs",
@@ -13,6 +13,7 @@
     "desktop:smoke": "node scripts/desktop.mjs --smoke",
     "build": "tsc && vite build",
     "test:memory": "node --experimental-sqlite scripts/test-memory.mjs",
+    "test:voice-settings": "node --experimental-sqlite scripts/test-voice-settings.mjs",
     "test:artifacts": "node --experimental-sqlite scripts/test-streaming-artifacts.mjs",
     "test:stream-parser": "node --experimental-sqlite scripts/test-stream-parser.mjs",
     "test:live-smoke": "node --experimental-sqlite scripts/test-live-stream-smoke.mjs",

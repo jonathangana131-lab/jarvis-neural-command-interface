@@ -1,4 +1,4 @@
-import type { AssistantMode } from './types';
+import type { AssistantMode, VoiceSettings } from './types';
 
 type VoiceCallbacks = {
   onMode: (mode: AssistantMode) => void;
@@ -53,6 +53,13 @@ export class VoiceSession {
   private analyser: AnalyserNode | null = null;
   private animationFrame = 0;
   private active = false;
+  private settings: VoiceSettings = {
+    voiceEnabled: true,
+    spokenResponses: true,
+    selectedVoiceName: '',
+    autoSendAfterFinalTranscript: true,
+    summaryMaxLength: 180
+  };
 
   constructor(private readonly callbacks: VoiceCallbacks) {}
 
@@ -60,7 +67,18 @@ export class VoiceSession {
     return this.active;
   }
 
+  configure(settings: VoiceSettings) {
+    this.settings = settings;
+  }
+
+  availableVoices() {
+    return window.speechSynthesis?.getVoices?.() ?? [];
+  }
+
   async start() {
+    if (!this.settings.voiceEnabled) {
+      throw new Error('Voice Mode is disabled in Settings.');
+    }
     if (this.active) {
       await this.stop();
     }
@@ -111,6 +129,32 @@ export class VoiceSession {
     this.callbacks.onAudioLevel(0);
     this.callbacks.onStatus('Codex app connected locally');
     this.callbacks.onMode('idle');
+  }
+
+  speakSummary(text: string) {
+    if (!this.settings.voiceEnabled || !this.settings.spokenResponses || !('speechSynthesis' in window)) {
+      return;
+    }
+    const summary = summarizeForSpeech(text, this.settings.summaryMaxLength);
+    if (!summary) {
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(summary);
+    utterance.rate = 1;
+    utterance.pitch = 0.92;
+    const voices = this.availableVoices();
+    const selected = voices.find((voice) => voice.name === this.settings.selectedVoiceName)
+      ?? voices.find((voice) => /natural|online|guy|david|mark|zira/i.test(`${voice.name} ${voice.voiceURI}`))
+      ?? voices.find((voice) => /^en/i.test(voice.lang))
+      ?? voices[0];
+    if (selected) {
+      utterance.voice = selected;
+    }
+    this.callbacks.onMode('speaking');
+    utterance.onend = () => this.callbacks.onMode(this.active ? 'listening' : 'idle');
+    utterance.onerror = () => this.callbacks.onMode(this.active ? 'listening' : 'idle');
+    window.speechSynthesis.speak(utterance);
   }
 
   private handleResult(event: SpeechRecognitionEvent) {
@@ -167,6 +211,22 @@ export class VoiceSession {
     };
     tick();
   }
+}
+
+function summarizeForSpeech(value: string, maxLength: number) {
+  const clean = value
+    .replace(/```[\s\S]*?```/g, ' code block ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!clean) {
+    return '';
+  }
+  const firstSentence = clean.match(/^.{24,}?[.!?](?:\s|$)/)?.[0]?.trim() ?? clean;
+  const summary = firstSentence.length <= maxLength ? firstSentence : `${firstSentence.slice(0, Math.max(0, maxLength - 3)).trim()}...`;
+  if (/^(import|const|let|var|function|class|export|type|interface)\b/.test(summary)) {
+    return 'I finished generating code. Check the response for details.';
+  }
+  return summary;
 }
 
 function requestMicrophoneStream(timeoutMs: number) {

@@ -149,6 +149,26 @@ try {
   if (!String(transcript).includes('Jarvis setup test complete.')) {
     throw new Error(`UI did not show streamed setup response. Transcript:\n${transcript}`);
   }
+  await client.evaluate(`(() => {
+    document.querySelector('[data-console-tab="settings"]').click();
+    const enabled = document.querySelector('#settings-voice-enabled');
+    const spoken = document.querySelector('#settings-spoken-responses');
+    const autoSend = document.querySelector('#settings-voice-auto-send');
+    const summary = document.querySelector('#settings-voice-summary-length');
+    if (!enabled || !spoken || !autoSend || !summary) {
+      throw new Error('Voice settings controls did not render.');
+    }
+    enabled.checked = true;
+    spoken.checked = false;
+    autoSend.checked = false;
+    summary.value = '160';
+    document.querySelector('#save-voice-settings').click();
+  })()`);
+  await waitForUi(client, 'document.querySelector("#voice-settings-message")?.textContent?.includes("saved")', 8000);
+  const voiceSettings = await waitForJson(`http://127.0.0.1:${appPort}/api/voice-settings`, 3000);
+  if (voiceSettings.spokenResponses !== false || voiceSettings.autoSendAfterFinalTranscript !== false || voiceSettings.summaryMaxLength !== 160) {
+    throw new Error(`Voice settings did not persist from renderer: ${JSON.stringify(voiceSettings)}`);
+  }
   console.log('installed UI smoke passed');
 } finally {
   client?.close();

@@ -701,7 +701,7 @@ export function buildCodexExecArgs({ model, reasoningEffort, ephemeral, cwd, out
   ];
 }
 
-async function runChatCompletion({ endpoint, apiKey, model, prompt, signal, onChunk, onFallback }) {
+export async function runChatCompletion({ endpoint, apiKey, model, prompt, signal, onChunk, onFallback }) {
   const headers = {
     Authorization: `Bearer ${apiKey}`,
     'Content-Type': 'application/json'
@@ -724,8 +724,7 @@ async function runChatCompletion({ endpoint, apiKey, model, prompt, signal, onCh
   }
 
   if (!streamResponse.ok) {
-    onFallback?.();
-    return runJsonChatCompletion({ endpoint, headers, model, prompt, signal });
+    throw await chatCompletionHttpError(streamResponse, 'OpenCode streaming API');
   }
 
   const contentType = streamResponse.headers.get('content-type') ?? '';
@@ -761,9 +760,23 @@ async function runJsonChatCompletion({ endpoint, headers, model, prompt, signal 
     throw new Error(`Model request failed for ${redactUrl(target)}: ${formatFetchFailure(error)}`);
   }
   if (!response.ok) {
-    throw new Error(`OpenCode API error: ${response.status} ${response.statusText}`);
+    throw await chatCompletionHttpError(response, 'OpenCode API');
   }
   return extractChatCompletionText(await response.json());
+}
+
+async function chatCompletionHttpError(response, label) {
+  const retryAfter = response.headers.get('retry-after');
+  let detail = '';
+  try {
+    const text = await response.text();
+    detail = text ? ` ${text.slice(0, 420)}` : '';
+  } catch {}
+  if (response.status === 429) {
+    const wait = retryAfter ? ` Retry after ${retryAfter} seconds.` : ' Retry later or switch provider/model in Settings.';
+    return new Error(`${label} rate limit: 429 Too Many Requests.${wait}`);
+  }
+  return new Error(`${label} error: ${response.status} ${response.statusText}${detail}`);
 }
 
 function formatFetchFailure(error) {

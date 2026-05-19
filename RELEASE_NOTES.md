@@ -4,7 +4,7 @@ Polish release for real chat continuity, clearer memory controls, safer recovery
 
 ## Download
 
-Attach these files to the GitHub release:
+Release assets:
 
 - `Jarvis-Neural-Command-Interface-Setup-0.6.0.exe`
 - `Jarvis-Neural-Command-Interface-Setup-0.6.0.exe.blockmap`

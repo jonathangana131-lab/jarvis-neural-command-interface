@@ -71,6 +71,8 @@ export type ChatSessionRecord = {
   title: string;
   workspace: string;
   archived?: boolean;
+  pinned?: boolean;
+  clearedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   taskCount?: number;

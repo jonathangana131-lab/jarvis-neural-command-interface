@@ -144,10 +144,34 @@ const listedChat = taskStore.listChats().find((entry) => entry.id === chat.id);
 assert.equal(listedChat.taskCount, 1, 'chat list should include task counts');
 assert.equal(listedChat.lastStatus, 'completed', 'chat list should include latest task status');
 assert.equal(taskStore.listByChat(chat.id).length, 1, 'chat task listing should return associated tasks');
+const pinnedChat = taskStore.updateChat(chat.id, { pinned: true });
+assert.equal(pinnedChat.pinned, true, 'chat pin state should update');
+assert.equal(taskStore.listChats({ query: 'memory work' })[0].id, chat.id, 'chat search should find title matches');
+const clearedChat = taskStore.clearChat(chat.id);
+assert.ok(clearedChat.clearedAt, 'chat clear should persist a cleared timestamp');
+assert.equal(taskStore.listByChat(chat.id).length, 0, 'cleared chats should hide older tasks from the active thread');
+assert.equal(taskStore.listChats().find((entry) => entry.id === chat.id).taskCount, 0, 'cleared chat counts should ignore older tasks');
+
+taskStore.upsert({
+  ...taskRecord,
+  id: 'task-after-clear',
+  prompt: 'Continue after clearing the visible thread.',
+  status: 'completed',
+  output: 'New visible message after the clear marker.',
+  logs: '',
+  createdAt: new Date(Date.now() + 1000).toISOString(),
+  finishedAt: new Date(Date.now() + 1000).toISOString(),
+  rememberedMemoryIds: [],
+  createdMemoryIds: []
+});
+assert.equal(taskStore.listByChat(chat.id).length, 1, 'new chat tasks should appear after clearing older messages');
+assert.equal(taskStore.listChats()[0].id, chat.id, 'pinned chats should sort ahead of ordinary chats');
 
 const taskStoreAfterRestart = new TaskStore(dbPath);
 assert.equal(taskStoreAfterRestart.get(taskRecord.id).status, 'completed', 'task history should survive store restart');
 assert.equal(taskStoreAfterRestart.getChat(chat.id).title, 'Memory work chat', 'chat sessions should survive store restart');
+assert.equal(taskStoreAfterRestart.getChat(chat.id).pinned, true, 'chat pin state should survive store restart');
+assert.equal(taskStoreAfterRestart.listByChat(chat.id).length, 1, 'chat clear marker should survive store restart');
 taskStoreAfterRestart.upsert({
   id: 'task-short-output',
   chatId: chat.id,

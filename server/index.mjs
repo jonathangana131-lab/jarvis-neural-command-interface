@@ -197,6 +197,88 @@ app.post('/api/update/download', async (_req, res, next) => {
   }
 });
 
+async function safeUpdateCheck() {
+  try {
+    const release = await fetchLatestRelease();
+    const asset = findWindowsInstallerAsset(release);
+    const latestVersion = String(release.tag_name ?? '').replace(/^v/i, '');
+    return {
+      currentVersion: packageInfo.version,
+      latestVersion,
+      updateAvailable: compareVersions(latestVersion, packageInfo.version) > 0,
+      url: release.html_url,
+      assetName: asset?.name ?? null,
+      assetSize: asset?.size ?? null,
+      digest: asset?.digest ?? null,
+      downloaded: asset ? downloadedInstallerStatus(asset) : null,
+      error: null
+    };
+  } catch (error) {
+    return {
+      currentVersion: packageInfo.version,
+      latestVersion: packageInfo.version,
+      updateAvailable: false,
+      url: null,
+      assetName: null,
+      assetSize: null,
+      digest: null,
+      downloaded: null,
+      error: error instanceof Error ? error.message : 'Unable to check for updates.'
+    };
+  }
+}
+
+function workspaceSummary() {
+  const paths = new Set([
+    config.defaultWorkspace,
+    ...(Array.isArray(config.workspaceAllowlist) ? config.workspaceAllowlist : []),
+    ...taskRunner.list().map((task) => task.workspace),
+    ...taskStore.listChats({ limit: 80 }).map((chat) => chat.workspace).filter(Boolean)
+  ]);
+  const items = [...paths]
+    .filter(Boolean)
+    .map((workspacePath) => {
+      const resolved = path.resolve(workspacePath);
+      return {
+        path: resolved,
+        label: path.basename(resolved) || resolved,
+        allowed: isPathAllowed(config, resolved),
+        exists: fs.existsSync(resolved),
+        current: path.resolve(config.defaultWorkspace) === resolved
+      };
+    });
+  return {
+    current: config.defaultWorkspace,
+    items
+  };
+}
+
+async function releaseStatus() {
+  const releaseDir = path.resolve(config.rootDir, 'release');
+  const version = packageInfo.version;
+  const installerName = `Jarvis-Neural-Command-Interface-Setup-${version}.exe`;
+  const blockmapName = `${installerName}.blockmap`;
+  const latestName = 'latest.yml';
+  const assets = [installerName, blockmapName, latestName].map((name) => {
+    const assetPath = path.resolve(releaseDir, name);
+    return {
+      name,
+      path: assetPath,
+      exists: fs.existsSync(assetPath),
+      size: fs.existsSync(assetPath) ? fs.statSync(assetPath).size : 0,
+      sha256: fs.existsSync(assetPath) && name.endsWith('.exe') ? sha256File(assetPath) : null
+    };
+  });
+  return {
+    version,
+    tag: `v${version}`,
+    releaseDir,
+    assets,
+    ready: assets.every((asset) => asset.exists && asset.size > 0),
+    latest: await safeUpdateCheck()
+  };
+}
+
 app.get('/api/update/status', (_req, res) => {
   res.json(updateDownloadState);
 });
@@ -693,7 +775,10 @@ app.post('/api/remember', async (req, res, next) => {
 
 app.get('/api/chats', (req, res) => {
   const limit = req.query.limit ? Number(req.query.limit) : 80;
-  res.json({ chats: taskStore.listChats(Number.isFinite(limit) ? limit : 80) });
+  res.json({ chats: taskStore.listChats({
+    limit: Number.isFinite(limit) ? limit : 80,
+    query: req.query.q
+  }) });
 });
 
 app.post('/api/chats', (req, res, next) => {
@@ -726,6 +811,15 @@ app.put('/api/chats/:id', (req, res) => {
   res.json({ chat });
 });
 
+app.post('/api/chats/:id/clear', (req, res) => {
+  const chat = taskStore.clearChat(req.params.id);
+  if (!chat) {
+    res.status(404).json({ error: 'Chat not found.' });
+    return;
+  }
+  res.json({ chat });
+});
+
 app.delete('/api/chats/:id', (req, res) => {
   const chat = taskStore.archiveChat(req.params.id);
   if (!chat) {
@@ -733,6 +827,39 @@ app.delete('/api/chats/:id', (req, res) => {
     return;
   }
   res.json({ chat });
+});
+
+app.get('/api/dashboard', async (_req, res) => {
+  const update = await safeUpdateCheck();
+  const storage = storageReport();
+  res.json({
+    version: packageInfo.version,
+    workspace: config.defaultWorkspace,
+    chats: taskStore.listChats({ limit: 6 }),
+    tasks: taskRunner.list().slice(0, 8),
+    memory: {
+      count: memoryStore.count(),
+      embeddings: memoryStore.embeddingsReady()
+    },
+    queue: taskRunner.queueStatus(),
+    update,
+    storage: {
+      totalSize: storage.totalSize,
+      updatesSize: storage.updates.size,
+      backupsSize: storage.backups.size,
+      logsSize: storage.logs.size,
+      dataDir: storage.dataDir
+    },
+    workspaces: workspaceSummary()
+  });
+});
+
+app.get('/api/workspaces', (_req, res) => {
+  res.json(workspaceSummary());
+});
+
+app.get('/api/release/status', async (_req, res) => {
+  res.json(await releaseStatus());
 });
 
 app.get('/api/tasks', (req, res) => {

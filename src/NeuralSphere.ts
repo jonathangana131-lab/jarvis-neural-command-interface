@@ -74,9 +74,9 @@ const MODE_EXECUTE = new THREE.Color(0xffa64d);
 const MODE_LISTEN = new THREE.Color(0x96c7ff);
 const MODE_LEARN = new THREE.Color(0x76ffd1);
 const MODE_ERROR = new THREE.Color(0xff6174);
-const MEMORY_CORE_CLEARANCE = 1.52;
-const MEMORY_SHELL_MIN = 1.68;
-const MEMORY_SHELL_MAX = 2.28;
+const MEMORY_CORE_CLEARANCE = 1.74;
+const MEMORY_SHELL_MIN = 1.88;
+const MEMORY_SHELL_MAX = 2.14;
 
 const KIND_PALETTE: Record<string, { color: number; accent: number; direction: [number, number, number] }> = {
   preference: { color: 0x73f3ff, accent: 0xe9fdff, direction: [-0.78, 0.08, -0.22] },
@@ -842,12 +842,12 @@ export class NeuralSphere {
     rng: () => number
   ): THREE.Vector3 {
     const importance = THREE.MathUtils.clamp(Number(memory.importance ?? 2), 1, 5);
-    const scopePull = memory.scope === 'global' ? -0.02 : 0.04;
+    const scopePull = memory.scope === 'global' ? -0.01 : 0.03;
     const shell = Math.floor(order / 18);
     const ringSlot = order % 18;
     const angle = order * 2.399963 + shell * 0.57 + rng() * 0.42;
     const compactRadius = THREE.MathUtils.clamp(
-      1.64 + importance * 0.055 + shell * 0.048 + (ringSlot % 5) * 0.02 + scopePull + (rng() - 0.5) * 0.045,
+      1.86 + importance * 0.035 + shell * 0.028 + (ringSlot % 5) * 0.012 + scopePull + (rng() - 0.5) * 0.026,
       MEMORY_SHELL_MIN,
       MEMORY_SHELL_MAX
     );
@@ -856,8 +856,8 @@ export class NeuralSphere {
       .add(cluster.binormal.clone().multiplyScalar(Math.sin(angle) * (0.82 + rng() * 0.08)))
       .add(cluster.direction.clone().multiplyScalar(((ringSlot % 6) - 2.5) * 0.16 + (rng() - 0.5) * 0.18));
     const direction = clusterBias.add(localSpread).normalize();
-    const interiorScatter = cluster.tangent.clone().multiplyScalar((rng() - 0.5) * 0.035)
-      .add(cluster.binormal.clone().multiplyScalar((rng() - 0.5) * 0.035));
+    const interiorScatter = cluster.tangent.clone().multiplyScalar((rng() - 0.5) * 0.018)
+      .add(cluster.binormal.clone().multiplyScalar((rng() - 0.5) * 0.018));
 
     return direction.multiplyScalar(compactRadius).add(interiorScatter);
   }

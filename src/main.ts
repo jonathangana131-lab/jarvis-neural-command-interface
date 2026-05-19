@@ -77,7 +77,10 @@ const chatSidebarToggle = required<HTMLButtonElement>('#chat-sidebar-toggle');
 const chatSidebarClose = required<HTMLButtonElement>('#chat-sidebar-close');
 const chatSidebarScrim = required<HTMLElement>('#chat-sidebar-scrim');
 const newChat = required<HTMLButtonElement>('#new-chat');
+const chatSearch = required<HTMLInputElement>('#chat-search');
 const chatSessionList = required<HTMLElement>('#chat-session-list');
+const refreshDashboard = required<HTMLButtonElement>('#refresh-dashboard');
+const dashboardGrid = required<HTMLElement>('#dashboard-grid');
 const commandChatFeed = required<HTMLElement>('#command-chat-feed');
 const missionObjective = required<HTMLElement>('#mission-objective');
 const missionVitals = required<HTMLElement>('#mission-vitals');
@@ -114,12 +117,16 @@ const refreshMemory = required<HTMLButtonElement>('#refresh-memory');
 const resetMemory = required<HTMLButtonElement>('#reset-memory');
 const rememberCurrent = required<HTMLButtonElement>('#remember-current');
 const memorySearch = required<HTMLInputElement>('#memory-search');
+const memorySortFilter = required<HTMLSelectElement>('#memory-sort-filter');
 const memoryScopeFilter = required<HTMLSelectElement>('#memory-scope-filter');
 const memoryKindFilter = required<HTMLSelectElement>('#memory-kind-filter');
+const memoryGraphLegend = required<HTMLElement>('#memory-graph-legend');
+const memoryReviewQueue = required<HTMLElement>('#memory-review-queue');
 const memoryDetail = required<HTMLElement>('#memory-detail');
 const refreshTasks = required<HTMLButtonElement>('#refresh-tasks');
 const taskHistoryList = required<HTMLElement>('#task-history-list');
 const taskHistoryDetail = required<HTMLElement>('#task-history-detail');
+const commandReviewPanel = required<HTMLElement>('#command-review-panel');
 const refreshArtifacts = required<HTMLButtonElement>('#refresh-artifacts');
 const artifactCatalog = required<HTMLElement>('#artifact-catalog');
 const settingsWorkspace = required<HTMLInputElement>('#settings-workspace');
@@ -150,6 +157,10 @@ const voiceSettingsMessage = required<HTMLElement>('#voice-settings-message');
 const applyModel = required<HTMLButtonElement>('#apply-model');
 const refreshDiagnostics = required<HTMLButtonElement>('#refresh-diagnostics');
 const diagnosticsList = required<HTMLElement>('#diagnostics-list');
+const releaseAssistant = required<HTMLElement>('#release-assistant');
+const workspaceSwitcher = required<HTMLSelectElement>('#workspace-switcher');
+const saveWorkspace = required<HTMLButtonElement>('#save-workspace');
+const taskTemplateRow = required<HTMLElement>('#task-template-row');
 const taskHud = new TaskHud(required<HTMLElement>('#task-hud'), cancelTask, renderIcons);
 const scene = new JarvisScene(canvas, {
   onRendererStatus: (status) => {
@@ -214,6 +225,14 @@ let eventsReconnectTimer = 0;
 let eventsReconnectAttempts = 0;
 let eventsConnected = false;
 const queuedWatchTimers = new Map<string, number>();
+let savedWorkspaces: string[] = loadSavedWorkspaces();
+const taskTemplates = [
+  { id: 'fix-bugs', label: 'Fix Bugs', prompt: 'Find and fix the most important bugs in this project. Run focused tests and summarize the fixes.' },
+  { id: 'polish-ui', label: 'Polish UI', prompt: 'Review the UI for rough edges, spacing, responsiveness, and text overflow. Refine it carefully and verify with a build.' },
+  { id: 'run-tests', label: 'Run Tests', prompt: 'Run the relevant test suite, diagnose any failures, fix the root causes, and rerun the checks.' },
+  { id: 'explain-project', label: 'Explain Project', prompt: 'Explain the current project architecture, important files, and risky areas in a concise engineering summary.' },
+  { id: 'prepare-release', label: 'Prepare Release', prompt: 'Prepare the next release: update version notes, run checks, package the app, verify release assets, and summarize readiness.' }
+];
 
 type ModelProvider = NonNullable<AppConfig['localModel']>['provider'];
 type ArtifactCatalogItem = {
@@ -300,6 +319,39 @@ type StorageReport = {
   backups: { path: string; size: number; count: number; items: Array<BackupRecord & { size: number }> };
   logs: { path: string; size: number; currentLogSize: number; bundleSize: number; bundles: StorageFile[] };
   memory: { path: string; size: number; files: StorageFile[] };
+};
+
+type WorkspaceSummary = {
+  current: string;
+  items: Array<{ path: string; label: string; allowed: boolean; exists: boolean; current: boolean }>;
+};
+
+type DashboardReport = {
+  version: string;
+  workspace: string;
+  chats: ChatSessionRecord[];
+  tasks: TaskRecord[];
+  memory: { count: number; embeddings: { ready?: boolean; disabled?: boolean; lastError?: string | null } };
+  queue: { paused: boolean; runningTaskId: string | null };
+  update: {
+    currentVersion: string;
+    latestVersion: string;
+    updateAvailable: boolean;
+    assetName: string | null;
+    assetSize: number | null;
+    error: string | null;
+  };
+  storage: { totalSize: number; updatesSize: number; backupsSize: number; logsSize: number; dataDir: string };
+  workspaces: WorkspaceSummary;
+};
+
+type ReleaseStatus = {
+  version: string;
+  tag: string;
+  releaseDir: string;
+  ready: boolean;
+  assets: Array<{ name: string; path: string; exists: boolean; size: number; sha256: string | null }>;
+  latest: { currentVersion: string; latestVersion: string; updateAvailable: boolean; error: string | null };
 };
 
 type PreparedUpdateInstall = {
@@ -397,6 +449,14 @@ chatSidebarScrim.addEventListener('click', () => {
 
 newChat.addEventListener('click', () => {
   void startNewChat();
+});
+
+chatSearch.addEventListener('input', () => {
+  renderChatSessions();
+});
+
+refreshDashboard.addEventListener('click', () => {
+  void loadDashboard();
 });
 
 document.addEventListener('keydown', (event) => {
@@ -500,6 +560,10 @@ memorySearch.addEventListener('input', () => {
   void loadMemories(false);
 });
 
+memorySortFilter.addEventListener('change', () => {
+  void loadMemories(false);
+});
+
 taskPrompt.addEventListener('input', () => {
   // Update prompt preview without full re-render to prevent shaking
   const draftPrompt = taskPrompt.value.trim();
@@ -544,6 +608,19 @@ refreshTasks.addEventListener('click', () => {
 
 refreshArtifacts.addEventListener('click', () => {
   void loadTasks();
+});
+
+workspaceSwitcher.addEventListener('change', () => {
+  if (!workspaceSwitcher.value) {
+    return;
+  }
+  applyWorkspace(workspaceSwitcher.value);
+});
+
+saveWorkspace.addEventListener('click', () => {
+  addSavedWorkspace(taskWorkspace.value);
+  renderWorkspaceSwitcher();
+  voiceStatus.textContent = 'Workspace saved.';
 });
 
 pauseQueue.addEventListener('click', async () => {
@@ -673,6 +750,8 @@ async function boot() {
   memoryCount.textContent = formatMemoryCount(config.memoryCount);
   apiKeyStatus.textContent = config.openAiApiKeyPresent ? 'API key ready' : 'Local login';
   hydrateSetupWizard();
+  renderTaskTemplates();
+  renderWorkspaceSwitcher();
   renderModelPresets();
   renderModelProfile();
   renderModelInstructions();
@@ -683,6 +762,7 @@ async function boot() {
   void loadSemanticEdges();
   await loadChats();
   await loadTasks();
+  void loadDashboard();
   try {
     await loadDiagnostics();
   } catch (error) {
@@ -699,6 +779,7 @@ function hydrateSettingsFromConfig() {
   }
   workspaceLabel.textContent = compactPath(config.defaultWorkspace);
   taskWorkspace.value = config.defaultWorkspace;
+  addSavedWorkspace(config.defaultWorkspace, false);
   settingsWorkspace.value = config.defaultWorkspace;
   settingsDataDir.value = config.dataDir;
   settingsCodexCommand.value = config.codexCommand;
@@ -1104,6 +1185,7 @@ async function loadMemories(hydrate: boolean) {
   const unique = uniqueMemories(data.memories)
     .filter(isRealMemory)
     .filter((memory) => !kind || memory.kind === kind);
+  unique.sort((a, b) => compareMemoriesForView(a, b, unique));
   visibleMemories = unique;
   if (selectedMemoryId !== null && !visibleMemories.some((memory) => memory.id === selectedMemoryId)) {
     selectedMemoryId = null;
@@ -1112,6 +1194,8 @@ async function loadMemories(hydrate: boolean) {
   memoryCount.textContent = formatMemoryCount(unique.length);
   renderMemories(unique);
   renderMemoryDetail();
+  renderMemoryGraphLegend();
+  renderMemoryReviewQueue();
   renderTaskHistory();
   renderCommandChat();
   if (hydrate) {
@@ -1148,6 +1232,84 @@ async function loadTasks() {
   renderCommandChat();
 }
 
+function compareMemoriesForView(a: MemoryRecord, b: MemoryRecord, source: MemoryRecord[] = visibleMemories) {
+  switch (memorySortFilter.value) {
+    case 'importance':
+      return (b.importance ?? 0) - (a.importance ?? 0) || b.createdAt.localeCompare(a.createdAt);
+    case 'confidence':
+      return (b.confidence ?? 0) - (a.confidence ?? 0) || b.createdAt.localeCompare(a.createdAt);
+    case 'duplicates':
+      return duplicateMemoriesFor(b, source).length - duplicateMemoriesFor(a, source).length || b.createdAt.localeCompare(a.createdAt);
+    default:
+      return b.createdAt.localeCompare(a.createdAt);
+  }
+}
+
+function renderMemoryGraphLegend() {
+  const counts = visibleMemories.reduce<Record<string, number>>((acc, memory) => {
+    acc[memory.kind] = (acc[memory.kind] ?? 0) + 1;
+    return acc;
+  }, {});
+  const rows = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([kind, count]) => `<span><i data-kind="${escapeHtml(kind)}"></i>${escapeHtml(kind)} ${count}</span>`)
+    .join('');
+  memoryGraphLegend.innerHTML = `
+    <div><strong>Graph Legend</strong><p>Nodes sit on the outer shell. Pulses mean recalled context. Brighter rings are pinned or selected memories.</p></div>
+    <div class="memory-legend-items">${rows || '<span>No visible memory types</span>'}</div>
+  `;
+}
+
+function renderMemoryReviewQueue() {
+  const duplicateIds = new Set<number>();
+  visibleMemories.forEach((memory) => duplicateMemoriesFor(memory).forEach((duplicate) => duplicateIds.add(duplicate.id)));
+  const candidates = visibleMemories
+    .filter((memory) => duplicateIds.has(memory.id) || (memory.confidence ?? 1) < 0.72 || memory.importance <= 2)
+    .slice(0, 5);
+  if (candidates.length === 0) {
+    memoryReviewQueue.innerHTML = `
+      <div class="memory-review-empty">
+        <strong>Review Queue Clear</strong>
+        <span>No duplicate or low-confidence memories in the current filter.</span>
+      </div>
+    `;
+    return;
+  }
+  memoryReviewQueue.innerHTML = `
+    <div class="memory-review-head">
+      <strong>Memory Review Queue</strong>
+      <span>${candidates.length} item${candidates.length === 1 ? '' : 's'} need attention</span>
+    </div>
+    <div class="memory-review-list">
+      ${candidates.map((memory) => `
+        <article>
+          <div>
+            <strong>${escapeHtml(memory.title)}</strong>
+            <span>${escapeHtml(reviewReason(memory))}</span>
+          </div>
+          <button class="hud-button" type="button" data-memory-review="${memory.id}" data-icon="network"><span>Review</span></button>
+        </article>
+      `).join('')}
+    </div>
+  `;
+  memoryReviewQueue.querySelectorAll<HTMLButtonElement>('[data-memory-review]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const memoryId = Number(button.dataset.memoryReview);
+      if (Number.isFinite(memoryId)) {
+        selectMemory(memoryId);
+      }
+    });
+  });
+  renderIcons();
+}
+
+function reviewReason(memory: MemoryRecord) {
+  const duplicates = duplicateMemoriesFor(memory).length;
+  if (duplicates > 0) return `${duplicates} likely duplicate${duplicates === 1 ? '' : 's'}`;
+  if ((memory.confidence ?? 1) < 0.72) return `Low confidence ${Math.round((memory.confidence ?? 0) * 100)}%`;
+  return `Low importance ${memory.importance}`;
+}
+
 async function loadChats() {
   const data = await fetchJson<{ chats: ChatSessionRecord[] }>('/api/chats');
   visibleChats = data.chats;
@@ -1160,6 +1322,7 @@ async function loadChats() {
     persistSelectedChat();
   }
   renderChatSessions();
+  renderWorkspaceSwitcher();
 }
 
 async function ensureSelectedChat(prompt = '') {
@@ -1178,13 +1341,156 @@ async function ensureSelectedChat(prompt = '') {
 function upsertVisibleChat(chat: ChatSessionRecord, select: boolean) {
   visibleChats = [chat, ...visibleChats.filter((entry) => entry.id !== chat.id)]
     .filter((entry) => !entry.archived)
-    .sort((a, b) => (b.lastTaskAt ?? b.updatedAt).localeCompare(a.lastTaskAt ?? a.updatedAt))
+    .sort(compareChats)
     .slice(0, 80);
   if (select) {
     selectedChatId = chat.id;
     persistSelectedChat();
   }
   renderChatSessions();
+}
+
+async function loadDashboard() {
+  try {
+    const data = await fetchJson<DashboardReport>('/api/dashboard');
+    renderDashboard(data);
+    renderWorkspaceSwitcher(data.workspaces);
+  } catch (error) {
+    dashboardGrid.innerHTML = `<div class="empty-state">Dashboard unavailable: ${escapeHtml(error instanceof Error ? error.message : 'Unknown error')}</div>`;
+  }
+}
+
+function renderDashboard(data: DashboardReport) {
+  const activeTask = data.tasks.find((task) => task.status === 'running' || task.status === 'queued');
+  const recentTasks = data.tasks.slice(0, 5).map((task) => `
+    <button class="dashboard-list-row" type="button" data-dashboard-task="${escapeHtml(task.id)}">
+      <strong>${escapeHtml(compactSessionTitle(task.prompt))}</strong>
+      <span>${escapeHtml(task.status)} / ${escapeHtml(formatTime(task.createdAt))}</span>
+    </button>
+  `).join('') || '<p class="dashboard-empty">No tasks yet.</p>';
+  const recentChats = data.chats.slice(0, 5).map((chat) => `
+    <button class="dashboard-list-row" type="button" data-dashboard-chat="${escapeHtml(chat.id)}">
+      <strong>${chat.pinned ? 'Pinned / ' : ''}${escapeHtml(compactSessionTitle(chat.title))}</strong>
+      <span>${chat.taskCount ?? 0} tasks / ${escapeHtml(formatTime(chat.lastTaskAt ?? chat.updatedAt))}</span>
+    </button>
+  `).join('') || '<p class="dashboard-empty">No chats yet.</p>';
+  dashboardGrid.innerHTML = `
+    <article class="dashboard-card dashboard-card--wide">
+      <span class="micro-label">Readiness</span>
+      <strong>${escapeHtml(activeTask ? 'Task active' : 'Ready for work')}</strong>
+      <p>${escapeHtml(activeTask ? compactSessionTitle(activeTask.prompt) : `${data.memory.count} memories indexed. ${data.queue.paused ? 'Queue paused.' : 'Queue ready.'}`)}</p>
+      <div class="dashboard-actions">
+        <button class="hud-button hud-button--primary" type="button" data-dashboard-run data-icon="terminal-square"><span>Run Mission</span></button>
+        <button class="hud-button" type="button" data-dashboard-release data-icon="rocket"><span>Release Assistant</span></button>
+      </div>
+    </article>
+    <article class="dashboard-card"><span class="micro-label">Version</span><strong>${escapeHtml(data.version)}</strong><p>${escapeHtml(data.update.updateAvailable ? `Update ${data.update.latestVersion} available` : data.update.error ? `Update check failed: ${data.update.error}` : 'Current release installed')}</p></article>
+    <article class="dashboard-card"><span class="micro-label">Storage</span><strong>${escapeHtml(formatBytes(data.storage.totalSize))}</strong><p>${escapeHtml(`Updates ${formatBytes(data.storage.updatesSize)} / backups ${formatBytes(data.storage.backupsSize)} / logs ${formatBytes(data.storage.logsSize)}`)}</p></article>
+    <article class="dashboard-card"><span class="micro-label">Workspace</span><strong>${escapeHtml(compactPath(data.workspace))}</strong><p>${escapeHtml(`${data.workspaces.items.length} saved or discovered workspace${data.workspaces.items.length === 1 ? '' : 's'}`)}</p></article>
+    <article class="dashboard-card dashboard-card--wide"><span class="micro-label">Recent Chats</span><div class="dashboard-list">${recentChats}</div></article>
+    <article class="dashboard-card dashboard-card--wide"><span class="micro-label">Recent Tasks</span><div class="dashboard-list">${recentTasks}</div></article>
+  `;
+  dashboardGrid.querySelector<HTMLButtonElement>('[data-dashboard-run]')?.addEventListener('click', () => setTab('run'));
+  dashboardGrid.querySelector<HTMLButtonElement>('[data-dashboard-release]')?.addEventListener('click', () => {
+    setTab('diagnostics');
+    void loadReleaseAssistant();
+  });
+  dashboardGrid.querySelectorAll<HTMLButtonElement>('[data-dashboard-chat]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const chatId = button.dataset.dashboardChat;
+      if (chatId) {
+        selectChat(chatId);
+        setTab('run');
+      }
+    });
+  });
+  dashboardGrid.querySelectorAll<HTMLButtonElement>('[data-dashboard-task]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const taskId = button.dataset.dashboardTask;
+      if (!taskId) return;
+      selectedTaskId = taskId;
+      selectedChatId = visibleTasks.find((task) => task.id === taskId)?.chatId ?? selectedChatId;
+      persistSelectedChat();
+      setTab('history');
+      renderTaskHistory();
+      renderCommandChat(true);
+    });
+  });
+  renderIcons();
+}
+
+function compareChats(a: ChatSessionRecord, b: ChatSessionRecord) {
+  if (Boolean(a.pinned) !== Boolean(b.pinned)) {
+    return a.pinned ? -1 : 1;
+  }
+  return (b.lastTaskAt ?? b.updatedAt).localeCompare(a.lastTaskAt ?? a.updatedAt);
+}
+
+function renderTaskTemplates() {
+  taskTemplateRow.innerHTML = taskTemplates.map((template) => `
+    <button class="hud-button" type="button" data-task-template="${escapeHtml(template.id)}" data-icon="sparkles">
+      <span>${escapeHtml(template.label)}</span>
+    </button>
+  `).join('');
+  taskTemplateRow.querySelectorAll<HTMLButtonElement>('[data-task-template]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const template = taskTemplates.find((entry) => entry.id === button.dataset.taskTemplate);
+      if (!template) return;
+      taskPrompt.value = taskPrompt.value.trim()
+        ? `${taskPrompt.value.trim()}\n\n${template.prompt}`
+        : template.prompt;
+      taskPrompt.focus();
+      lastCommandPhase = 'ready';
+      renderCommandChat(true);
+    });
+  });
+  renderIcons();
+}
+
+function renderWorkspaceSwitcher(summary?: WorkspaceSummary) {
+  const workspaces = new Set<string>([
+    ...(summary?.items.map((item) => item.path) ?? []),
+    ...(config?.workspaceAllowlist ?? []),
+    config?.defaultWorkspace ?? '',
+    ...savedWorkspaces,
+    ...visibleChats.map((chat) => chat.workspace),
+    ...visibleTasks.map((task) => task.workspace)
+  ].filter(Boolean));
+  const current = taskWorkspace.value || config?.defaultWorkspace || summary?.current || '';
+  workspaceSwitcher.innerHTML = [...workspaces]
+    .map((workspacePath) => `<option value="${escapeHtml(workspacePath)}">${escapeHtml(compactPath(workspacePath))}</option>`)
+    .join('');
+  if (current && !Array.from(workspaceSwitcher.options).some((option) => option.value === current)) {
+    workspaceSwitcher.add(new Option(compactPath(current), current));
+  }
+  workspaceSwitcher.value = current;
+}
+
+function applyWorkspace(workspacePath: string) {
+  taskWorkspace.value = workspacePath;
+  settingsWorkspace.value = workspacePath;
+  workspaceLabel.textContent = compactPath(workspacePath);
+  addSavedWorkspace(workspacePath);
+  void loadMemories(true);
+  renderCommandChat(true);
+}
+
+function addSavedWorkspace(workspacePath: string, persist = true) {
+  const clean = String(workspacePath ?? '').trim();
+  if (!clean) return;
+  savedWorkspaces = [clean, ...savedWorkspaces.filter((entry) => entry !== clean)].slice(0, 12);
+  if (persist) {
+    window.localStorage.setItem('jarvis.workspaces', JSON.stringify(savedWorkspaces));
+  }
+}
+
+function loadSavedWorkspaces() {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem('jarvis.workspaces') ?? '[]');
+    return Array.isArray(parsed) ? parsed.filter((entry) => typeof entry === 'string') : [];
+  } catch {
+    return [];
+  }
 }
 
 function persistSelectedChat() {
@@ -1236,6 +1542,8 @@ async function loadDiagnostics() {
     <article><strong>Updates</strong><span>${updateStatus.status === 'downloading' ? 'Downloading' : update.updateAvailable ? 'Available' : update.error ? 'Check failed' : 'Current'}</span><p>${escapeHtml(updateDetail)}</p>${updateActions}</article>
     <article><strong>Voice</strong><span>${data.voice.settings.voiceEnabled ? 'Enabled' : 'Disabled'}</span><p>${escapeHtml(`${voiceCapabilityLabel()} Spoken summaries ${data.voice.settings.spokenResponses ? 'on' : 'off'}.`)}</p></article>
     <article><strong>SQLite</strong><span>${data.sqlite.exists ? 'Ready' : 'Missing'}</span><p>${escapeHtml(data.sqlite.databasePath)}</p></article>
+    <article class="diagnostics-grid__wide"><strong>Fix Common Problems</strong><span>Guided repair</span><p>Use these when the app opens oddly, shortcuts disappear, storage fills up, or model settings are bad.</p>${renderFixCommonProblems(data, storage)}</article>
+    <article class="diagnostics-grid__wide"><strong>Update Safety</strong><span>${updateStatus.status}</span><p>${escapeHtml(updateSafetySummary(update, updateStatus))}</p>${renderUpdateSafety(update, updateStatus)}</article>
     <article class="diagnostics-grid__wide"><strong>Storage</strong><span>${escapeHtml(formatBytes(storage.totalSize))}</span><p>${escapeHtml(storageSummary(storage))}</p>${renderStorageManager(storage)}</article>
     <article><strong>Queue</strong><span>${data.queue.paused ? 'Paused' : 'Active'}</span><p>${data.queue.runningTaskId ? `Running ${escapeHtml(data.queue.runningTaskId)}` : 'No active task'}</p></article>
     <article class="diagnostics-grid__wide"><strong>Session Recovery</strong><span>${data.session.previousCrashed ? 'Previous crash detected' : 'Clean'}</span><p>${escapeHtml(sessionRecoveryDetail(data.session))}</p>${renderSessionRecoveryActions(data.session)}</article>
@@ -1248,8 +1556,107 @@ async function loadDiagnostics() {
   wireRecoveryActions();
   wireStorageActions();
   wireBackupActions();
+  void loadReleaseAssistant();
   renderIcons();
   renderQueueStatus(data.queue);
+}
+
+function renderFixCommonProblems(
+  data: { codex: { available: boolean }; modelKey: ModelKeyStatus; queue: { paused: boolean } },
+  storage: StorageReport
+) {
+  const recommendations = [
+    !data.codex.available ? 'Codex CLI is unavailable. Check Settings or reinstall the CLI.' : '',
+    !data.modelKey.present ? 'OpenCode key is missing. Save a key in Settings or use Codex CLI mode.' : '',
+    data.queue.paused ? 'Queue is paused. Resume it before starting new work.' : '',
+    storage.updates.size > 100 * 1024 * 1024 ? 'Old installers are using storage. Clear installers after a successful update.' : '',
+    storage.logs.size > 2 * 1024 * 1024 ? 'Logs are getting large. Trim logs or export a bundle before cleanup.' : ''
+  ].filter(Boolean);
+  return `
+    <div class="fix-grid">
+      ${(recommendations.length ? recommendations : ['No urgent repair recommendation.']).map((item) => `<span>${escapeHtml(item)}</span>`).join('')}
+    </div>
+    <div class="update-actions">
+      <button class="hud-button" type="button" data-recovery-reset-model data-icon="rotate-ccw"><span>Reset Model</span></button>
+      <button class="hud-button" type="button" data-recovery-repair-shortcuts data-icon="terminal-square"><span>Repair Shortcuts</span></button>
+      <button class="hud-button" type="button" data-storage-cleanup="all" data-icon="trash-2"><span>Recommended Cleanup</span></button>
+    </div>
+  `;
+}
+
+function updateSafetySummary(update: UpdateCheck, status: UpdateStatus) {
+  if (status.status === 'ready') {
+    return `Installer ${status.fileName ?? ''} verified with SHA256 ${status.sha256 ?? 'unknown'}. Backup ${status.backupPath ?? 'pending'}.`;
+  }
+  if (status.status === 'downloading') {
+    return `Downloading ${formatBytes(status.receivedBytes)} of ${formatBytes(status.totalBytes)}.`;
+  }
+  if (update.updateAvailable) {
+    return `Latest ${update.latestVersion}, current ${update.currentVersion}. ${update.digest ? 'Release digest available.' : 'Release digest missing.'}`;
+  }
+  return update.error ? `Update check failed: ${update.error}` : `Current version ${update.currentVersion} is installed.`;
+}
+
+function renderUpdateSafety(update: UpdateCheck, status: UpdateStatus) {
+  return `
+    <div class="release-checklist">
+      <span class="${update.error ? 'warn' : 'ok'}"><i></i><strong>Version Check</strong><em>${escapeHtml(update.error ?? `${update.currentVersion} -> ${update.latestVersion}`)}</em></span>
+      <span class="${update.assetSize ? 'ok' : 'warn'}"><i></i><strong>Installer Size</strong><em>${escapeHtml(update.assetSize ? formatBytes(update.assetSize) : 'Not available')}</em></span>
+      <span class="${update.digest || status.sha256 ? 'ok' : 'warn'}"><i></i><strong>Checksum</strong><em>${escapeHtml(status.sha256 ?? update.digest ?? 'Not available')}</em></span>
+      <span class="${status.backupPath ? 'ok' : 'warn'}"><i></i><strong>Backup</strong><em>${escapeHtml(status.backupPath ?? 'Created during download')}</em></span>
+    </div>
+  `;
+}
+
+async function loadReleaseAssistant() {
+  try {
+    const status = await fetchJson<ReleaseStatus>('/api/release/status');
+    renderReleaseAssistant(status);
+  } catch (error) {
+    releaseAssistant.innerHTML = `<div class="empty-state">Release assistant unavailable: ${escapeHtml(error instanceof Error ? error.message : 'Unknown error')}</div>`;
+  }
+}
+
+function renderReleaseAssistant(status: ReleaseStatus) {
+  const checks = [
+    { label: 'Version set', ok: /^0\.7\./.test(status.version) || status.version !== '0.6.0', detail: `package.json ${status.version}` },
+    { label: 'Installer asset', ok: assetReady(status, `.exe`), detail: assetLabel(status, `.exe`) },
+    { label: 'Blockmap asset', ok: assetReady(status, `.blockmap`), detail: assetLabel(status, `.blockmap`) },
+    { label: 'latest.yml', ok: assetReady(status, `latest.yml`), detail: assetLabel(status, `latest.yml`) },
+    { label: 'GitHub latest check', ok: !status.latest.error, detail: status.latest.error ?? `Latest ${status.latest.latestVersion}` }
+  ];
+  releaseAssistant.innerHTML = `
+    <article class="release-card">
+      <div>
+        <span class="micro-label">Release Assistant</span>
+        <strong>${escapeHtml(status.tag)} ${status.ready ? 'assets ready' : 'assets pending'}</strong>
+        <p>${escapeHtml(status.releaseDir)}</p>
+      </div>
+      <div class="release-checklist">
+        ${checks.map((check) => `
+          <span class="${check.ok ? 'ok' : 'warn'}"><i></i><strong>${escapeHtml(check.label)}</strong><em>${escapeHtml(check.detail)}</em></span>
+        `).join('')}
+      </div>
+      <div class="update-actions">
+        <button class="hud-button" type="button" data-release-copy data-icon="save"><span>Copy Asset Summary</span></button>
+      </div>
+    </article>
+  `;
+  releaseAssistant.querySelector<HTMLButtonElement>('[data-release-copy]')?.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(status.assets.map((asset) => `${asset.name} ${formatBytes(asset.size)} ${asset.sha256 ?? ''}`.trim()).join('\n'));
+    voiceStatus.textContent = 'Release asset summary copied.';
+  });
+  renderIcons();
+}
+
+function assetReady(status: ReleaseStatus, suffix: string) {
+  return status.assets.some((asset) => asset.name.endsWith(suffix) && asset.exists && asset.size > 0);
+}
+
+function assetLabel(status: ReleaseStatus, suffix: string) {
+  const asset = status.assets.find((entry) => entry.name.endsWith(suffix));
+  if (!asset) return 'Missing';
+  return asset.exists ? `${formatBytes(asset.size)}${asset.sha256 ? ` / ${asset.sha256.slice(0, 12)}` : ''}` : 'Missing';
 }
 
 function renderUpdateActions(update: UpdateCheck, status?: UpdateStatus) {
@@ -1499,24 +1906,30 @@ function renderStorageMeter(label: string, size: number, total: number, detail: 
 }
 
 function wireRecoveryActions() {
-  diagnosticsList.querySelector<HTMLButtonElement>('[data-recovery-reset-model]')?.addEventListener('click', async () => {
-    if (!window.confirm('Reset model provider, endpoint, and model to safe defaults?')) return;
-    const result = await postJson<{ message: string; localModel: AppConfig['localModel'] }>('/api/recovery/reset-model', {});
-    window.alert(result.message);
-    config = await fetchJson<AppConfig>('/api/config');
-    hydrateSettingsFromConfig();
-    await loadDiagnostics();
+  diagnosticsList.querySelectorAll<HTMLButtonElement>('[data-recovery-reset-model]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      if (!window.confirm('Reset model provider, endpoint, and model to safe defaults?')) return;
+      const result = await postJson<{ message: string; localModel: AppConfig['localModel'] }>('/api/recovery/reset-model', {});
+      window.alert(result.message);
+      config = await fetchJson<AppConfig>('/api/config');
+      hydrateSettingsFromConfig();
+      await loadDiagnostics();
+    });
   });
-  diagnosticsList.querySelector<HTMLButtonElement>('[data-recovery-clear-secrets]')?.addEventListener('click', async () => {
-    if (!window.confirm('Clear saved model secrets from this app profile?')) return;
-    const result = await postJson<{ message: string; modelKey: ModelKeyStatus }>('/api/recovery/clear-secrets', {});
-    window.alert(result.message);
-    updateModelKeyStatus(result.modelKey);
-    await loadDiagnostics();
+  diagnosticsList.querySelectorAll<HTMLButtonElement>('[data-recovery-clear-secrets]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      if (!window.confirm('Clear saved model secrets from this app profile?')) return;
+      const result = await postJson<{ message: string; modelKey: ModelKeyStatus }>('/api/recovery/clear-secrets', {});
+      window.alert(result.message);
+      updateModelKeyStatus(result.modelKey);
+      await loadDiagnostics();
+    });
   });
-  diagnosticsList.querySelector<HTMLButtonElement>('[data-recovery-repair-shortcuts]')?.addEventListener('click', async () => {
-    const result = await postJson<{ message: string; repaired: string[] }>('/api/recovery/repair-shortcuts', {});
-    window.alert(result.repaired.length ? `${result.message}\n\n${result.repaired.join('\n')}` : result.message);
+  diagnosticsList.querySelectorAll<HTMLButtonElement>('[data-recovery-repair-shortcuts]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const result = await postJson<{ message: string; repaired: string[] }>('/api/recovery/repair-shortcuts', {});
+      window.alert(result.repaired.length ? `${result.message}\n\n${result.repaired.join('\n')}` : result.message);
+    });
   });
   diagnosticsList.querySelectorAll<HTMLButtonElement>('[data-log-export]').forEach((button) => {
     button.addEventListener('click', async () => {
@@ -2133,9 +2546,9 @@ function recallReasonForMemory(memory: MemoryRecord) {
   return memoryReason(memory);
 }
 
-function duplicateMemoriesFor(memory: MemoryRecord) {
+function duplicateMemoriesFor(memory: MemoryRecord, source: MemoryRecord[] = visibleMemories) {
   const key = memoryFingerprint(memory);
-  return visibleMemories
+  return source
     .filter((entry) => entry.id !== memory.id && memoryFingerprint(entry) === key)
     .slice(0, 5);
 }
@@ -2198,6 +2611,7 @@ function renderTaskHistory() {
     taskHistoryList.innerHTML = '<div class="empty-state">No task history yet.</div>';
     taskHistoryDetail.classList.add('hidden');
     taskHistoryDetail.innerHTML = '';
+    commandReviewPanel.innerHTML = '';
     renderIcons();
     return;
   }
@@ -2223,6 +2637,7 @@ function renderTaskHistory() {
         selectedChatId = visibleTasks.find((task) => task.id === taskId)?.chatId ?? selectedChatId;
         persistSelectedChat();
         renderTaskHistory();
+        renderCommandReviewPanel();
         renderChatSessions();
         renderCommandChat(true);
       }
@@ -2230,6 +2645,7 @@ function renderTaskHistory() {
   });
 
   renderTaskDetail();
+  renderCommandReviewPanel();
   renderIcons();
 }
 
@@ -2277,6 +2693,62 @@ function renderTaskDetail() {
   });
   wireArtifactOpenButtons(taskHistoryDetail);
   renderIcons();
+}
+
+function renderCommandReviewPanel() {
+  const task = selectedTask();
+  if (!task) {
+    commandReviewPanel.innerHTML = '';
+    return;
+  }
+  const commands = task.commandsRun ?? [];
+  const files = task.filesChanged ?? [];
+  const tests = task.testsRun ?? [];
+  commandReviewPanel.innerHTML = `
+    <article>
+      <span class="micro-label">Command Review</span>
+      <strong>${escapeHtml(commandReviewStatus(task))}</strong>
+      <p>${escapeHtml(`Files ${files.length} / commands ${commands.length} / tests ${tests.length}`)}</p>
+      <div class="command-review-grid">
+        ${renderReviewBucket('Files', files, task.workspace, true)}
+        ${renderReviewBucket('Commands', commands)}
+        ${renderReviewBucket('Tests', tests)}
+      </div>
+      <div class="task-actions task-actions--inline">
+        ${commands.length ? `<button type="button" data-copy-review-commands data-icon="terminal-square"><span>Copy Commands</span></button>` : ''}
+        ${files.length ? `<button type="button" data-copy-review-files data-icon="save"><span>Copy Files</span></button>` : ''}
+      </div>
+    </article>
+  `;
+  commandReviewPanel.querySelector<HTMLButtonElement>('[data-copy-review-commands]')?.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(commands.join('\n'));
+    voiceStatus.textContent = 'Reviewed commands copied.';
+  });
+  commandReviewPanel.querySelector<HTMLButtonElement>('[data-copy-review-files]')?.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(files.join('\n'));
+    voiceStatus.textContent = 'Reviewed files copied.';
+  });
+  wireArtifactOpenButtons(commandReviewPanel);
+  renderIcons();
+}
+
+function renderReviewBucket(label: string, values: string[] = [], workspace = '', openable = false) {
+  return `
+    <section>
+      <strong>${escapeHtml(label)}</strong>
+      ${values.length ? values.slice(0, 8).map((value) => openable
+        ? `<button type="button" class="artifact-file" data-open-artifact="${escapeHtml(value)}" data-workspace="${escapeHtml(workspace)}"><code>${escapeHtml(value)}</code></button>`
+        : `<code>${escapeHtml(value)}</code>`).join('')
+        : '<span>None captured</span>'}
+    </section>
+  `;
+}
+
+function commandReviewStatus(task: TaskRecord) {
+  if (task.status === 'completed' && (task.testsRun?.length ?? 0) > 0) return 'Verified task';
+  if (task.status === 'completed') return 'Completed without captured tests';
+  if (task.status === 'failed') return 'Failed task review';
+  return `${task.status} task`;
 }
 
 function selectMemory(memoryId: number) {
@@ -2514,12 +2986,19 @@ function setChatSidebarOpen(open: boolean) {
 
 function renderChatSessions() {
   newChat.classList.toggle('active', Boolean(selectedChatId && !visibleTasks.some((task) => task.chatId === selectedChatId)));
-  if (visibleChats.length === 0) {
+  const query = chatSearch.value.trim().toLowerCase();
+  const chats = visibleChats
+    .filter((chat) => !query
+      || chat.title.toLowerCase().includes(query)
+      || (chat.lastPrompt ?? '').toLowerCase().includes(query)
+      || chat.workspace.toLowerCase().includes(query))
+    .sort(compareChats);
+  if (chats.length === 0) {
     chatSessionList.innerHTML = '<div class="chat-session-empty">No saved chats yet.</div>';
     return;
   }
 
-  chatSessionList.innerHTML = visibleChats
+  chatSessionList.innerHTML = chats
     .slice(0, 30)
     .map(renderChatSessionButton)
     .join('');
@@ -2559,6 +3038,30 @@ function renderChatSessions() {
       renderCommandChat(true);
     });
   });
+  chatSessionList.querySelectorAll<HTMLButtonElement>('[data-chat-pin]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const chatId = button.dataset.chatPin;
+      const chat = visibleChats.find((entry) => entry.id === chatId);
+      if (!chat) return;
+      const updated = await putJson<{ chat: ChatSessionRecord }>(`/api/chats/${encodeURIComponent(chat.id)}`, { pinned: !chat.pinned });
+      upsertVisibleChat(updated.chat, selectedChatId === chat.id);
+    });
+  });
+  chatSessionList.querySelectorAll<HTMLButtonElement>('[data-chat-clear]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const chatId = button.dataset.chatClear;
+      if (!chatId || !window.confirm('Clear this chat transcript from the Run view? Task history stays in Archive.')) return;
+      const updated = await postJson<{ chat: ChatSessionRecord }>(`/api/chats/${encodeURIComponent(chatId)}/clear`, {});
+      upsertVisibleChat(updated.chat, selectedChatId === chatId);
+      if (selectedChatId === chatId) {
+        selectedTaskId = null;
+        lastCommandOutput = '';
+        lastCommandPhase = 'ready';
+        renderCommandChat(true);
+      }
+      await loadTasks();
+    });
+  });
   renderIcons();
 }
 
@@ -2590,13 +3093,15 @@ function renderChatSessionButton(chat: ChatSessionRecord) {
   return `
     <article class="chat-session ${active ? 'active' : ''} ${live ? 'is-live' : ''}">
       <button class="chat-session__main" type="button" data-chat-select="${escapeHtml(chat.id)}">
-        <span class="chat-session__status">${escapeHtml(sessionStatusLabel(chat.lastStatus ?? null))}</span>
+        <span class="chat-session__status">${chat.pinned ? 'Pinned' : escapeHtml(sessionStatusLabel(chat.lastStatus ?? null))}</span>
         <strong>${escapeHtml(compactSessionTitle(chat.title))}</strong>
         <em>${escapeHtml(formatTime(chat.lastTaskAt ?? chat.updatedAt))} / ${chat.taskCount ?? 0} task${chat.taskCount === 1 ? '' : 's'}</em>
         <p>${escapeHtml(preview)}</p>
       </button>
       <div class="chat-session__actions">
+        <button type="button" class="hud-button hud-button--icon" data-icon="pin" data-chat-pin="${escapeHtml(chat.id)}" aria-label="Pin chat"><span>${chat.pinned ? 'Unpin' : 'Pin'}</span></button>
         <button type="button" class="hud-button hud-button--icon" data-icon="save" data-chat-rename="${escapeHtml(chat.id)}" aria-label="Rename chat"><span>Rename</span></button>
+        <button type="button" class="hud-button hud-button--icon" data-icon="rotate-ccw" data-chat-clear="${escapeHtml(chat.id)}" aria-label="Clear chat"><span>Clear</span></button>
         <button type="button" class="hud-button hud-button--icon" data-icon="trash-2" data-chat-archive="${escapeHtml(chat.id)}" aria-label="Archive chat"><span>Archive</span></button>
       </div>
     </article>
@@ -3311,11 +3816,15 @@ function setTab(tab: string) {
   });
   // Hide task HUD and chat sidebar elements when not on Run tab
   const isRun = tab === 'run';
-  document.querySelectorAll('#task-hud, #chat-sidebar-toggle, #chat-session-rail').forEach((el) => {
+  document.querySelectorAll('#task-hud, #chat-sidebar-toggle, #chat-session-rail, .workspace-switcher, .task-template-row').forEach((el) => {
     (el as HTMLElement).hidden = !isRun;
   });
   if (tab === 'diagnostics') {
     void loadDiagnostics();
+    void loadReleaseAssistant();
+  }
+  if (tab === 'dashboard') {
+    void loadDashboard();
   }
   if (tab === 'artifacts') {
     renderArtifactCatalog();

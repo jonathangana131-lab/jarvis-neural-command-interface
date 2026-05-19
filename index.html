@@ -45,6 +45,7 @@
       </section>
 
       <nav class="radial-nav" aria-label="Console views">
+        <button type="button" data-console-tab="dashboard" data-icon="activity"><span>Dashboard</span></button>
         <button type="button" data-console-tab="run" class="active" data-icon="terminal-square"><span>Run</span></button>
         <button type="button" data-console-tab="history" data-icon="history"><span>History</span></button>
         <button type="button" data-console-tab="artifacts" data-icon="save"><span>Artifacts</span></button>
@@ -106,6 +107,17 @@
       </section>
 
       <main class="console-deck" aria-label="Jarvis cockpit console">
+        <section class="dashboard-console console-view" data-view="dashboard" aria-label="Project dashboard">
+          <header class="panel-header">
+            <div>
+              <span class="micro-label">Overview</span>
+              <strong>Project Dashboard</strong>
+            </div>
+            <button id="refresh-dashboard" class="hud-button" type="button" data-icon="refresh-cw"><span>Refresh</span></button>
+          </header>
+          <div id="dashboard-grid" class="dashboard-grid"></div>
+        </section>
+
         <section class="command-console console-view" data-view="run" aria-label="Codex mission control">
           <div class="mission-control">
             <button id="chat-sidebar-toggle" class="chat-sidebar-toggle" type="button" data-icon="history" aria-expanded="false" aria-controls="chat-session-rail">
@@ -125,6 +137,7 @@
               <button id="new-chat" class="hud-button hud-button--primary" type="button" data-icon="terminal-square">
                 <span>New Chat</span>
               </button>
+              <input id="chat-search" class="chat-search" aria-label="Search chats" placeholder="Search chats" />
               <div id="chat-session-list" class="chat-session-list" aria-label="Recent chats"></div>
             </aside>
 
@@ -179,6 +192,11 @@
               <span class="micro-label">Workspace</span>
               <input id="task-workspace" aria-label="Workspace path" />
             </label>
+            <div class="workspace-switcher">
+              <select id="workspace-switcher" aria-label="Saved workspaces"></select>
+              <button id="save-workspace" class="hud-button" type="button" data-icon="save"><span>Save Workspace</span></button>
+            </div>
+            <div id="task-template-row" class="task-template-row" aria-label="Task templates"></div>
             <div class="mission-status-strip">
               <span><span class="micro-label">Agent</span><strong id="api-key-status" class="system-chip">Checking</strong></span>
               <span><span class="micro-label">Queue</span><strong id="queue-status">Queue ready</strong></span>
@@ -198,6 +216,7 @@
             <div id="task-history-list" class="scroll-stream"></div>
             <aside id="task-history-detail" class="detail-module hidden"></aside>
           </div>
+          <aside id="command-review-panel" class="command-review-panel"></aside>
         </section>
 
         <section class="artifacts-console console-view" data-view="artifacts" aria-label="Generated artifacts">
@@ -225,6 +244,12 @@
           </header>
           <div class="filter-row">
             <input id="memory-search" aria-label="Search memories" placeholder="Search memory" />
+            <select id="memory-sort-filter" aria-label="Memory sort">
+              <option value="recent">Recent</option>
+              <option value="importance">Importance</option>
+              <option value="confidence">Confidence</option>
+              <option value="duplicates">Duplicates</option>
+            </select>
             <select id="memory-scope-filter" aria-label="Memory scope">
               <option value="">All</option>
               <option value="project">Project</option>
@@ -239,6 +264,8 @@
               <option value="constraint">Constraint</option>
             </select>
           </div>
+          <div id="memory-graph-legend" class="memory-graph-legend"></div>
+          <div id="memory-review-queue" class="memory-review-queue"></div>
           <div class="split-console">
             <div id="memory-list" class="scroll-stream"></div>
             <aside id="memory-detail" class="detail-module hidden"></aside>
@@ -374,6 +401,7 @@
             <button id="refresh-diagnostics" class="hud-button" type="button" data-icon="scan-line"><span>Refresh</span></button>
           </header>
           <div id="diagnostics-list" class="diagnostics-grid"></div>
+          <div id="release-assistant" class="release-assistant"></div>
         </section>
       </main>
 

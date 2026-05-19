@@ -241,7 +241,7 @@ function createCdpClient(url) {
       returnByValue: true
       });
       if (result.exceptionDetails) {
-        throw new Error(result.exceptionDetails.text ?? 'Evaluation failed.');
+        throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text ?? 'Evaluation failed.');
       }
       return result.result?.value;
     },

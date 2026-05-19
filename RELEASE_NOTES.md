@@ -1,3 +1,49 @@
+# v0.7.0
+
+Polish release for a stronger daily-use cockpit: better chat control, dashboard visibility, release readiness, memory review, and a refined neural UI pass.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.7.0.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.7.0.exe.blockmap`
+- `latest.yml`
+
+## Added
+
+- Project Dashboard with readiness, storage, workspace, update, recent chat, and recent task summaries.
+- Chat search, pin/unpin, visible-thread clear, and stronger preserved-session behavior.
+- Workspace switcher with locally saved workspace choices.
+- Task template shortcuts for bug fixing, UI polish, tests, project explanation, and release prep.
+- Command Review Panel for task outputs, touched files, captured commands, and test signals.
+- Release Assistant panel that checks version, installer, blockmap, `latest.yml`, and asset hashes.
+- Memory graph legend and review queue for duplicate, low-confidence, and low-importance memories.
+
+## Improved
+
+- Memory nodes now stay on a tighter neural shell around the inner orb instead of drifting through the core.
+- Recovery notice layering was refined so Dismiss and Diagnostics stay clickable even with the run cockpit controls visible.
+- Dashboard, memory, diagnostics, release, and command-review panels received responsive UI polish.
+- Recovery and diagnostics buttons now wire every rendered action, not just the first matching button.
+- Chat clearing keeps durable history in SQLite while hiding older messages from the active thread.
+- Dashboard, workspace, and release status APIs expose app readiness to the UI and smoke tests.
+
+## Verified
+
+- `npm run build`
+- `npm run test:memory`
+- `npm run test:voice-settings`
+- `npm run test:artifacts`
+- `npm run test:stream-parser`
+- `npm run test:live-smoke`
+- `npm run package:win`
+- `npm run test:packaged-smoke`
+- `npm run dist:win`
+- `npm run test:installed-ui-smoke`
+
+SHA256: `BA30A0E5FB851CB6D338A81805C6E6548D4BA61BCA671BF05ED71415D96915FD`
+
 # v0.6.0
 
 Polish release for real chat continuity, clearer memory controls, safer recovery, and a cleaner neural cockpit.

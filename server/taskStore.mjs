@@ -33,6 +33,8 @@ export class TaskStore {
         title TEXT NOT NULL,
         workspace TEXT NOT NULL DEFAULT '',
         archived INTEGER NOT NULL DEFAULT 0,
+        pinned INTEGER NOT NULL DEFAULT 0,
+        cleared_at TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
@@ -50,6 +52,8 @@ export class TaskStore {
     this.#ensureColumn('commands_run', "TEXT NOT NULL DEFAULT '[]'");
     this.#ensureColumn('tests_run', "TEXT NOT NULL DEFAULT '[]'");
     this.#ensureColumn('updated_at', 'TEXT');
+    this.#ensureChatColumn('pinned', 'INTEGER NOT NULL DEFAULT 0');
+    this.#ensureChatColumn('cleared_at', 'TEXT');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_chat_id ON tasks(chat_id)');
     this.#markInterruptedRunning();
   }
@@ -62,9 +66,11 @@ export class TaskStore {
   }
 
   listByChat(chatId, limit = 80) {
+    const chat = this.getChat(chatId);
+    const clearedAt = chat?.clearedAt ?? '';
     return this.db
-      .prepare(`${selectTaskRows()} WHERE chat_id = ? ORDER BY created_at ASC LIMIT ?`)
-      .all(chatId, limit)
+      .prepare(`${selectTaskRows()} WHERE chat_id = ? AND (? = '' OR created_at > ?) ORDER BY created_at ASC LIMIT ?`)
+      .all(chatId, clearedAt, clearedAt, limit)
       .map(normalizeTaskRow);
   }
 
@@ -136,7 +142,9 @@ export class TaskStore {
       .get());
   }
 
-  listChats(limit = 80) {
+  listChats({ limit = 80, query = '' } = {}) {
+    const q = String(query ?? '').trim().toLowerCase();
+    const like = `%${q}%`;
     return this.db
       .prepare(`
         SELECT
@@ -144,6 +152,8 @@ export class TaskStore {
           c.title,
           c.workspace,
           c.archived,
+          c.pinned,
+          c.cleared_at AS clearedAt,
           c.created_at AS createdAt,
           c.updated_at AS updatedAt,
           COUNT(t.id) AS taskCount,
@@ -152,6 +162,7 @@ export class TaskStore {
             SELECT prompt
             FROM tasks
             WHERE chat_id = c.id
+              AND (c.cleared_at IS NULL OR created_at > c.cleared_at)
             ORDER BY created_at DESC
             LIMIT 1
           ) AS lastPrompt,
@@ -159,17 +170,20 @@ export class TaskStore {
             SELECT status
             FROM tasks
             WHERE chat_id = c.id
+              AND (c.cleared_at IS NULL OR created_at > c.cleared_at)
             ORDER BY created_at DESC
             LIMIT 1
           ) AS lastStatus
         FROM chat_sessions c
         LEFT JOIN tasks t ON t.chat_id = c.id
+          AND (c.cleared_at IS NULL OR t.created_at > c.cleared_at)
         WHERE c.archived = 0
+          AND (? = '' OR lower(c.title) LIKE ? OR lower(c.workspace) LIKE ? OR lower(COALESCE(t.prompt, '')) LIKE ?)
         GROUP BY c.id
-        ORDER BY COALESCE(MAX(t.created_at), c.updated_at) DESC
+        ORDER BY c.pinned DESC, COALESCE(MAX(t.created_at), c.updated_at) DESC
         LIMIT ?
       `)
-      .all(limit)
+      .all(q, like, like, like, limit)
       .map(normalizeChatRow);
   }
 
@@ -181,6 +195,8 @@ export class TaskStore {
           title,
           workspace,
           archived,
+          pinned,
+          cleared_at AS clearedAt,
           created_at AS createdAt,
           updated_at AS updatedAt
         FROM chat_sessions
@@ -213,6 +229,8 @@ export class TaskStore {
       ? existing.title
       : compactTitle(updates.title, existing.title || 'New Chat');
     const archived = updates.archived === undefined ? existing.archived : Boolean(updates.archived);
+    const pinned = updates.pinned === undefined ? existing.pinned : Boolean(updates.pinned);
+    const clearedAt = updates.clearedAt === undefined ? existing.clearedAt : (updates.clearedAt || null);
     const workspace = updates.workspace === undefined
       ? existing.workspace
       : String(updates.workspace ?? '').trim();
@@ -222,15 +240,21 @@ export class TaskStore {
         SET title = ?,
             workspace = ?,
             archived = ?,
+            pinned = ?,
+            cleared_at = ?,
             updated_at = ?
         WHERE id = ?
       `)
-      .run(title, workspace, archived ? 1 : 0, new Date().toISOString(), id);
+      .run(title, workspace, archived ? 1 : 0, pinned ? 1 : 0, clearedAt, new Date().toISOString(), id);
     return this.getChat(id);
   }
 
   archiveChat(id) {
     return this.updateChat(id, { archived: true });
+  }
+
+  clearChat(id) {
+    return this.updateChat(id, { clearedAt: new Date().toISOString() });
   }
 
   touchChat(id, task = null) {
@@ -261,6 +285,13 @@ export class TaskStore {
     const columns = this.db.prepare('PRAGMA table_info(tasks)').all();
     if (!columns.some((column) => column.name === name)) {
       this.db.exec(`ALTER TABLE tasks ADD COLUMN ${name} ${definition}`);
+    }
+  }
+
+  #ensureChatColumn(name, definition) {
+    const columns = this.db.prepare('PRAGMA table_info(chat_sessions)').all();
+    if (!columns.some((column) => column.name === name)) {
+      this.db.exec(`ALTER TABLE chat_sessions ADD COLUMN ${name} ${definition}`);
     }
   }
 
@@ -326,6 +357,8 @@ function normalizeChatRow(row) {
   return {
     ...row,
     archived: Boolean(row.archived),
+    pinned: Boolean(row.pinned),
+    clearedAt: row.clearedAt ?? null,
     taskCount: Number(row.taskCount ?? 0),
     lastTaskAt: row.lastTaskAt ?? null,
     lastPrompt: row.lastPrompt ?? null,

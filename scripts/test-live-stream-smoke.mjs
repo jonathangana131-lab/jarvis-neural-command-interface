@@ -156,6 +156,18 @@ try {
   if (typeof logs.tail !== 'string' || !logs.path) {
     throw new Error(`Logs endpoint did not return a log path and tail: ${JSON.stringify(logs)}`);
   }
+  const dashboard = await getJson(appPort, '/api/dashboard');
+  if (!dashboard.version || dashboard.workspace !== workspace || !Array.isArray(dashboard.workspaces?.items)) {
+    throw new Error(`Dashboard endpoint did not return the expected project summary: ${JSON.stringify(dashboard)}`);
+  }
+  const workspaces = await getJson(appPort, '/api/workspaces');
+  if (!workspaces.items?.some((entry) => entry.path === workspace && entry.exists)) {
+    throw new Error(`Workspace summary did not include the configured workspace: ${JSON.stringify(workspaces)}`);
+  }
+  const releaseStatus = await getJson(appPort, '/api/release/status');
+  if (!releaseStatus.version || typeof releaseStatus.ready !== 'boolean' || !releaseStatus.assets?.some((asset) => asset.name.endsWith('.exe'))) {
+    throw new Error(`Release status endpoint did not return asset readiness: ${JSON.stringify(releaseStatus)}`);
+  }
   const chat = await postJson(appPort, '/api/chats', { title: 'Smoke chat', workspace });
   if (!chat.chat?.id || chat.chat.title !== 'Smoke chat') {
     throw new Error(`Chat create did not return a usable session: ${JSON.stringify(chat)}`);
@@ -182,6 +194,22 @@ try {
   const chatTasks = await getJson(appPort, `/api/chats/${chat.chat.id}/tasks`);
   if (chatTasks.tasks.length !== 2 || chatTasks.tasks[0].prompt !== 'first live smoke message') {
     throw new Error(`Chat task listing was not ordered oldest to newest: ${JSON.stringify(chatTasks)}`);
+  }
+  const pinned = await putJson(appPort, `/api/chats/${chat.chat.id}`, { pinned: true });
+  if (pinned.chat.pinned !== true) {
+    throw new Error(`Chat pin failed: ${JSON.stringify(pinned)}`);
+  }
+  const searchedChats = await getJson(appPort, '/api/chats?q=smoke');
+  if (searchedChats.chats[0]?.id !== chat.chat.id || searchedChats.chats[0]?.pinned !== true) {
+    throw new Error(`Chat search/pin sorting failed: ${JSON.stringify(searchedChats)}`);
+  }
+  const cleared = await postJson(appPort, `/api/chats/${chat.chat.id}/clear`, {});
+  if (!cleared.chat?.clearedAt) {
+    throw new Error(`Chat clear did not set a clear marker: ${JSON.stringify(cleared)}`);
+  }
+  const clearedTasks = await getJson(appPort, `/api/chats/${chat.chat.id}/tasks`);
+  if (clearedTasks.tasks.length !== 0) {
+    throw new Error(`Cleared chat should not return older task messages: ${JSON.stringify(clearedTasks)}`);
   }
   const renamed = await putJson(appPort, `/api/chats/${chat.chat.id}`, { title: 'Renamed smoke chat' });
   if (renamed.chat.title !== 'Renamed smoke chat') {

@@ -67,19 +67,24 @@ const PATH_SEGMENT_CAPACITY = 9000;
 const PULSE_CAPACITY = 560;
 const CORE_COLOR = new THREE.Color(0x72f7ff);
 const CORE_HOT = new THREE.Color(0xf3feff);
-const MEMORY_AMBER = new THREE.Color(0xffc857);
+const MEMORY_SIGNAL = new THREE.Color(0x8ceeff);
+const MEMORY_BLUE = new THREE.Color(0x2f9cff);
+const MEMORY_AMBER = new THREE.Color(0x8ceeff);
 const MODE_EXECUTE = new THREE.Color(0xffa64d);
 const MODE_LISTEN = new THREE.Color(0x96c7ff);
 const MODE_LEARN = new THREE.Color(0x76ffd1);
 const MODE_ERROR = new THREE.Color(0xff6174);
+const MEMORY_CORE_CLEARANCE = 1.18;
+const MEMORY_SHELL_MIN = 1.34;
+const MEMORY_SHELL_MAX = 1.92;
 
 const KIND_PALETTE: Record<string, { color: number; accent: number; direction: [number, number, number] }> = {
   preference: { color: 0x73f3ff, accent: 0xe9fdff, direction: [-0.78, 0.08, -0.22] },
-  constraint: { color: 0xffd479, accent: 0xfff1bd, direction: [0.78, 0.08, -0.18] },
-  project: { color: 0x55a8ff, accent: 0xb9dcff, direction: [-0.56, -0.04, 0.12] },
-  task: { color: 0xff915c, accent: 0xffd0af, direction: [0.58, -0.04, 0.02] },
-  fact: { color: 0x88ffca, accent: 0xdbffef, direction: [0.06, 0.08, -0.46] },
-  conversation: { color: 0xbf9bff, accent: 0xf1eaff, direction: [0.0, 0.04, 0.28] }
+  constraint: { color: 0x63d8ff, accent: 0xdaf7ff, direction: [0.78, 0.08, -0.18] },
+  project: { color: 0x45a8ff, accent: 0xc8ecff, direction: [-0.56, -0.04, 0.12] },
+  task: { color: 0x7cf2ff, accent: 0xf2feff, direction: [0.58, -0.04, 0.02] },
+  fact: { color: 0x6fffd8, accent: 0xe2fff6, direction: [0.06, 0.08, -0.46] },
+  conversation: { color: 0x94c7ff, accent: 0xeaf6ff, direction: [0.0, 0.04, 0.28] }
 };
 
 function clamp01(value: number): number {
@@ -152,27 +157,50 @@ function makeCurvePoints(
   return points;
 }
 
+function radialDirectionFor(point: THREE.Vector3, fallback = new THREE.Vector3(0, 1, 0)): THREE.Vector3 {
+  if (point.lengthSq() > 0.0001) {
+    return point.clone().normalize();
+  }
+  return fallback.clone().normalize();
+}
+
+function keepOutsideMemoryCore(point: THREE.Vector3, minRadius = MEMORY_CORE_CLEARANCE): THREE.Vector3 {
+  if (point.lengthSq() < minRadius * minRadius) {
+    return radialDirectionFor(point).multiplyScalar(minRadius);
+  }
+  return point;
+}
+
 function makeSemanticCurve(
   from: THREE.Vector3,
   to: THREE.Vector3,
   weight: number
 ): THREE.Vector3[] {
-  // Pull weak edges towards the core so the strong ones read as more direct.
   const distance = from.distanceTo(to);
-  const corePull = THREE.MathUtils.lerp(0.42, 0.12, THREE.MathUtils.clamp(weight, 0, 1));
+  const clampedWeight = THREE.MathUtils.clamp(weight, 0, 1);
   const mid = from.clone().lerp(to, 0.5);
-  const corewards = mid.clone().normalize().multiplyScalar(-corePull * distance);
-  const control = mid.add(corewards);
+  const radial = radialDirectionFor(mid, from);
+  const arcAxis = new THREE.Vector3().crossVectors(radialDirectionFor(from), radialDirectionFor(to));
+  if (arcAxis.lengthSq() < 0.0001) {
+    arcAxis.copy(new THREE.Vector3(0, 1, 0)).cross(radial);
+  }
+  if (arcAxis.lengthSq() < 0.0001) {
+    arcAxis.set(1, 0, 0);
+  }
+  arcAxis.normalize();
+  const shellRadius = Math.max(from.length(), to.length(), MEMORY_SHELL_MIN);
+  const outwardLift = THREE.MathUtils.lerp(0.42, 0.22, clampedWeight) + Math.min(distance, 1.8) * 0.12;
+  const sideSweep = arcAxis.multiplyScalar(Math.sin((from.x + to.y + weight) * 3.41) * 0.18);
+  const control = radial.multiplyScalar(shellRadius + outwardLift).add(sideSweep);
   const points: THREE.Vector3[] = [];
   const segments = 16;
   for (let i = 0; i <= segments; i += 1) {
     const t = i / segments;
     const mt = 1 - t;
-    points.push(
-      from.clone().multiplyScalar(mt * mt)
+    const point = from.clone().multiplyScalar(mt * mt)
         .add(control.clone().multiplyScalar(2 * mt * t))
-        .add(to.clone().multiplyScalar(t * t))
-    );
+        .add(to.clone().multiplyScalar(t * t));
+    points.push(keepOutsideMemoryCore(point, MEMORY_CORE_CLEARANCE));
   }
   return points;
 }
@@ -639,7 +667,11 @@ export class NeuralSphere {
     for (const neuron of this.neurons) {
       const cluster = this.clusters.get(neuron.clusterKey);
       if (!cluster) continue;
-      const root = cluster.direction.clone().multiplyScalar(0.42);
+      const root = radialDirectionFor(neuron.basePosition, cluster.direction)
+        .lerp(cluster.direction, 0.28)
+        .normalize()
+        .multiplyScalar(MEMORY_CORE_CLEARANCE + 0.08)
+        .add(cluster.tangent.clone().multiplyScalar(Math.sin(neuron.phase) * 0.035));
       const path: MemoryPath = {
         memoryId: neuron.memoryId,
         memoryKind: neuron.memoryKind,
@@ -787,8 +819,8 @@ export class NeuralSphere {
       ? new THREE.Vector3(...palette.direction).normalize()
       : directionFromHash(normalized);
     const { tangent, binormal } = basisFromDirection(direction);
-    const fallbackHue = (hashString(normalized) % 360) / 360;
-    const color = palette ? new THREE.Color(palette.color) : new THREE.Color().setHSL(fallbackHue, 0.8, 0.62);
+    const fallbackHue = 0.48 + ((hashString(normalized) % 80) / 1000);
+    const color = palette ? new THREE.Color(palette.color) : new THREE.Color().setHSL(fallbackHue, 0.78, 0.62);
     const accent = palette ? new THREE.Color(palette.accent) : color.clone().lerp(CORE_HOT, 0.45);
     const cluster: MemoryCluster = {
       kind: normalized,
@@ -810,22 +842,22 @@ export class NeuralSphere {
     rng: () => number
   ): THREE.Vector3 {
     const importance = THREE.MathUtils.clamp(Number(memory.importance ?? 2), 1, 5);
-    const scopePull = memory.scope === 'global' ? -0.08 : 0.04;
+    const scopePull = memory.scope === 'global' ? -0.02 : 0.04;
     const shell = Math.floor(order / 18);
     const ringSlot = order % 18;
     const angle = order * 2.399963 + shell * 0.57 + rng() * 0.42;
     const compactRadius = THREE.MathUtils.clamp(
-      1.02 + importance * 0.06 + shell * 0.052 + (ringSlot % 5) * 0.018 + scopePull + (rng() - 0.5) * 0.06,
-      0.96,
-      1.62
+      1.28 + importance * 0.055 + shell * 0.048 + (ringSlot % 5) * 0.02 + scopePull + (rng() - 0.5) * 0.045,
+      MEMORY_SHELL_MIN,
+      MEMORY_SHELL_MAX
     );
-    const clusterBias = cluster.direction.clone().multiplyScalar(0.28);
+    const clusterBias = cluster.direction.clone().multiplyScalar(0.34);
     const localSpread = cluster.tangent.clone().multiplyScalar(Math.cos(angle) * (0.86 + rng() * 0.08))
       .add(cluster.binormal.clone().multiplyScalar(Math.sin(angle) * (0.82 + rng() * 0.08)))
       .add(cluster.direction.clone().multiplyScalar(((ringSlot % 6) - 2.5) * 0.16 + (rng() - 0.5) * 0.18));
     const direction = clusterBias.add(localSpread).normalize();
-    const interiorScatter = cluster.tangent.clone().multiplyScalar((rng() - 0.5) * 0.08)
-      .add(cluster.binormal.clone().multiplyScalar((rng() - 0.5) * 0.08));
+    const interiorScatter = cluster.tangent.clone().multiplyScalar((rng() - 0.5) * 0.035)
+      .add(cluster.binormal.clone().multiplyScalar((rng() - 0.5) * 0.035));
 
     return direction.multiplyScalar(compactRadius).add(interiorScatter);
   }
@@ -849,9 +881,12 @@ export class NeuralSphere {
 
   private createMemoryPath(neuron: MemoryNeuron, cluster: MemoryCluster, parent: MemoryNeuron | null): MemoryPath {
     const root = parent?.basePosition.clone()
-      ?? cluster.direction.clone().multiplyScalar(0.54)
-        .add(cluster.tangent.clone().multiplyScalar(Math.sin(neuron.phase) * 0.08))
-        .add(cluster.binormal.clone().multiplyScalar(Math.cos(neuron.phase) * 0.08));
+      ?? radialDirectionFor(neuron.basePosition, cluster.direction)
+        .lerp(cluster.direction, 0.34)
+        .normalize()
+        .multiplyScalar(MEMORY_CORE_CLEARANCE + 0.1)
+        .add(cluster.tangent.clone().multiplyScalar(Math.sin(neuron.phase) * 0.055))
+        .add(cluster.binormal.clone().multiplyScalar(Math.cos(neuron.phase) * 0.055));
     const points = makeCurvePoints(
       root,
       neuron.basePosition,
@@ -889,19 +924,20 @@ export class NeuralSphere {
         break;
       }
       const other = this.neurons[candidate.idx];
+      const midpoint = neuron.basePosition.clone().lerp(other.basePosition, 0.5);
       const mid = neuron.basePosition.clone().lerp(other.basePosition, 0.5)
-        .add(cluster.direction.clone().multiplyScalar(0.055 + rng() * 0.055))
+        .add(radialDirectionFor(midpoint, cluster.direction).multiplyScalar(0.15 + rng() * 0.08))
+        .add(cluster.direction.clone().multiplyScalar(0.035 + rng() * 0.04))
         .add(cluster.tangent.clone().multiplyScalar((rng() - 0.5) * 0.085));
       const points: THREE.Vector3[] = [];
       const segments = 8;
       for (let i = 0; i <= segments; i += 1) {
         const t = i / segments;
         const mt = 1 - t;
-        points.push(
-          neuron.basePosition.clone().multiplyScalar(mt * mt)
+        const point = neuron.basePosition.clone().multiplyScalar(mt * mt)
             .add(mid.clone().multiplyScalar(2 * mt * t))
-            .add(other.basePosition.clone().multiplyScalar(t * t))
-        );
+            .add(other.basePosition.clone().multiplyScalar(t * t));
+        points.push(keepOutsideMemoryCore(point, MEMORY_CORE_CLEARANCE));
       }
       const pathIndex = this.paths.length;
       this.paths.push({
@@ -980,7 +1016,7 @@ export class NeuralSphere {
       const material = (ring as THREE.Mesh).material;
       if (material instanceof THREE.MeshBasicMaterial) {
         material.opacity = 0.055 + Math.sin(elapsed * 1.8 + i) * 0.012 + modeBoost * 0.025;
-        material.color.copy(i % 4 === 0 ? MEMORY_AMBER : this.modeColor().lerp(this.phaseProfile().color, 0.36));
+        material.color.copy(i % 4 === 0 ? MEMORY_BLUE : this.modeColor().lerp(this.phaseProfile().color, 0.36));
       }
     }
   }
@@ -1267,7 +1303,7 @@ export class NeuralSphere {
         return { color: MODE_LISTEN.clone(), energy: 0.58, spin: 0.006, pulse: 3, speed: 0.02, beat: 0.1 };
       case 'planning':
       case 'thinking':
-        return { color: MEMORY_AMBER.clone(), energy: 1.02, spin: 0.025, pulse: 12, speed: 0.08, beat: 0.5 };
+        return { color: MEMORY_SIGNAL.clone(), energy: 1.02, spin: 0.025, pulse: 12, speed: 0.08, beat: 0.5 };
       case 'streaming':
         return { color: CORE_HOT.clone(), energy: 1.1, spin: 0.04, pulse: 18, speed: 0.12, beat: 0.8 };
       case 'editing':
@@ -1289,8 +1325,8 @@ export class NeuralSphere {
     const ringSpecs = [
       { radius: 0.92, tube: 0.006, color: 0x73f3ff, opacity: 0.035, rot: [Math.PI / 2, 0.1, 0] },
       { radius: 1.12, tube: 0.005, color: 0xe9fdff, opacity: 0.025, rot: [Math.PI / 2.25, -0.22, 0.8] },
-      { radius: 1.38, tube: 0.005, color: 0xffc857, opacity: 0.024, rot: [Math.PI / 2.1, 0.32, 1.8] },
-      { radius: 1.66, tube: 0.004, color: 0x73f3ff, opacity: 0.02, rot: [Math.PI / 1.9, -0.48, 2.7] }
+      { radius: 1.38, tube: 0.005, color: 0x63d8ff, opacity: 0.026, rot: [Math.PI / 2.1, 0.32, 1.8] },
+      { radius: 1.66, tube: 0.004, color: 0x2f9cff, opacity: 0.022, rot: [Math.PI / 1.9, -0.48, 2.7] }
     ];
 
     for (const spec of ringSpecs) {
@@ -1311,7 +1347,7 @@ export class NeuralSphere {
     const positions: number[] = [];
     const colors: number[] = [];
     const colorA = new THREE.Color(0x28dfff);
-    const colorB = MEMORY_AMBER.clone().multiplyScalar(0.72);
+    const colorB = MEMORY_SIGNAL.clone().multiplyScalar(0.72);
     const colorC = new THREE.Color(0x147cff).lerp(CORE_COLOR, 0.28);
     const rng = seededRandom('jarvis-reference-memory-web');
 

@@ -21,6 +21,141 @@
   color-scheme: dark;
 }
 
+/* v0.5.2 polish: memory cards now read like neural nodes instead of generic rows. */
+.memory-node-card {
+  isolation: isolate;
+  display: grid;
+  gap: 8px;
+  padding-left: 34px;
+  overflow: hidden;
+  border-color: rgba(115, 243, 255, 0.2) !important;
+  background:
+    radial-gradient(circle at 18px 22px, rgba(229, 253, 255, 0.22), transparent 18px),
+    linear-gradient(135deg, rgba(5, 28, 42, 0.76), rgba(0, 6, 12, 0.58)) !important;
+}
+
+.memory-node-card::before,
+.memory-node-card::after {
+  position: absolute;
+  z-index: -1;
+  content: "";
+}
+
+.memory-node-card::before {
+  top: 20px;
+  left: 14px;
+  width: 1px;
+  height: calc(100% - 28px);
+  background: linear-gradient(180deg, rgba(115, 243, 255, 0.44), rgba(47, 156, 255, 0.06));
+}
+
+.memory-node-card::after {
+  inset: 0;
+  background:
+    linear-gradient(95deg, transparent 0 34%, rgba(115, 243, 255, 0.06) 35%, transparent 56%),
+    repeating-linear-gradient(120deg, transparent 0 17px, rgba(115, 243, 255, 0.035) 18px 19px);
+  opacity: 0.6;
+}
+
+.memory-node-card__pulse {
+  position: absolute;
+  top: 18px;
+  left: 10px;
+  width: 11px;
+  height: 11px;
+  border: 1px solid rgba(229, 253, 255, 0.8);
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 20px rgba(115, 243, 255, 0.7);
+}
+
+.memory-node-card__meta {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 3px;
+}
+
+.memory-node-card__meta span {
+  color: #8bb9c7;
+}
+
+.memory-node-card__footer {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.memory-node-card__footer span {
+  min-width: 0;
+  overflow: hidden;
+  color: #9ac7d2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-node-card__footer .hud-button {
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+
+.data-node.memory-node-card.selected,
+.data-node.memory-node-card:hover {
+  border-color: rgba(140, 238, 255, 0.62) !important;
+  background:
+    radial-gradient(circle at 18px 22px, rgba(229, 253, 255, 0.32), transparent 20px),
+    linear-gradient(135deg, rgba(9, 46, 67, 0.86), rgba(0, 7, 13, 0.62)) !important;
+}
+
+.memory-detail-shell__head {
+  display: grid !important;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(115, 243, 255, 0.18);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 18px 50%, rgba(115, 243, 255, 0.16), transparent 28px),
+    rgba(0, 9, 16, 0.46);
+}
+
+.memory-detail-shell__node {
+  width: 14px;
+  height: 14px;
+  border: 1px solid rgba(229, 253, 255, 0.78);
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 20px rgba(115, 243, 255, 0.64);
+}
+
+.memory-detail-shell__head div {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+
+.memory-detail-shell__head em {
+  color: var(--cyan-hot);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+#new-chat.active,
+.chat-session.active {
+  border-color: rgba(140, 238, 255, 0.64) !important;
+  background:
+    radial-gradient(circle at 100% 0, rgba(140, 238, 255, 0.13), transparent 40%),
+    linear-gradient(135deg, rgba(6, 35, 50, 0.84), rgba(0, 5, 11, 0.58)) !important;
+  color: var(--cyan-hot) !important;
+  box-shadow: 0 0 28px rgba(115, 243, 255, 0.12) !important;
+}
+
+.conversation-stream .conversation-message + .conversation-message {
+  margin-top: 8px;
+}
+
 /* Absolute last drawer/menu correction: closed drawer cannot block clicks, open
    drawer sits below the top HUD, and the toggle remains available to close it. */
 @media (min-width: 901px) {

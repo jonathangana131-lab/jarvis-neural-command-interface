@@ -176,6 +176,8 @@ let visibleMemories: MemoryRecord[] = [];
 let visibleTasks: TaskRecord[] = [];
 let selectedMemoryId: number | null = null;
 let selectedTaskId: string | null = null;
+let currentChatStartedAt = window.localStorage.getItem('jarvis.chat.currentStartedAt') ?? '';
+let reviewingHistoricalTask = false;
 let currentTab = 'run';
 let lastCommandPrompt = '';
 let lastCommandOutput = '';
@@ -390,6 +392,7 @@ async function dispatchTask() {
   window.clearTimeout(voiceSubmitTimer);
   taskDispatchInFlight = true;
   runTask.disabled = true;
+  reviewingHistoricalTask = false;
   lastCommandPrompt = prompt;
   lastCommandOutput = '';
   lastCommandPhase = 'queued';
@@ -740,18 +743,44 @@ function renderSessionRecoveryNotice(session: SessionRecoveryState) {
           <p>The last app session ended without a clean shutdown. Memories and settings are still stored in the app profile. Open Diagnostics to export logs or use recovery controls.</p>
           <div class="task-actions">
             <button type="button" data-session-open-diagnostics data-icon="activity"><span>Open Diagnostics</span></button>
-            <button type="button" data-session-ack-crash data-icon="save"><span>Dismiss</span></button>
+            <button type="button" data-session-ack-crash data-icon="octagon-x"><span>Dismiss</span></button>
           </div>
         </section>
       </div>
     </article>
   `;
   commandChatFeed.querySelector<HTMLButtonElement>('[data-session-open-diagnostics]')?.addEventListener('click', () => setTab('diagnostics'));
-  commandChatFeed.querySelector<HTMLButtonElement>('[data-session-ack-crash]')?.addEventListener('click', async () => {
-    await postJson<SessionRecoveryState>('/api/session/acknowledge-crash', {});
-    renderCommandChat(true);
+  commandChatFeed.querySelector<HTMLButtonElement>('[data-session-ack-crash]')?.addEventListener('click', (event) => {
+    void acknowledgeSessionRecovery(event.currentTarget as HTMLButtonElement);
   });
   renderIcons();
+}
+
+async function acknowledgeSessionRecovery(button?: HTMLButtonElement) {
+  if (button?.disabled) {
+    return;
+  }
+  if (button) {
+    button.disabled = true;
+  }
+  try {
+    await postJson<SessionRecoveryState>('/api/session/acknowledge-crash', {});
+    voiceStatus.textContent = 'Recovery notice dismissed.';
+    commandChatFeed.innerHTML = '';
+    lastCommandPhase = selectedTaskId ? lastCommandPhase : 'ready';
+    lastMissionSignature = '';
+    renderCommandChat(true);
+    if (currentTab === 'diagnostics') {
+      await loadDiagnostics();
+    }
+  } catch (error) {
+    voiceStatus.textContent = error instanceof Error ? error.message : 'Unable to dismiss recovery notice.';
+    if (button) {
+      button.disabled = false;
+    }
+  } finally {
+    renderIcons();
+  }
 }
 
 function renderBootFailure(error: unknown) {
@@ -882,6 +911,7 @@ function connectEvents() {
     resetStreamOutput(task.id);
     currentRunningTask = task;
     selectedTaskId = task.id;
+    reviewingHistoricalTask = false;
     clearTaskWatch(task.id);
     renderCommandChat(true);
     taskHud.upsert(task);
@@ -899,6 +929,7 @@ function connectEvents() {
     lastCommandPhase = task.phase ?? task.status;
     currentRunningTask = task;
     selectedTaskId = task.id;
+    reviewingHistoricalTask = false;
     scheduleQueuedTaskWatch(task);
     renderCommandChat(true);
     renderChatSessions();
@@ -1028,13 +1059,23 @@ async function loadMemories(hydrate: boolean) {
 async function loadTasks() {
   const data = await fetchJson<{ tasks: TaskRecord[] }>('/api/tasks');
   visibleTasks = data.tasks;
+  ensureCurrentChatWindow();
   if (selectedTaskId !== null && !visibleTasks.some((task) => task.id === selectedTaskId)) {
     selectedTaskId = null;
+    reviewingHistoricalTask = false;
   }
   renderTaskHistory();
   renderArtifactCatalog();
   renderChatSessions();
   renderCommandChat();
+}
+
+function ensureCurrentChatWindow() {
+  if (currentChatStartedAt) {
+    return;
+  }
+  currentChatStartedAt = visibleTasks[0]?.createdAt ?? new Date().toISOString();
+  window.localStorage.setItem('jarvis.chat.currentStartedAt', currentChatStartedAt);
 }
 
 async function loadDiagnostics() {
@@ -1135,15 +1176,14 @@ function renderSessionRecoveryActions(session: SessionRecoveryState) {
   return `
     <div class="update-actions">
       <button class="hud-button hud-button--primary" type="button" data-log-export data-icon="save"><span>Export Logs</span></button>
-      <button class="hud-button" type="button" data-session-ack-crash data-icon="save"><span>Dismiss Notice</span></button>
+      <button class="hud-button" type="button" data-session-ack-crash data-icon="octagon-x"><span>Dismiss Notice</span></button>
     </div>
   `;
 }
 
 function wireSessionRecoveryActions() {
-  diagnosticsList.querySelector<HTMLButtonElement>('[data-session-ack-crash]')?.addEventListener('click', async () => {
-    await postJson<SessionRecoveryState>('/api/session/acknowledge-crash', {});
-    await loadDiagnostics();
+  diagnosticsList.querySelector<HTMLButtonElement>('[data-session-ack-crash]')?.addEventListener('click', (event) => {
+    void acknowledgeSessionRecovery(event.currentTarget as HTMLButtonElement);
   });
 }
 
@@ -1805,18 +1845,25 @@ function renderMemories(memories: MemoryRecord[]) {
     return;
   }
 
-memoryList.innerHTML = memories
-     .slice(0, 24)
-     .map((memory) => `
-       <article class="data-node ${memory.id === selectedMemoryId ? 'selected crystal-active' : ''}">
-         <div class="data-node__meta">
+  memoryList.innerHTML = memories
+    .slice(0, 24)
+    .map((memory) => {
+      const confidence = Math.round((memory.confidence ?? 1) * 100);
+      return `
+       <article class="data-node memory-node-card ${memory.id === selectedMemoryId ? 'selected crystal-active' : ''}" data-memory-id="${memory.id}" data-memory-kind="${escapeHtml(memory.kind)}">
+         <span class="memory-node-card__pulse" aria-hidden="true"></span>
+         <div class="data-node__meta memory-node-card__meta">
            <strong>${escapeHtml(memory.title)}</strong>
-           <span>${escapeHtml(memory.kind)} / ${memory.importance}${memory.confidence ? ` / ${Math.round(memory.confidence * 100)}%` : ''}</span>
+           <span>${escapeHtml(memory.kind)} / ${escapeHtml(memory.scope ?? 'project')}</span>
          </div>
          <p>${escapeHtml(memory.content)}</p>
-         <button class="hud-button" type="button" data-icon="trash-2" data-delete-memory="${memory.id}"><span>Delete</span></button>
+         <div class="memory-node-card__footer">
+           <span>Importance ${memory.importance} / Signal ${confidence}%</span>
+           <button class="hud-button" type="button" data-icon="trash-2" data-delete-memory="${memory.id}"><span>Delete</span></button>
+         </div>
        </article>
-     `)
+     `;
+    })
     .join('');
 
   memoryList.querySelectorAll<HTMLButtonElement>('[data-delete-memory]').forEach((button) => {
@@ -1826,8 +1873,13 @@ memoryList.innerHTML = memories
       await loadMemories(true);
     });
   });
-  memoryList.querySelectorAll<HTMLElement>('.data-node').forEach((item, index) => {
-    item.addEventListener('click', () => selectMemory(memories[index].id));
+  memoryList.querySelectorAll<HTMLElement>('[data-memory-id]').forEach((item) => {
+    item.addEventListener('click', () => {
+      const memoryId = Number(item.dataset.memoryId);
+      if (Number.isFinite(memoryId)) {
+        selectMemory(memoryId);
+      }
+    });
   });
   renderIcons();
 }
@@ -2007,8 +2059,16 @@ function renderMemoryDetail() {
     return;
   }
   memoryDetail.classList.remove('hidden');
+  const confidence = Math.round((memory.confidence ?? 1) * 100);
   memoryDetail.innerHTML = `
-    <span>${escapeHtml(memory.kind)} / ${escapeHtml(memory.scope ?? 'project')} / ${memory.importance}${memory.confidence ? ` / ${Math.round(memory.confidence * 100)}%` : ''}</span>
+    <div class="memory-detail-shell__head">
+      <span class="memory-detail-shell__node" aria-hidden="true"></span>
+      <div>
+        <span>${escapeHtml(memory.kind)} / ${escapeHtml(memory.scope ?? 'project')}</span>
+        <strong>${escapeHtml(memory.title)}</strong>
+      </div>
+      <em>${confidence}%</em>
+    </div>
     <input id="memory-edit-title" value="${escapeHtml(memory.title)}" />
     <textarea id="memory-edit-content">${escapeHtml(memory.content)}</textarea>
     <div class="memory-edit-row">
@@ -2140,7 +2200,10 @@ function completeStreamOutput(taskId: string, output: string) {
 }
 
 function startNewChat() {
+  currentChatStartedAt = new Date().toISOString();
+  window.localStorage.setItem('jarvis.chat.currentStartedAt', currentChatStartedAt);
   selectedTaskId = null;
+  reviewingHistoricalTask = false;
   currentRunningTask = null;
   streamTaskId = null;
   streamingActive = false;
@@ -2159,6 +2222,7 @@ function startNewChat() {
   renderChatSessions();
   renderCommandChat(true);
   setChatSidebarOpen(false);
+  voiceStatus.textContent = 'New chat started.';
   taskPrompt.focus();
 }
 
@@ -2167,6 +2231,7 @@ function selectRunChat(taskId: string) {
     return;
   }
   selectedTaskId = taskId;
+  reviewingHistoricalTask = true;
   const task = selectedTask();
   lastCommandPrompt = task?.prompt ?? '';
   lastCommandOutput = streamTaskId === taskId ? streamVisibleOutput : task?.output ?? '';
@@ -2277,6 +2342,7 @@ function renderCommandChat(immediate = false) {
   lastMissionRenderAt = now;
   const draftPrompt = taskPrompt.value.trim();
   const latestTask = selectedTask();
+  const conversationTasks = currentChatTasks(latestTask);
   const prompt = latestTask?.prompt || lastCommandPrompt || draftPrompt;
   const phase = latestTask ? latestTask.phase ?? latestTask.status : lastCommandPhase;
   const taskOutput = latestTask && streamTaskId === latestTask.id
@@ -2294,7 +2360,7 @@ function renderCommandChat(immediate = false) {
   const progress = missionProgressFor(latestTask, phase);
   const nextAction = missionNextActionFor(latestTask, output);
   const objective = latestTask?.prompt || promptPreview;
-  const timeline = renderMissionTimeline(latestTask, output, promptPreview, statusText, phase);
+  const timeline = renderMissionTimeline(latestTask, conversationTasks, output, promptPreview, statusText, phase);
   const memoryContext = renderMissionMemoryContext(latestTask);
   const artifactMarkup = renderMissionArtifacts(latestTask);
   const signature = JSON.stringify({
@@ -2309,6 +2375,9 @@ function renderCommandChat(immediate = false) {
     artifactCount,
     selectedMemoryId,
     selectedTaskId,
+    reviewingHistoricalTask,
+    currentChatStartedAt,
+    conversationIds: conversationTasks.map((task) => `${task.id}:${task.status}:${task.phase}:${task.output.length}`),
     taskCount: visibleTasks.length,
     visibleMemories: visibleMemories.length,
     promptPreview,
@@ -2407,6 +2476,7 @@ function renderCommandChat(immediate = false) {
 
 function renderMissionTimeline(
   task: TaskRecord | null,
+  conversationTasks: TaskRecord[],
   output: string,
   promptPreview: string,
   statusText: string,
@@ -2414,7 +2484,7 @@ function renderMissionTimeline(
 ) {
   const taskStatus = task?.status ?? 'idle';
   const live = task?.status === 'running' || task?.status === 'queued';
-  const conversation = renderMissionConversation(task, output, promptPreview, statusText, phase);
+  const conversation = renderMissionConversation(task, conversationTasks, output, promptPreview, statusText, phase);
 
   return `
     <article class="mission-event mission-event--response mission-event--${escapeHtml(taskStatus)} ${live ? 'is-live' : ''}" ${task ? `data-task-id="${escapeHtml(task.id)}"` : ''}>
@@ -2446,6 +2516,7 @@ function renderActiveTaskActions(task: TaskRecord | null, output: string) {
 
 function renderMissionConversation(
   task: TaskRecord | null,
+  conversationTasks: TaskRecord[],
   output: string,
   promptPreview: string,
   statusText: string,
@@ -2453,26 +2524,30 @@ function renderMissionConversation(
 ) {
   const messages: string[] = [];
 
-  if (task) {
-    // Only show the current active task's conversation
-    const activeOutput = output || task.output || '';
-    messages.push(renderConversationMessage('user', task.prompt, 'You', formatTime(task.createdAt), false));
-    if (task.status === 'queued' || task.status === 'running') {
-      messages.push(renderThinkingSignal(
-        activeOutput ? activeSignalLabel(phase) : 'Thinking through the mission',
-        phase,
-        Boolean(activeOutput)
-      ));
+  if (conversationTasks.length > 0) {
+    for (const entry of conversationTasks) {
+      const active = task?.id === entry.id;
+      const entryStatus = active ? task?.status ?? entry.status : entry.status;
+      const activeOutput = active ? output || entry.output || '' : entry.output || '';
+      const entryPhase = active ? phase : entry.phase ?? entry.status;
+      messages.push(renderConversationMessage('user', entry.prompt, active ? 'You' : 'You', formatTime(entry.createdAt), false));
+      if (active && (entryStatus === 'queued' || entryStatus === 'running')) {
+        messages.push(renderThinkingSignal(
+          activeOutput ? activeSignalLabel(entryPhase) : 'Thinking through the mission',
+          entryPhase,
+          Boolean(activeOutput)
+        ));
+      }
+      const cleanOutput = stripUiArtifactBlocks(activeOutput).trim();
+      const assistantBody = cleanOutput
+        ? cleanOutput.slice(entryStatus === 'running' ? -3600 : -1400)
+        : entryStatus === 'queued'
+          ? 'Queued for the local agent.'
+          : entryStatus === 'running'
+            ? ''
+            : 'No response captured for this run.';
+      messages.push(renderConversationMessage('assistant', assistantBody, 'Jarvis', entryPhase, active && entryStatus === 'running'));
     }
-    const cleanOutput = stripUiArtifactBlocks(activeOutput).trim();
-    const assistantBody = cleanOutput
-      ? cleanOutput.slice(task.status === 'running' ? -3600 : -1400)
-      : task.status === 'queued'
-        ? 'Queued for the local agent.'
-        : task.status === 'running'
-          ? ''
-          : 'No response captured for this run.';
-    messages.push(renderConversationMessage('assistant', assistantBody, 'Jarvis', task.phase ?? task.status, task.status === 'running'));
   } else if (promptPreview && promptPreview !== 'Standing by.') {
     messages.push(renderConversationMessage('user', promptPreview, 'Draft command', 'Not sent yet', false));
   }
@@ -2954,7 +3029,25 @@ function renderIcons() {
 }
 
 function selectedTask() {
+  if (reviewingHistoricalTask) {
+    return visibleTasks.find((entry) => entry.id === selectedTaskId) ?? null;
+  }
   return currentRunningTask ?? visibleTasks.find((entry) => entry.id === selectedTaskId) ?? null;
+}
+
+function currentChatTasks(activeTask: TaskRecord | null) {
+  if (reviewingHistoricalTask) {
+    return activeTask ? [activeTask] : [];
+  }
+  ensureCurrentChatWindow();
+  const tasks = visibleTasks
+    .map((task) => activeTask && task.id === activeTask.id ? activeTask : task)
+    .filter((task) => !currentChatStartedAt || task.createdAt >= currentChatStartedAt)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  if (activeTask && !tasks.some((task) => task.id === activeTask.id)) {
+    tasks.push(activeTask);
+  }
+  return tasks.slice(-8);
 }
 
 function renderQueueStatus(queue: { paused: boolean; runningTaskId: string | null }) {

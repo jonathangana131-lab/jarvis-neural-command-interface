@@ -156,6 +156,48 @@
   margin-top: 8px;
 }
 
+.storage-meter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.storage-meter {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid rgba(115, 243, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(0, 8, 15, 0.38);
+}
+
+.storage-meter span {
+  color: #8bb9c7;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.storage-meter strong {
+  color: var(--cyan-hot);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.storage-meter p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+@media (max-width: 760px) {
+  .storage-meter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* Absolute last drawer/menu correction: closed drawer cannot block clicks, open
    drawer sits below the top HUD, and the toggle remains available to close it. */
 @media (min-width: 901px) {

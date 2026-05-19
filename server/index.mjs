@@ -201,6 +201,18 @@ app.get('/api/update/status', (_req, res) => {
   res.json(updateDownloadState);
 });
 
+app.post('/api/update/prepare-install', async (req, res, next) => {
+  try {
+    const prepared = await prepareVerifiedUpdateInstall(req.body ?? {});
+    res.json({
+      ...prepared,
+      message: 'Verified update is ready. The desktop app will close, install it, then reopen Jarvis.'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post('/api/backups/create', (_req, res, next) => {
   try {
     res.status(201).json(backupUserDataForUpdate('manual'));
@@ -346,47 +358,69 @@ async function runUpdateDownload(asset, latestVersion, fileName, expected) {
   }
 }
 
+async function prepareVerifiedUpdateInstall(body = {}) {
+  if (process.platform !== 'win32') {
+    const error = new Error('In-app installer launch is only supported by the Windows build.');
+    error.status = 400;
+    throw error;
+  }
+  const requestedPath = String(body.installerPath ?? '').trim();
+  const installerPath = requestedPath
+    ? path.resolve(requestedPath)
+    : latestDownloadedInstallerPath();
+  if (!installerPath) {
+    const error = new Error('Download the update before installing it.');
+    error.status = 400;
+    throw error;
+  }
+  if (!isSubpath(updateDir, installerPath) || path.extname(installerPath).toLowerCase() !== '.exe' || !fs.existsSync(installerPath)) {
+    const error = new Error('Installer path is not a verified Jarvis update download.');
+    error.status = 403;
+    throw error;
+  }
+  const release = await fetchLatestRelease();
+  const asset = findWindowsInstallerAsset(release);
+  const expected = normalizeSha256Digest(asset?.digest);
+  const sha256 = sha256File(installerPath);
+  if (expected && sha256.toLowerCase() !== expected.toLowerCase()) {
+    const error = new Error('Installer checksum changed after download. Download the update again.');
+    error.status = 409;
+    throw error;
+  }
+  return {
+    ready: true,
+    version: String(release.tag_name ?? '').replace(/^v/i, '') || updateDownloadState.version,
+    installerPath,
+    fileName: path.basename(installerPath),
+    sha256,
+    expectedSha256: expected || null,
+    size: fs.statSync(installerPath).size
+  };
+}
+
 app.post('/api/update/install', async (req, res, next) => {
   try {
-    if (process.platform !== 'win32') {
-      const error = new Error('In-app installer launch is only supported by the Windows build.');
-      error.status = 400;
-      throw error;
-    }
-    const requestedPath = String(req.body?.installerPath ?? '').trim();
-    const installerPath = requestedPath
-      ? path.resolve(requestedPath)
-      : latestDownloadedInstallerPath();
-    if (!installerPath) {
-      const error = new Error('Download the update before installing it.');
-      error.status = 400;
-      throw error;
-    }
-    if (!isSubpath(updateDir, installerPath) || path.extname(installerPath).toLowerCase() !== '.exe' || !fs.existsSync(installerPath)) {
-      const error = new Error('Installer path is not a verified Jarvis update download.');
-      error.status = 403;
-      throw error;
-    }
-    const release = await fetchLatestRelease();
-    const asset = findWindowsInstallerAsset(release);
-    const expected = normalizeSha256Digest(asset?.digest);
-    const sha256 = sha256File(installerPath);
-    if (expected && sha256.toLowerCase() !== expected.toLowerCase()) {
-      const error = new Error('Installer checksum changed after download. Download the update again.');
-      error.status = 409;
-      throw error;
-    }
-    const child = spawn(installerPath, ['/S'], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true
-    });
-    child.unref();
+    const prepared = await prepareVerifiedUpdateInstall(req.body ?? {});
     res.json({
-      launched: true,
-      installerPath,
-      message: 'Update installer is running silently. Restart Jarvis after it finishes; memories and settings stay in the app profile.'
+      ...prepared,
+      launched: false,
+      requiresDesktopBridge: true,
+      message: 'Update verified. Use the desktop update handoff so Jarvis can close before the installer runs.'
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/storage', (_req, res) => {
+  res.json(storageReport());
+});
+
+app.post('/api/storage/cleanup', (req, res, next) => {
+  try {
+    const target = String(req.body?.target ?? '').trim();
+    const result = cleanupStorage(target);
+    res.json({ ...result, storage: storageReport() });
   } catch (error) {
     next(error);
   }
@@ -1007,6 +1041,178 @@ function listUpdateBackups() {
       };
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+function storageReport() {
+  const updateFiles = listFiles(updateDir)
+    .filter((file) => /\.(exe|download|blockmap|yml)$/i.test(file.name));
+  const logBundles = listFiles(config.dataDir)
+    .filter((file) => /^jarvis-log-bundle-.*\.txt$/i.test(file.name));
+  const backupRecords = listUpdateBackups().map((backup) => ({
+    ...backup,
+    size: directorySize(backup.path)
+  }));
+  const currentLogSize = fs.existsSync(logPath) ? fs.statSync(logPath).size : 0;
+  const memoryFiles = [
+    config.memory.databasePath,
+    `${config.memory.databasePath}-wal`,
+    `${config.memory.databasePath}-shm`
+  ].filter((file) => fs.existsSync(file)).map((file) => ({
+    path: file,
+    size: fs.statSync(file).size
+  }));
+  const updatesSize = updateFiles.reduce((sum, file) => sum + file.size, 0);
+  const backupSize = backupRecords.reduce((sum, backup) => sum + backup.size, 0);
+  const logBundleSize = logBundles.reduce((sum, file) => sum + file.size, 0);
+  const memorySize = memoryFiles.reduce((sum, file) => sum + file.size, 0);
+  return {
+    dataDir: config.dataDir,
+    totalSize: directorySize(config.dataDir),
+    updates: {
+      path: updateDir,
+      size: updatesSize,
+      files: updateFiles
+    },
+    backups: {
+      path: updateBackupDir,
+      size: backupSize,
+      count: backupRecords.length,
+      items: backupRecords
+    },
+    logs: {
+      path: logPath,
+      size: currentLogSize + logBundleSize,
+      currentLogSize,
+      bundleSize: logBundleSize,
+      bundles: logBundles
+    },
+    memory: {
+      path: config.memory.databasePath,
+      size: memorySize,
+      files: memoryFiles
+    }
+  };
+}
+
+function cleanupStorage(target) {
+  if (!['updates', 'backups', 'logs', 'all'].includes(target)) {
+    const error = new Error('Unknown cleanup target.');
+    error.status = 400;
+    throw error;
+  }
+  const removed = [];
+  if (target === 'updates' || target === 'all') {
+    for (const file of listFiles(updateDir)) {
+      if (!/\.(exe|download|blockmap|yml)$/i.test(file.name)) {
+        continue;
+      }
+      fs.rmSync(file.path, { force: true });
+      removed.push(file.path);
+    }
+    updateDownloadState = {
+      status: 'idle',
+      version: null,
+      fileName: null,
+      installerPath: null,
+      receivedBytes: 0,
+      totalBytes: 0,
+      sha256: null,
+      expectedSha256: null,
+      backupPath: null,
+      backupFiles: [],
+      error: null,
+      updatedAt: new Date().toISOString()
+    };
+  }
+  if (target === 'backups' || target === 'all') {
+    const backups = listUpdateBackups();
+    const keep = new Set(backups.slice(0, target === 'all' ? 1 : 2).map((backup) => backup.id));
+    for (const backup of backups) {
+      if (keep.has(backup.id)) {
+        continue;
+      }
+      fs.rmSync(backup.path, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+      removed.push(backup.path);
+    }
+  }
+  if (target === 'logs' || target === 'all') {
+    for (const file of listFiles(config.dataDir)) {
+      if (!/^jarvis-log-bundle-.*\.txt$/i.test(file.name)) {
+        continue;
+      }
+      fs.rmSync(file.path, { force: true });
+      removed.push(file.path);
+    }
+    trimLogFile(logPath, 512 * 1024);
+  }
+  return { target, removed, removedCount: removed.length };
+}
+
+function listFiles(directory) {
+  if (!fs.existsSync(directory)) {
+    return [];
+  }
+  return fs.readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => {
+      const filePath = path.resolve(directory, entry.name);
+      const stat = fs.statSync(filePath);
+      return {
+        name: entry.name,
+        path: filePath,
+        size: stat.size,
+        updatedAt: stat.mtime.toISOString()
+      };
+    })
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+function directorySize(directory) {
+  if (!directory || !fs.existsSync(directory)) {
+    return 0;
+  }
+  let total = 0;
+  const stack = [directory];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    let entries = [];
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      const entryPath = path.resolve(current, entry.name);
+      try {
+        if (entry.isDirectory()) {
+          stack.push(entryPath);
+        } else if (entry.isFile()) {
+          total += fs.statSync(entryPath).size;
+        }
+      } catch {
+        // Ignore files that are removed while diagnostics are being calculated.
+      }
+    }
+  }
+  return total;
+}
+
+function trimLogFile(targetPath, maxBytes) {
+  if (!fs.existsSync(targetPath)) {
+    return;
+  }
+  const stat = fs.statSync(targetPath);
+  if (stat.size <= maxBytes) {
+    return;
+  }
+  const buffer = Buffer.alloc(maxBytes);
+  const fd = fs.openSync(targetPath, 'r');
+  try {
+    fs.readSync(fd, buffer, 0, maxBytes, stat.size - maxBytes);
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.writeFileSync(targetPath, buffer);
 }
 
 function backupById(id) {

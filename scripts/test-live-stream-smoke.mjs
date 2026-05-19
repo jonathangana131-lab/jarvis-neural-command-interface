@@ -136,6 +136,22 @@ try {
   if (!downloadedUpdate.backupPath || !fs.existsSync(downloadedUpdate.backupPath)) {
     throw new Error(`Update backup was not created: ${JSON.stringify(downloadedUpdate)}`);
   }
+  const preparedUpdate = await postJson(appPort, '/api/update/prepare-install', {});
+  if (!preparedUpdate.ready || preparedUpdate.sha256 !== mockInstallerSha256 || preparedUpdate.installerPath !== downloadedUpdate.installerPath) {
+    throw new Error(`Update prepare did not verify the downloaded installer: ${JSON.stringify(preparedUpdate)}`);
+  }
+  const legacyInstall = await postJson(appPort, '/api/update/install', {});
+  if (legacyInstall.launched !== false || legacyInstall.requiresDesktopBridge !== true) {
+    throw new Error(`Legacy update install endpoint should not launch installers directly: ${JSON.stringify(legacyInstall)}`);
+  }
+  const storageBeforeCleanup = await getJson(appPort, '/api/storage');
+  if (storageBeforeCleanup.updates.size < mockInstaller.length || storageBeforeCleanup.totalSize < storageBeforeCleanup.updates.size) {
+    throw new Error(`Storage endpoint did not report downloaded updates: ${JSON.stringify(storageBeforeCleanup)}`);
+  }
+  const cleanup = await postJson(appPort, '/api/storage/cleanup', { target: 'updates' });
+  if (cleanup.removedCount < 1 || cleanup.storage.updates.size !== 0) {
+    throw new Error(`Update cleanup did not remove downloaded installer: ${JSON.stringify(cleanup)}`);
+  }
   const logs = await getJson(appPort, '/api/logs');
   if (typeof logs.tail !== 'string' || !logs.path) {
     throw new Error(`Logs endpoint did not return a log path and tail: ${JSON.stringify(logs)}`);

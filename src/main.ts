@@ -283,6 +283,42 @@ type BackupRecord = {
   restartRequiredForMemoryRestore: boolean;
 };
 
+type StorageFile = {
+  name: string;
+  path: string;
+  size: number;
+  updatedAt: string;
+};
+
+type StorageReport = {
+  dataDir: string;
+  totalSize: number;
+  updates: { path: string; size: number; files: StorageFile[] };
+  backups: { path: string; size: number; count: number; items: Array<BackupRecord & { size: number }> };
+  logs: { path: string; size: number; currentLogSize: number; bundleSize: number; bundles: StorageFile[] };
+  memory: { path: string; size: number; files: StorageFile[] };
+};
+
+type PreparedUpdateInstall = {
+  ready: boolean;
+  version: string | null;
+  installerPath: string;
+  fileName: string;
+  sha256: string;
+  expectedSha256: string | null;
+  size: number;
+  message: string;
+};
+
+declare global {
+  interface Window {
+    jarvisDesktop?: {
+      platform: string;
+      installUpdate(payload: { installerPath: string; sha256: string; expectedSha256?: string | null }): Promise<{ scheduled: boolean; message: string }>;
+    };
+  }
+}
+
 const codexModelPresets = [
   { id: 'gpt-5.5', name: 'GPT-5.5', note: 'Latest model', icon: 'sparkles' },
   { id: 'o3-mini', name: 'O3 Mini', note: 'Fast reasoning', icon: 'zap' },
@@ -1079,7 +1115,7 @@ function ensureCurrentChatWindow() {
 }
 
 async function loadDiagnostics() {
-  const [data, health, update, updateStatus, backups, logs] = await Promise.all([
+  const [data, health, update, updateStatus, backups, logs, storage] = await Promise.all([
     fetchJson<{
       codex: { available: boolean; detail: string };
       localModel: { available: boolean; detail: string; provider: string; endpoint: string; models: string[] };
@@ -1094,7 +1130,8 @@ async function loadDiagnostics() {
     fetchJson<UpdateCheck>('/api/update-check'),
     fetchJson<UpdateStatus>('/api/update/status'),
     fetchJson<{ backups: BackupRecord[] }>('/api/backups'),
-    fetchJson<{ path: string; tail: string }>('/api/logs')
+    fetchJson<{ path: string; tail: string }>('/api/logs'),
+    fetchJson<StorageReport>('/api/storage')
   ]);
   lastUpdateCheck = update;
   renderUpdateBanner(update, updateStatus);
@@ -1118,6 +1155,7 @@ async function loadDiagnostics() {
     <article><strong>Updates</strong><span>${updateStatus.status === 'downloading' ? 'Downloading' : update.updateAvailable ? 'Available' : update.error ? 'Check failed' : 'Current'}</span><p>${escapeHtml(updateDetail)}</p>${updateActions}</article>
     <article><strong>Voice</strong><span>${data.voice.settings.voiceEnabled ? 'Enabled' : 'Disabled'}</span><p>${escapeHtml(`${voiceCapabilityLabel()} Spoken summaries ${data.voice.settings.spokenResponses ? 'on' : 'off'}.`)}</p></article>
     <article><strong>SQLite</strong><span>${data.sqlite.exists ? 'Ready' : 'Missing'}</span><p>${escapeHtml(data.sqlite.databasePath)}</p></article>
+    <article class="diagnostics-grid__wide"><strong>Storage</strong><span>${escapeHtml(formatBytes(storage.totalSize))}</span><p>${escapeHtml(storageSummary(storage))}</p>${renderStorageManager(storage)}</article>
     <article><strong>Queue</strong><span>${data.queue.paused ? 'Paused' : 'Active'}</span><p>${data.queue.runningTaskId ? `Running ${escapeHtml(data.queue.runningTaskId)}` : 'No active task'}</p></article>
     <article class="diagnostics-grid__wide"><strong>Session Recovery</strong><span>${data.session.previousCrashed ? 'Previous crash detected' : 'Clean'}</span><p>${escapeHtml(sessionRecoveryDetail(data.session))}</p>${renderSessionRecoveryActions(data.session)}</article>
     <article class="diagnostics-grid__wide"><strong>Recovery</strong><span>Safe controls</span><p>Reset bad model settings, clear saved model secrets, or export a log bundle for bug reports.</p>${renderRecoveryActions()}</article>
@@ -1127,6 +1165,7 @@ async function loadDiagnostics() {
   wireUpdateActions(update, updateStatus);
   wireSessionRecoveryActions();
   wireRecoveryActions();
+  wireStorageActions();
   wireBackupActions();
   renderIcons();
   renderQueueStatus(data.queue);
@@ -1277,15 +1316,24 @@ async function installDownloadedUpdate() {
   if (updateActionBusy) {
     return;
   }
-  if (!window.confirm('Run the verified update now? Jarvis will update in place without opening the installer wizard. Your memories and settings stay in the app profile.')) {
+  if (!window.confirm('Install the verified update now? Jarvis will close, install after the app exits, then reopen. Your memories and settings stay in the app profile.')) {
     return;
   }
   updateActionBusy = true;
   try {
-    const result = await postJson<{ launched: boolean; message: string }>('/api/update/install', {});
+    const prepared = await postJson<PreparedUpdateInstall>('/api/update/prepare-install', {});
+    if (!window.jarvisDesktop?.installUpdate) {
+      window.alert(`Update verified, but this window is not running inside the desktop app.\n\nInstaller:\n${prepared.installerPath}`);
+      return;
+    }
+    const result = await window.jarvisDesktop.installUpdate({
+      installerPath: prepared.installerPath,
+      sha256: prepared.sha256,
+      expectedSha256: prepared.expectedSha256
+    });
     window.alert(result.message);
   } catch (error) {
-    window.alert(error instanceof Error ? error.message : 'Unable to launch installer.');
+    window.alert(error instanceof Error ? error.message : 'Unable to prepare update install.');
   } finally {
     updateActionBusy = false;
     await loadDiagnostics();
@@ -1330,6 +1378,44 @@ function renderBackupManager(backups: BackupRecord[]) {
   `;
 }
 
+function storageSummary(storage: StorageReport) {
+  return [
+    `Updates ${formatBytes(storage.updates.size)}`,
+    `backups ${formatBytes(storage.backups.size)}`,
+    `logs ${formatBytes(storage.logs.size)}`,
+    `memory ${formatBytes(storage.memory.size)}`
+  ].join(' / ');
+}
+
+function renderStorageManager(storage: StorageReport) {
+  return `
+    <div class="storage-meter-grid">
+      ${renderStorageMeter('Updates', storage.updates.size, storage.totalSize, `${storage.updates.files.length} files`)}
+      ${renderStorageMeter('Backups', storage.backups.size, storage.totalSize, `${storage.backups.count} saved`)}
+      ${renderStorageMeter('Logs', storage.logs.size, storage.totalSize, `${storage.logs.bundles.length} bundles`)}
+      ${renderStorageMeter('Memory DB', storage.memory.size, storage.totalSize, `${storage.memory.files.length} files`)}
+    </div>
+    <div class="update-actions">
+      <button class="hud-button" type="button" data-storage-cleanup="updates" data-icon="trash-2"><span>Clear Installers</span></button>
+      <button class="hud-button" type="button" data-storage-cleanup="logs" data-icon="trash-2"><span>Trim Logs</span></button>
+      <button class="hud-button" type="button" data-storage-cleanup="backups" data-icon="trash-2"><span>Prune Backups</span></button>
+    </div>
+    <p class="diagnostics-grid__note">${escapeHtml(storage.dataDir)}</p>
+  `;
+}
+
+function renderStorageMeter(label: string, size: number, total: number, detail: string) {
+  const percent = total > 0 ? Math.min(100, Math.round((size / total) * 100)) : 0;
+  return `
+    <div class="storage-meter">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(formatBytes(size))}</strong>
+      <div class="update-progress"><span style="width: ${percent}%"></span></div>
+      <p>${escapeHtml(detail)}</p>
+    </div>
+  `;
+}
+
 function wireRecoveryActions() {
   diagnosticsList.querySelector<HTMLButtonElement>('[data-recovery-reset-model]')?.addEventListener('click', async () => {
     if (!window.confirm('Reset model provider, endpoint, and model to safe defaults?')) return;
@@ -1350,6 +1436,24 @@ function wireRecoveryActions() {
     button.addEventListener('click', async () => {
       const result = await fetchJson<{ path: string; size: number }>('/api/logs/export');
       window.alert(`Log bundle exported:\n${result.path}`);
+    });
+  });
+}
+
+function wireStorageActions() {
+  diagnosticsList.querySelectorAll<HTMLButtonElement>('[data-storage-cleanup]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const target = button.dataset.storageCleanup;
+      if (!target) {
+        return;
+      }
+      const label = button.textContent?.trim() || 'clean storage';
+      if (!window.confirm(`${label}? Memories and settings will be left alone.`)) {
+        return;
+      }
+      const result = await postJson<{ removedCount: number }>(`/api/storage/cleanup`, { target });
+      voiceStatus.textContent = `Storage cleanup removed ${result.removedCount} item${result.removedCount === 1 ? '' : 's'}.`;
+      await loadDiagnostics();
     });
   });
 }

@@ -1,5 +1,6 @@
-const { app, BrowserWindow, Menu, Tray, dialog, globalShortcut, nativeTheme } = require('electron');
+const { app, BrowserWindow, Menu, Tray, dialog, globalShortcut, ipcMain, nativeTheme } = require('electron');
 const { spawn } = require('node:child_process');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -61,6 +62,7 @@ async function createWindow(appUrl) {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.cjs'),
       sandbox: true
     }
   });
@@ -118,6 +120,10 @@ app.on('window-all-closed', () => {
   }
 });
 
+ipcMain.handle('jarvis:update-install', async (_event, payload = {}) => {
+  return scheduleVerifiedUpdateInstall(payload);
+});
+
 function setupAutoUpdates(window) {
   if (!autoUpdater || !app.isPackaged || process.env.JARVIS_DISABLE_AUTO_UPDATE === '1') {
     return;
@@ -130,14 +136,14 @@ function setupAutoUpdates(window) {
   }
 
   autoUpdater.setFeedURL({ provider: 'github', owner, repo });
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
 
   autoUpdater.on('checking-for-update', () => {
     console.log('[updater] Checking for update');
   });
   autoUpdater.on('update-available', (info) => {
-    console.log(`[updater] Downloading ${info.version}`);
+    console.log(`[updater] Update ${info.version} is available through the in-app updater`);
   });
   autoUpdater.on('update-not-available', () => {
     console.log('[updater] App is up to date');
@@ -145,27 +151,104 @@ function setupAutoUpdates(window) {
   autoUpdater.on('error', (error) => {
     console.warn(`[updater] ${error.message}`);
   });
-  autoUpdater.on('update-downloaded', async (info) => {
-    const result = await dialog.showMessageBox(window, {
-      type: 'info',
-      buttons: ['Restart and update', 'Later'],
-      defaultId: 0,
-      cancelId: 1,
-      title: 'Update ready',
-      message: `Jarvis Neural Command Interface ${info.version} is ready.`,
-      detail: 'Restart now to replace the current app with the new version. Choosing Later installs it when you quit.'
-    });
-
-    if (result.response === 0) {
-      autoUpdater.quitAndInstall(false, true);
-    }
-  });
-
   setTimeout(() => {
     autoUpdater.checkForUpdates().catch((error) => {
       console.warn(`[updater] Update check failed: ${error.message}`);
     });
   }, 5000);
+}
+
+function scheduleVerifiedUpdateInstall(payload) {
+  if (process.platform !== 'win32') {
+    throw new Error('Desktop update install is only available on Windows.');
+  }
+  const installerPath = path.resolve(String(payload.installerPath || ''));
+  const updatesDir = path.join(app.getPath('userData'), 'data', 'updates');
+  if (!isSubpath(updatesDir, installerPath) || path.extname(installerPath).toLowerCase() !== '.exe' || !fs.existsSync(installerPath)) {
+    throw new Error('Installer path is not a verified Jarvis update download.');
+  }
+  const expectedSha256 = String(payload.sha256 || payload.expectedSha256 || '').trim();
+  if (expectedSha256) {
+    const actualSha256 = sha256File(installerPath);
+    if (actualSha256.toLowerCase() !== expectedSha256.toLowerCase()) {
+      throw new Error('Installer checksum changed after verification. Download the update again.');
+    }
+  }
+
+  const handoffScript = writeUpdateHandoffScript(installerPath);
+  const child = spawn('powershell.exe', [
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    handoffScript
+  ], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true
+  });
+  child.unref();
+
+  setTimeout(() => app.quit(), 250);
+  return {
+    scheduled: true,
+    message: 'Jarvis will close, install the verified update after the app exits, then reopen automatically.'
+  };
+}
+
+function writeUpdateHandoffScript(installerPath) {
+  const userData = app.getPath('userData');
+  const scriptPath = path.join(userData, 'run-verified-update.ps1');
+  const logPath = path.join(userData, 'update-install.log');
+  const currentPid = process.pid;
+  const backendPid = backend?.pid || 0;
+  const currentExe = process.execPath;
+  const installDir = path.dirname(currentExe);
+  const fallbackExe = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Jarvis Neural Command Interface', 'Jarvis Neural Command Interface.exe');
+  const lines = [
+    '$ErrorActionPreference = "Continue"',
+    `$installer = ${psQuote(installerPath)}`,
+    `$currentPid = ${currentPid}`,
+    `$backendPid = ${backendPid}`,
+    `$currentExe = ${psQuote(currentExe)}`,
+    `$fallbackExe = ${psQuote(fallbackExe)}`,
+    `$installDir = ${psQuote(installDir)}`,
+    `$log = ${psQuote(logPath)}`,
+    'function Log($message) { Add-Content -LiteralPath $log -Value "[$(Get-Date -Format o)] $message" }',
+    'New-Item -ItemType Directory -Force -Path (Split-Path -Parent $log) | Out-Null',
+    'Log "Waiting for Jarvis to exit before installing update."',
+    'try { Wait-Process -Id $currentPid -Timeout 120 -ErrorAction SilentlyContinue } catch {}',
+    'if ($backendPid -gt 0) { try { Wait-Process -Id $backendPid -Timeout 45 -ErrorAction SilentlyContinue } catch {} }',
+    'Start-Sleep -Seconds 2',
+    'Log "Starting verified installer: $installer"',
+    '$installerProcess = Start-Process -FilePath $installer -ArgumentList @("/S") -Wait -PassThru',
+    'Log "Installer exited with code $($installerProcess.ExitCode)."',
+    'Start-Sleep -Seconds 2',
+    '$candidates = @($currentExe, $fallbackExe) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }',
+    'if ($candidates.Count -gt 0) {',
+    '  Log "Restarting Jarvis from $($candidates[0])."',
+    '  Start-Process -FilePath $candidates[0] -WorkingDirectory (Split-Path -Parent $candidates[0])',
+    '} else {',
+    '  Log "Jarvis executable was not found after install."',
+    '}'
+  ];
+  fs.writeFileSync(scriptPath, lines.join('\r\n'));
+  return scriptPath;
+}
+
+function isSubpath(parent, child) {
+  const relative = path.relative(parent, child);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function sha256File(targetPath) {
+  const hash = crypto.createHash('sha256');
+  hash.update(fs.readFileSync(targetPath));
+  return hash.digest('hex').toUpperCase();
+}
+
+function psQuote(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
 }
 
 function startBackend() {
@@ -252,6 +335,7 @@ async function createStartupErrorWindow(error) {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload: path.join(__dirname, 'preload.cjs'),
       sandbox: true
     }
   });

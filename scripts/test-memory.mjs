@@ -96,8 +96,16 @@ assert.deepEqual(noisy, [], 'JSON parser should suppress known Codex startup dia
 const processCleanup = parser.push('SUCCESS: The process with PID 1234 has been terminated.\nERROR: The process "5678" not found.\n');
 assert.deepEqual(processCleanup, [], 'JSON parser should suppress Windows process cleanup diagnostics');
 
+const chat = taskStore.createChat({
+  title: 'Memory work chat',
+  workspace: 'C:\\jarvis-neural-command-interface'
+});
+assert.ok(chat.id, 'chat session should receive an id');
+assert.equal(chat.title, 'Memory work chat', 'chat title should persist');
+
 const taskRecord = {
   id: 'task-persist-1',
+  chatId: chat.id,
   prompt: 'Remember that this app uses task history.',
   workspace: 'C:\\jarvis-neural-command-interface',
   status: 'running',
@@ -125,15 +133,24 @@ taskStore.upsert({
 });
 const persistedTask = taskStore.get(taskRecord.id);
 assert.equal(persistedTask.status, 'completed', 'finished task should be persisted');
+assert.equal(persistedTask.chatId, chat.id, 'task chat id should round-trip');
 assert.deepEqual(persistedTask.rememberedMemoryIds, [inserted.id], 'remembered memory IDs should round-trip');
 assert.deepEqual(persistedTask.createdMemoryIds, [inserted.id], 'created memory IDs should round-trip');
 assert.equal(persistedTask.phase, 'done', 'task phase should round-trip');
 assert.match(persistedTask.logs, /test:memory/, 'task logs should round-trip');
+const touchedChat = taskStore.touchChat(chat.id, persistedTask);
+assert.equal(touchedChat.title, 'Memory work chat', 'named chats should keep their title when touched');
+const listedChat = taskStore.listChats().find((entry) => entry.id === chat.id);
+assert.equal(listedChat.taskCount, 1, 'chat list should include task counts');
+assert.equal(listedChat.lastStatus, 'completed', 'chat list should include latest task status');
+assert.equal(taskStore.listByChat(chat.id).length, 1, 'chat task listing should return associated tasks');
 
 const taskStoreAfterRestart = new TaskStore(dbPath);
 assert.equal(taskStoreAfterRestart.get(taskRecord.id).status, 'completed', 'task history should survive store restart');
+assert.equal(taskStoreAfterRestart.getChat(chat.id).title, 'Memory work chat', 'chat sessions should survive store restart');
 taskStoreAfterRestart.upsert({
   id: 'task-short-output',
+  chatId: chat.id,
   prompt: 'Reply briefly',
   workspace: 'C:\\jarvis-neural-command-interface',
   status: 'completed',

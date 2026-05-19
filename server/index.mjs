@@ -2,7 +2,7 @@ import express from 'express';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { isPathAllowed, loadConfig, publicConfig } from './config.mjs';
 import { EventBus } from './eventBus.mjs';
@@ -265,6 +265,15 @@ app.post('/api/recovery/clear-secrets', (_req, res, next) => {
   }
 });
 
+app.post('/api/recovery/repair-shortcuts', (_req, res, next) => {
+  try {
+    const repaired = repairShortcuts();
+    res.json({ repaired, message: repaired.length ? 'Jarvis shortcuts repaired.' : 'Shortcut repair is only available in the Windows desktop build.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post('/api/backups/:id/restore-settings', (req, res, next) => {
   try {
     const backup = backupById(req.params.id);
@@ -512,6 +521,48 @@ function openLocalPath(target) {
   spawn('xdg-open', [target], { stdio: 'ignore' }).unref();
 }
 
+function repairShortcuts() {
+  if (process.platform !== 'win32' || /node(\.exe)?$/i.test(path.basename(process.execPath))) {
+    return [];
+  }
+  const appName = 'Jarvis Neural Command Interface';
+  const exePath = process.execPath;
+  const shortcutTargets = [
+    path.join(process.env.USERPROFILE ?? '', 'Desktop', `${appName}.lnk`),
+    path.join(process.env.APPDATA ?? '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', `${appName}.lnk`)
+  ].filter(Boolean);
+  const script = `
+$ErrorActionPreference = 'Stop'
+$shell = New-Object -ComObject WScript.Shell
+foreach ($shortcutPath in @(${shortcutTargets.map(psQuote).join(',')})) {
+  $directory = Split-Path -Parent $shortcutPath
+  if (-not (Test-Path -LiteralPath $directory)) {
+    New-Item -ItemType Directory -Force -Path $directory | Out-Null
+  }
+  $shortcut = $shell.CreateShortcut($shortcutPath)
+  $shortcut.TargetPath = ${psQuote(exePath)}
+  $shortcut.WorkingDirectory = ${psQuote(path.dirname(exePath))}
+  $shortcut.IconLocation = ${psQuote(`${exePath},0`)}
+  $shortcut.Description = ${psQuote(appName)}
+  $shortcut.Save()
+}
+`;
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script], {
+    windowsHide: true,
+    encoding: 'utf8'
+  });
+  if (result.status !== 0) {
+    const error = new Error((result.stderr || result.stdout || 'Shortcut repair failed.').trim());
+    error.status = 500;
+    throw error;
+  }
+  return shortcutTargets;
+}
+
+function psQuote(value) {
+  return `'${String(value ?? '').replace(/'/g, "''")}'`;
+}
+
 app.get('/api/diagnostics', async (_req, res) => {
   const codex = await checkCodexStatus(config.codex.command);
   const localModel = await listLocalModels(config.localModel?.provider, config.localModel?.endpoint);
@@ -640,7 +691,56 @@ app.post('/api/remember', async (req, res, next) => {
   }
 });
 
-app.get('/api/tasks', (_req, res) => {
+app.get('/api/chats', (req, res) => {
+  const limit = req.query.limit ? Number(req.query.limit) : 80;
+  res.json({ chats: taskStore.listChats(Number.isFinite(limit) ? limit : 80) });
+});
+
+app.post('/api/chats', (req, res, next) => {
+  try {
+    const chat = taskStore.createChat({
+      title: req.body?.title,
+      workspace: req.body?.workspace ?? config.defaultWorkspace
+    });
+    res.status(201).json({ chat });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/chats/:id/tasks', (req, res) => {
+  const chat = taskStore.getChat(req.params.id);
+  if (!chat || chat.archived) {
+    res.status(404).json({ error: 'Chat not found.' });
+    return;
+  }
+  res.json({ chat, tasks: taskStore.listByChat(req.params.id, 120) });
+});
+
+app.put('/api/chats/:id', (req, res) => {
+  const chat = taskStore.updateChat(req.params.id, req.body ?? {});
+  if (!chat) {
+    res.status(404).json({ error: 'Chat not found.' });
+    return;
+  }
+  res.json({ chat });
+});
+
+app.delete('/api/chats/:id', (req, res) => {
+  const chat = taskStore.archiveChat(req.params.id);
+  if (!chat) {
+    res.status(404).json({ error: 'Chat not found.' });
+    return;
+  }
+  res.json({ chat });
+});
+
+app.get('/api/tasks', (req, res) => {
+  const chatId = String(req.query.chatId ?? '').trim();
+  if (chatId) {
+    res.json({ tasks: taskStore.listByChat(chatId, 120) });
+    return;
+  }
   res.json({ tasks: taskRunner.list() });
 });
 

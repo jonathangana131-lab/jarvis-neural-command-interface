@@ -94,6 +94,13 @@
   white-space: nowrap;
 }
 
+.memory-node-card__reason,
+.memory-detail-shell__insight span {
+  color: #9ac7d2;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .memory-node-card__footer .hud-button {
   flex: 0 0 auto;
   margin-top: 0;
@@ -142,6 +149,20 @@
   font-weight: 900;
 }
 
+.memory-detail-shell__insight {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid rgba(115, 243, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(0, 9, 16, 0.34);
+}
+
+.memory-detail-shell__insight strong {
+  color: var(--cyan-hot);
+  font-size: 12px;
+}
+
 #new-chat.active,
 .chat-session.active {
   border-color: rgba(140, 238, 255, 0.64) !important;
@@ -154,6 +175,51 @@
 
 .conversation-stream .conversation-message + .conversation-message {
   margin-top: 8px;
+}
+
+.mission-stepper {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin: 8px 0 10px;
+}
+
+.mission-stepper span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  color: var(--dim);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.mission-stepper i {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(115, 243, 255, 0.22);
+  border-radius: 50%;
+  background: rgba(115, 243, 255, 0.08);
+}
+
+.mission-stepper span.active {
+  color: var(--cyan-hot);
+}
+
+.mission-stepper span.active i {
+  background: var(--cyan);
+  box-shadow: 0 0 16px rgba(115, 243, 255, 0.6);
+}
+
+.mission-stepper span.complete {
+  color: var(--muted);
+}
+
+.mission-stepper span.complete i {
+  border-color: rgba(136, 255, 202, 0.6);
+  background: rgba(136, 255, 202, 0.45);
 }
 
 .storage-meter-grid {
@@ -5061,12 +5127,35 @@ sl-tooltip::part(base__popup) {
 .chat-session {
   display: grid;
   width: 100%;
-  gap: 4px;
-  padding: 10px 11px;
+  gap: 8px;
+  padding: 9px;
   color: var(--text);
-  cursor: pointer;
   text-align: left;
   transition: border-color 160ms ease, background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.chat-session__main {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.chat-session__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.chat-session__actions .hud-button {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 9px;
 }
 
 .chat-session:hover {

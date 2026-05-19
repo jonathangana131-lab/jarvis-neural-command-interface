@@ -32,7 +32,7 @@ import { JarvisScene } from './JarvisScene';
 import { MemoryAnimator } from './MemoryAnimator';
 import { TaskHud } from './TaskHud';
 import { VoiceSession } from './VoiceSession';
-import type { AppConfig, AssistantMode, MemoryRecord, ModelKeyStatus, SessionRecoveryState, TaskRecord, VoiceSettings } from './types';
+import type { AppConfig, AssistantMode, ChatSessionRecord, MemoryRecord, ModelKeyStatus, SessionRecoveryState, TaskRecord, VoiceSettings } from './types';
 
 const jarvisIcons = {
   Activity,
@@ -115,6 +115,7 @@ const resetMemory = required<HTMLButtonElement>('#reset-memory');
 const rememberCurrent = required<HTMLButtonElement>('#remember-current');
 const memorySearch = required<HTMLInputElement>('#memory-search');
 const memoryScopeFilter = required<HTMLSelectElement>('#memory-scope-filter');
+const memoryKindFilter = required<HTMLSelectElement>('#memory-kind-filter');
 const memoryDetail = required<HTMLElement>('#memory-detail');
 const refreshTasks = required<HTMLButtonElement>('#refresh-tasks');
 const taskHistoryList = required<HTMLElement>('#task-history-list');
@@ -174,9 +175,10 @@ let modeResetTimer = 0;
 const animatedMemoryIds = new Set<number>();
 let visibleMemories: MemoryRecord[] = [];
 let visibleTasks: TaskRecord[] = [];
+let visibleChats: ChatSessionRecord[] = [];
 let selectedMemoryId: number | null = null;
 let selectedTaskId: string | null = null;
-let currentChatStartedAt = window.localStorage.getItem('jarvis.chat.currentStartedAt') ?? '';
+let selectedChatId: string | null = window.localStorage.getItem('jarvis.chat.selectedId') || null;
 let reviewingHistoricalTask = false;
 let currentTab = 'run';
 let lastCommandPrompt = '';
@@ -199,6 +201,7 @@ let missionRenderFrame = 0;
 let lastMissionRenderAt = 0;
 let missionQueueLabel = 'Queue ready';
 let taskDispatchInFlight = false;
+const lastMemoryRecall = new Map<number, { mode: string; prompt: string; at: string }>();
 let voiceSettings: VoiceSettings = {
   voiceEnabled: true,
   spokenResponses: true,
@@ -393,7 +396,7 @@ chatSidebarScrim.addEventListener('click', () => {
 });
 
 newChat.addEventListener('click', () => {
-  startNewChat();
+  void startNewChat();
 });
 
 document.addEventListener('keydown', (event) => {
@@ -437,23 +440,25 @@ async function dispatchTask() {
   scene.setResponseActive(true);
   scene.pulseResponse(1.25);
   scene.pulseMemoryGrowth(0.5);
-  taskHud.upsert({
-    id: `dispatch-${Date.now()}`,
-    prompt,
-    workspace: taskWorkspace.value,
-    status: 'queued',
-    phase: 'queued',
-    output: '',
-    createdAt: new Date().toISOString(),
-    finishedAt: null,
-    exitCode: null
-  });
 
   try {
+    const chat = await ensureSelectedChat(prompt);
+    taskHud.upsert({
+      id: `dispatch-${Date.now()}`,
+      chatId: chat.id,
+      prompt,
+      workspace: taskWorkspace.value,
+      status: 'queued',
+      phase: 'queued',
+      output: '',
+      createdAt: new Date().toISOString(),
+      finishedAt: null,
+      exitCode: null
+    });
     const response = await fetch('/api/tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, workspace: taskWorkspace.value })
+      body: JSON.stringify({ prompt, workspace: taskWorkspace.value, chatId: chat.id })
     });
     const data = (await response.json()) as { task?: TaskRecord; error?: string };
     if (!response.ok || !data.task) {
@@ -469,6 +474,7 @@ async function dispatchTask() {
     taskPrompt.focus();
     taskHud.upsert(data.task);
     upsertVisibleTask(data.task, true);
+    await loadChats();
     scene.pulseResponse(0.9);
     renderCommandChat(true);
     renderIcons();
@@ -507,6 +513,10 @@ taskPrompt.addEventListener('input', () => {
 
 memoryScopeFilter.addEventListener('change', () => {
   void loadMemories(true);
+});
+
+memoryKindFilter.addEventListener('change', () => {
+  void loadMemories(false);
 });
 
 rememberCurrent.addEventListener('click', async () => {
@@ -671,6 +681,7 @@ async function boot() {
   void refreshUpdateBanner();
   await loadMemories(true);
   void loadSemanticEdges();
+  await loadChats();
   await loadTasks();
   try {
     await loadDiagnostics();
@@ -927,7 +938,15 @@ function connectEvents() {
       };
       const ids = Array.isArray(payload.ids) ? payload.ids.filter((id) => Number.isFinite(id)) : [];
       if (ids.length === 0) return;
+      const at = new Date().toISOString();
+      ids.forEach((id) => lastMemoryRecall.set(id, {
+        mode: payload.mode ?? 'semantic',
+        prompt: payload.prompt ?? '',
+        at
+      }));
       memoryAnimator.recall(ids, payload.mode ?? 'semantic');
+      renderMemories(visibleMemories);
+      renderMemoryDetail();
     } catch (error) {
       console.warn('[orb] malformed memory.recalled payload', error);
     }
@@ -947,6 +966,8 @@ function connectEvents() {
     resetStreamOutput(task.id);
     currentRunningTask = task;
     selectedTaskId = task.id;
+    selectedChatId = task.chatId ?? selectedChatId;
+    persistSelectedChat();
     reviewingHistoricalTask = false;
     clearTaskWatch(task.id);
     renderCommandChat(true);
@@ -965,6 +986,8 @@ function connectEvents() {
     lastCommandPhase = task.phase ?? task.status;
     currentRunningTask = task;
     selectedTaskId = task.id;
+    selectedChatId = task.chatId ?? selectedChatId;
+    persistSelectedChat();
     reviewingHistoricalTask = false;
     scheduleQueuedTaskWatch(task);
     renderCommandChat(true);
@@ -1036,6 +1059,7 @@ function connectEvents() {
       voiceSession.speakSummary(`Task ${task.status}. Check the response for details.`);
     }
     void loadMemories(false);
+    void loadChats();
     void loadTasks();
     void refreshQueueStatus();
     setMode(task.status === 'completed' ? 'learning' : 'idle');
@@ -1076,7 +1100,10 @@ async function loadMemories(hydrate: boolean) {
     params.set('workspace', taskWorkspace.value.trim());
   }
   const data = await fetchJson<{ memories: MemoryRecord[]; count: number }>(`/api/memories?${params.toString()}`);
-  const unique = uniqueMemories(data.memories).filter(isRealMemory);
+  const kind = memoryKindFilter.value;
+  const unique = uniqueMemories(data.memories)
+    .filter(isRealMemory)
+    .filter((memory) => !kind || memory.kind === kind);
   visibleMemories = unique;
   if (selectedMemoryId !== null && !visibleMemories.some((memory) => memory.id === selectedMemoryId)) {
     selectedMemoryId = null;
@@ -1095,10 +1122,25 @@ async function loadMemories(hydrate: boolean) {
 async function loadTasks() {
   const data = await fetchJson<{ tasks: TaskRecord[] }>('/api/tasks');
   visibleTasks = data.tasks;
-  ensureCurrentChatWindow();
   if (selectedTaskId !== null && !visibleTasks.some((task) => task.id === selectedTaskId)) {
     selectedTaskId = null;
     reviewingHistoricalTask = false;
+  }
+  if (selectedChatId && !visibleChats.some((chat) => chat.id === selectedChatId)) {
+    selectedChatId = visibleTasks.find((task) => task.id === selectedTaskId)?.chatId ?? visibleChats[0]?.id ?? null;
+    persistSelectedChat();
+  }
+  if (!selectedChatId && visibleChats.length > 0) {
+    selectedChatId = visibleChats[0].id;
+    persistSelectedChat();
+  }
+  if (selectedChatId && !reviewingHistoricalTask) {
+    const selectedTaskChatId = visibleTasks.find((task) => task.id === selectedTaskId)?.chatId ?? null;
+    if (selectedTaskChatId !== selectedChatId) {
+      selectedTaskId = visibleTasks
+        .filter((task) => task.chatId === selectedChatId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.id ?? null;
+    }
   }
   renderTaskHistory();
   renderArtifactCatalog();
@@ -1106,12 +1148,51 @@ async function loadTasks() {
   renderCommandChat();
 }
 
-function ensureCurrentChatWindow() {
-  if (currentChatStartedAt) {
-    return;
+async function loadChats() {
+  const data = await fetchJson<{ chats: ChatSessionRecord[] }>('/api/chats');
+  visibleChats = data.chats;
+  if (selectedChatId && !visibleChats.some((chat) => chat.id === selectedChatId)) {
+    selectedChatId = visibleChats[0]?.id ?? null;
+    persistSelectedChat();
   }
-  currentChatStartedAt = visibleTasks[0]?.createdAt ?? new Date().toISOString();
-  window.localStorage.setItem('jarvis.chat.currentStartedAt', currentChatStartedAt);
+  if (!selectedChatId && visibleChats.length > 0) {
+    selectedChatId = visibleChats[0].id;
+    persistSelectedChat();
+  }
+  renderChatSessions();
+}
+
+async function ensureSelectedChat(prompt = '') {
+  const existing = selectedChatId ? visibleChats.find((chat) => chat.id === selectedChatId) : null;
+  if (existing && !existing.archived) {
+    return existing;
+  }
+  const created = await postJson<{ chat: ChatSessionRecord }>('/api/chats', {
+    title: compactSessionTitle(prompt || 'New Chat'),
+    workspace: taskWorkspace.value
+  });
+  upsertVisibleChat(created.chat, true);
+  return created.chat;
+}
+
+function upsertVisibleChat(chat: ChatSessionRecord, select: boolean) {
+  visibleChats = [chat, ...visibleChats.filter((entry) => entry.id !== chat.id)]
+    .filter((entry) => !entry.archived)
+    .sort((a, b) => (b.lastTaskAt ?? b.updatedAt).localeCompare(a.lastTaskAt ?? a.updatedAt))
+    .slice(0, 80);
+  if (select) {
+    selectedChatId = chat.id;
+    persistSelectedChat();
+  }
+  renderChatSessions();
+}
+
+function persistSelectedChat() {
+  if (selectedChatId) {
+    window.localStorage.setItem('jarvis.chat.selectedId', selectedChatId);
+  } else {
+    window.localStorage.removeItem('jarvis.chat.selectedId');
+  }
 }
 
 async function loadDiagnostics() {
@@ -1158,7 +1239,7 @@ async function loadDiagnostics() {
     <article class="diagnostics-grid__wide"><strong>Storage</strong><span>${escapeHtml(formatBytes(storage.totalSize))}</span><p>${escapeHtml(storageSummary(storage))}</p>${renderStorageManager(storage)}</article>
     <article><strong>Queue</strong><span>${data.queue.paused ? 'Paused' : 'Active'}</span><p>${data.queue.runningTaskId ? `Running ${escapeHtml(data.queue.runningTaskId)}` : 'No active task'}</p></article>
     <article class="diagnostics-grid__wide"><strong>Session Recovery</strong><span>${data.session.previousCrashed ? 'Previous crash detected' : 'Clean'}</span><p>${escapeHtml(sessionRecoveryDetail(data.session))}</p>${renderSessionRecoveryActions(data.session)}</article>
-    <article class="diagnostics-grid__wide"><strong>Recovery</strong><span>Safe controls</span><p>Reset bad model settings, clear saved model secrets, or export a log bundle for bug reports.</p>${renderRecoveryActions()}</article>
+    <article class="diagnostics-grid__wide"><strong>Recovery</strong><span>Safe controls</span><p>Reset bad model settings, repair missing shortcuts, clear saved model secrets, or export a log bundle for bug reports.</p>${renderRecoveryActions()}</article>
     <article class="diagnostics-grid__wide"><strong>Backups</strong><span>${backups.backups.length} saved</span><p>Backups include memory database files, saved provider settings, and local model secrets. Memory database restore requires a restart-safe manual recovery step.</p>${renderBackupManager(backups.backups)}</article>
     <article class="diagnostics-grid__wide"><strong>Local Logs</strong><span>${escapeHtml(logs.path)}</span><pre>${escapeHtml(logs.tail || 'No log output yet.')}</pre></article>
   `;
@@ -1351,6 +1432,7 @@ function renderRecoveryActions() {
   return `
     <div class="update-actions">
       <button class="hud-button" type="button" data-recovery-reset-model data-icon="rotate-ccw"><span>Reset Model</span></button>
+      <button class="hud-button" type="button" data-recovery-repair-shortcuts data-icon="terminal-square"><span>Repair Shortcuts</span></button>
       <button class="hud-button" type="button" data-recovery-clear-secrets data-icon="trash-2"><span>Clear Secrets</span></button>
       <button class="hud-button" type="button" data-log-export data-icon="save"><span>Export Logs</span></button>
     </div>
@@ -1431,6 +1513,10 @@ function wireRecoveryActions() {
     window.alert(result.message);
     updateModelKeyStatus(result.modelKey);
     await loadDiagnostics();
+  });
+  diagnosticsList.querySelector<HTMLButtonElement>('[data-recovery-repair-shortcuts]')?.addEventListener('click', async () => {
+    const result = await postJson<{ message: string; repaired: string[] }>('/api/recovery/repair-shortcuts', {});
+    window.alert(result.repaired.length ? `${result.message}\n\n${result.repaired.join('\n')}` : result.message);
   });
   diagnosticsList.querySelectorAll<HTMLButtonElement>('[data-log-export]').forEach((button) => {
     button.addEventListener('click', async () => {
@@ -1953,16 +2039,20 @@ function renderMemories(memories: MemoryRecord[]) {
     .slice(0, 24)
     .map((memory) => {
       const confidence = Math.round((memory.confidence ?? 1) * 100);
+      const recall = recallReasonForMemory(memory);
+      const duplicates = duplicateMemoriesFor(memory);
       return `
        <article class="data-node memory-node-card ${memory.id === selectedMemoryId ? 'selected crystal-active' : ''}" data-memory-id="${memory.id}" data-memory-kind="${escapeHtml(memory.kind)}">
          <span class="memory-node-card__pulse" aria-hidden="true"></span>
          <div class="data-node__meta memory-node-card__meta">
            <strong>${escapeHtml(memory.title)}</strong>
-           <span>${escapeHtml(memory.kind)} / ${escapeHtml(memory.scope ?? 'project')}</span>
+           <span>${escapeHtml(memory.kind)} / ${escapeHtml(memory.scope ?? 'project')}${duplicates.length ? ` / ${duplicates.length} duplicate${duplicates.length === 1 ? '' : 's'}` : ''}</span>
          </div>
          <p>${escapeHtml(memory.content)}</p>
+         <small class="memory-node-card__reason">${escapeHtml(recall)}</small>
          <div class="memory-node-card__footer">
            <span>Importance ${memory.importance} / Signal ${confidence}%</span>
+           <button class="hud-button" type="button" data-icon="octagon-x" data-ignore-memory="${memory.id}"><span>Ignore</span></button>
            <button class="hud-button" type="button" data-icon="trash-2" data-delete-memory="${memory.id}"><span>Delete</span></button>
          </div>
        </article>
@@ -1983,6 +2073,13 @@ function renderMemories(memories: MemoryRecord[]) {
       if (Number.isFinite(memoryId)) {
         selectMemory(memoryId);
       }
+    });
+  });
+  memoryList.querySelectorAll<HTMLButtonElement>('[data-ignore-memory]').forEach((button) => {
+    button.addEventListener('click', async (event) => {
+      event.stopPropagation();
+      await putJson<{ memory: MemoryRecord; count: number }>(`/api/memories/${button.dataset.ignoreMemory}`, { archived: true });
+      await loadMemories(true);
     });
   });
   renderIcons();
@@ -2018,6 +2115,37 @@ function uniqueMemories(memories: MemoryRecord[]) {
     unique.push(memory);
   }
   return unique;
+}
+
+function recallReasonForMemory(memory: MemoryRecord) {
+  const recall = lastMemoryRecall.get(memory.id);
+  if (recall) {
+    const prompt = recall.prompt ? ` for "${compactSessionTitle(recall.prompt)}"` : '';
+    return `Recalled by ${recall.mode} search${prompt}`;
+  }
+  const selected = selectedTask();
+  if (selected?.rememberedMemoryIds?.includes(memory.id)) {
+    return `Used as context for ${compactSessionTitle(selected.prompt)}`;
+  }
+  if (Number(memory.pinned)) {
+    return 'Pinned anchor memory';
+  }
+  return memoryReason(memory);
+}
+
+function duplicateMemoriesFor(memory: MemoryRecord) {
+  const key = memoryFingerprint(memory);
+  return visibleMemories
+    .filter((entry) => entry.id !== memory.id && memoryFingerprint(entry) === key)
+    .slice(0, 5);
+}
+
+function memoryFingerprint(memory: MemoryRecord) {
+  return `${memory.kind}\n${memory.title}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 async function rememberText(text: string, source: string) {
@@ -2057,6 +2185,8 @@ function upsertVisibleTask(task: TaskRecord, select: boolean) {
     .slice(0, 40);
   if (select) {
     selectedTaskId = task.id;
+    selectedChatId = task.chatId ?? selectedChatId;
+    persistSelectedChat();
   }
   renderTaskHistory();
   renderArtifactCatalog();
@@ -2090,6 +2220,8 @@ function renderTaskHistory() {
       const taskId = item.dataset.taskId;
       if (taskId) {
         selectedTaskId = taskId;
+        selectedChatId = visibleTasks.find((task) => task.id === taskId)?.chatId ?? selectedChatId;
+        persistSelectedChat();
         renderTaskHistory();
         renderChatSessions();
         renderCommandChat(true);
@@ -2164,6 +2296,8 @@ function renderMemoryDetail() {
   }
   memoryDetail.classList.remove('hidden');
   const confidence = Math.round((memory.confidence ?? 1) * 100);
+  const duplicates = duplicateMemoriesFor(memory);
+  const recall = recallReasonForMemory(memory);
   memoryDetail.innerHTML = `
     <div class="memory-detail-shell__head">
       <span class="memory-detail-shell__node" aria-hidden="true"></span>
@@ -2173,6 +2307,10 @@ function renderMemoryDetail() {
       </div>
       <em>${confidence}%</em>
     </div>
+    <div class="memory-detail-shell__insight">
+      <strong>${escapeHtml(recall)}</strong>
+      <span>${duplicates.length ? `${duplicates.length} likely duplicate${duplicates.length === 1 ? '' : 's'} found` : 'No close duplicate in this filter'}</span>
+    </div>
     <input id="memory-edit-title" value="${escapeHtml(memory.title)}" />
     <textarea id="memory-edit-content">${escapeHtml(memory.content)}</textarea>
     <div class="memory-edit-row">
@@ -2181,6 +2319,8 @@ function renderMemoryDetail() {
         <option value="global" ${memory.scope === 'global' ? 'selected' : ''}>Global</option>
       </select>
       <button type="button" id="pin-memory" data-icon="pin"><span>${Number(memory.pinned) ? 'Unpin' : 'Pin'}</span></button>
+      <button type="button" id="ignore-memory" data-icon="octagon-x"><span>Ignore</span></button>
+      ${duplicates.length ? '<button type="button" id="archive-duplicates" data-icon="trash-2"><span>Archive Duplicates</span></button>' : ''}
       <button type="button" id="save-memory" data-icon="save"><span>Save</span></button>
     </div>
   `;
@@ -2195,6 +2335,16 @@ function renderMemoryDetail() {
   });
   required<HTMLButtonElement>('#pin-memory').addEventListener('click', async () => {
     await putJson<{ memory: MemoryRecord; count: number }>(`/api/memories/${memory.id}`, { pinned: !Number(memory.pinned) });
+    await loadMemories(true);
+  });
+  required<HTMLButtonElement>('#ignore-memory').addEventListener('click', async () => {
+    await putJson<{ memory: MemoryRecord; count: number }>(`/api/memories/${memory.id}`, { archived: true });
+    selectedMemoryId = null;
+    scene.setSelectedMemory(null);
+    await loadMemories(true);
+  });
+  memoryDetail.querySelector<HTMLButtonElement>('#archive-duplicates')?.addEventListener('click', async () => {
+    await Promise.all(duplicates.map((duplicate) => putJson<{ memory: MemoryRecord; count: number }>(`/api/memories/${duplicate.id}`, { archived: true })));
     await loadMemories(true);
   });
   renderIcons();
@@ -2303,9 +2453,12 @@ function completeStreamOutput(taskId: string, output: string) {
   }
 }
 
-function startNewChat() {
-  currentChatStartedAt = new Date().toISOString();
-  window.localStorage.setItem('jarvis.chat.currentStartedAt', currentChatStartedAt);
+async function startNewChat() {
+  const created = await postJson<{ chat: ChatSessionRecord }>('/api/chats', {
+    title: 'New Chat',
+    workspace: taskWorkspace.value
+  });
+  upsertVisibleChat(created.chat, true);
   selectedTaskId = null;
   reviewingHistoricalTask = false;
   currentRunningTask = null;
@@ -2330,16 +2483,21 @@ function startNewChat() {
   taskPrompt.focus();
 }
 
-function selectRunChat(taskId: string) {
-  if (!visibleTasks.some((task) => task.id === taskId)) {
+function selectChat(chatId: string) {
+  const chat = visibleChats.find((entry) => entry.id === chatId);
+  if (!chat) {
     return;
   }
-  selectedTaskId = taskId;
-  reviewingHistoricalTask = true;
-  const task = selectedTask();
-  lastCommandPrompt = task?.prompt ?? '';
-  lastCommandOutput = streamTaskId === taskId ? streamVisibleOutput : task?.output ?? '';
-  lastCommandPhase = task?.phase ?? task?.status ?? 'ready';
+  selectedChatId = chat.id;
+  persistSelectedChat();
+  reviewingHistoricalTask = false;
+  const newestTask = visibleTasks
+    .filter((task) => task.chatId === chat.id)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
+  selectedTaskId = newestTask?.id ?? null;
+  lastCommandPrompt = newestTask?.prompt ?? '';
+  lastCommandOutput = newestTask?.output ?? '';
+  lastCommandPhase = newestTask?.phase ?? newestTask?.status ?? 'ready';
   streamElement = null;
   streamScrollContainer = null;
   lastMissionSignature = '';
@@ -2355,26 +2513,53 @@ function setChatSidebarOpen(open: boolean) {
 }
 
 function renderChatSessions() {
-  newChat.classList.toggle('active', selectedTaskId === null);
-  const completedTasks = visibleTasks.filter((t) => t.status !== 'running' && t.status !== 'queued');
-  if (completedTasks.length === 0) {
+  newChat.classList.toggle('active', Boolean(selectedChatId && !visibleTasks.some((task) => task.chatId === selectedChatId)));
+  if (visibleChats.length === 0) {
     chatSessionList.innerHTML = '<div class="chat-session-empty">No saved chats yet.</div>';
     return;
   }
 
-  chatSessionList.innerHTML = completedTasks
-    .slice(0, 18)
+  chatSessionList.innerHTML = visibleChats
+    .slice(0, 30)
     .map(renderChatSessionButton)
     .join('');
 
-  chatSessionList.querySelectorAll<HTMLButtonElement>('[data-run-chat-id]').forEach((button) => {
+  chatSessionList.querySelectorAll<HTMLButtonElement>('[data-chat-select]').forEach((button) => {
     button.addEventListener('click', () => {
-      const taskId = button.dataset.runChatId;
-      if (taskId) {
-        selectRunChat(taskId);
+      const chatId = button.dataset.chatSelect;
+      if (chatId) {
+        selectChat(chatId);
       }
     });
   });
+  chatSessionList.querySelectorAll<HTMLButtonElement>('[data-chat-rename]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const chatId = button.dataset.chatRename;
+      const chat = visibleChats.find((entry) => entry.id === chatId);
+      if (!chat) return;
+      const title = window.prompt('Rename chat', chat.title)?.trim();
+      if (!title || title === chat.title) return;
+      const updated = await putJson<{ chat: ChatSessionRecord }>(`/api/chats/${encodeURIComponent(chat.id)}`, { title });
+      upsertVisibleChat(updated.chat, selectedChatId === chat.id);
+      renderCommandChat(true);
+    });
+  });
+  chatSessionList.querySelectorAll<HTMLButtonElement>('[data-chat-archive]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const chatId = button.dataset.chatArchive;
+      if (!chatId || !window.confirm('Archive this chat? Task history stays available in Archive.')) return;
+      await fetch(`/api/chats/${encodeURIComponent(chatId)}`, { method: 'DELETE' });
+      visibleChats = visibleChats.filter((chat) => chat.id !== chatId);
+      if (selectedChatId === chatId) {
+        selectedChatId = visibleChats[0]?.id ?? null;
+        selectedTaskId = visibleTasks.find((task) => task.chatId === selectedChatId)?.id ?? null;
+        persistSelectedChat();
+      }
+      renderChatSessions();
+      renderCommandChat(true);
+    });
+  });
+  renderIcons();
 }
 
 function pulseLiveStream() {
@@ -2398,26 +2583,32 @@ function scheduleStreamChromeRender() {
   });
 }
 
-function renderChatSessionButton(task: TaskRecord) {
-  const active = task.id === selectedTaskId;
-  const live = task.status === 'running' || task.status === 'queued';
-  const output = stripUiArtifactBlocks(task.output || '').trim();
-  const preview = output || (live ? 'Waiting for the first live response.' : 'No response captured yet.');
+function renderChatSessionButton(chat: ChatSessionRecord) {
+  const active = chat.id === selectedChatId;
+  const live = chat.lastStatus === 'running' || chat.lastStatus === 'queued';
+  const preview = chat.lastPrompt || (chat.taskCount ? 'No prompt captured yet.' : 'Empty chat ready for a mission.');
   return `
-    <button class="chat-session ${active ? 'active' : ''} ${live ? 'is-live' : ''}" type="button" data-run-chat-id="${escapeHtml(task.id)}">
-      <span class="chat-session__status">${escapeHtml(sessionStatusLabel(task))}</span>
-      <strong>${escapeHtml(compactSessionTitle(task.prompt))}</strong>
-      <em>${escapeHtml(formatTime(task.createdAt))} / ${escapeHtml(task.phase ?? task.status)}</em>
-      <p>${escapeHtml(preview)}</p>
-    </button>
+    <article class="chat-session ${active ? 'active' : ''} ${live ? 'is-live' : ''}">
+      <button class="chat-session__main" type="button" data-chat-select="${escapeHtml(chat.id)}">
+        <span class="chat-session__status">${escapeHtml(sessionStatusLabel(chat.lastStatus ?? null))}</span>
+        <strong>${escapeHtml(compactSessionTitle(chat.title))}</strong>
+        <em>${escapeHtml(formatTime(chat.lastTaskAt ?? chat.updatedAt))} / ${chat.taskCount ?? 0} task${chat.taskCount === 1 ? '' : 's'}</em>
+        <p>${escapeHtml(preview)}</p>
+      </button>
+      <div class="chat-session__actions">
+        <button type="button" class="hud-button hud-button--icon" data-icon="save" data-chat-rename="${escapeHtml(chat.id)}" aria-label="Rename chat"><span>Rename</span></button>
+        <button type="button" class="hud-button hud-button--icon" data-icon="trash-2" data-chat-archive="${escapeHtml(chat.id)}" aria-label="Archive chat"><span>Archive</span></button>
+      </div>
+    </article>
   `;
 }
 
-function sessionStatusLabel(task: TaskRecord) {
-  if (task.status === 'running') return 'Live';
-  if (task.status === 'queued') return 'Queued';
-  if (task.status === 'completed') return 'Done';
-  if (task.status === 'cancelled') return 'Stopped';
+function sessionStatusLabel(status: TaskRecord['status'] | null) {
+  if (status === 'running') return 'Live';
+  if (status === 'queued') return 'Queued';
+  if (status === 'completed') return 'Done';
+  if (status === 'cancelled') return 'Stopped';
+  if (!status) return 'Draft';
   return 'Review';
 }
 
@@ -2480,7 +2671,7 @@ function renderCommandChat(immediate = false) {
     selectedMemoryId,
     selectedTaskId,
     reviewingHistoricalTask,
-    currentChatStartedAt,
+    selectedChatId,
     conversationIds: conversationTasks.map((task) => `${task.id}:${task.status}:${task.phase}:${task.output.length}`),
     taskCount: visibleTasks.length,
     visibleMemories: visibleMemories.length,
@@ -2596,6 +2787,7 @@ function renderMissionTimeline(
         <span>${escapeHtml(statusText)} / ${escapeHtml(phase)}</span>
         <strong>${escapeHtml(task ? statusTitle(task.status) : 'Awaiting mission')}</strong>
       </div>
+      ${renderTaskPhaseStepper(task, phase)}
       <div class="conversation-stream ${live ? 'is-live' : ''}" ${task ? `data-stream-task="${escapeHtml(task.id)}"` : ''}>
         ${conversation}
       </div>
@@ -2614,6 +2806,28 @@ function renderActiveTaskActions(task: TaskRecord | null, output: string) {
       ${live ? `<button type="button" data-icon="octagon-x" data-cancel-active-task="${escapeHtml(task.id)}"><span>Stop</span></button>` : ''}
       ${!live ? `<button type="button" data-icon="rotate-cw" data-retry-active-task="${escapeHtml(task.id)}"><span>Retry</span></button>` : ''}
       ${output.trim() ? `<button type="button" data-icon="save" data-copy-task-summary="${escapeHtml(task.id)}"><span>Copy summary</span></button>` : ''}
+      ${(task.commandsRun?.length ?? 0) > 0 ? `<button type="button" data-icon="terminal-square" data-copy-task-commands="${escapeHtml(task.id)}"><span>Copy commands</span></button>` : ''}
+    </div>
+  `;
+}
+
+function renderTaskPhaseStepper(task: TaskRecord | null, phase: string) {
+  const steps = [
+    ['queued', 'Queued'],
+    ['planning', 'Plan'],
+    ['editing', 'Edit'],
+    ['testing', 'Verify'],
+    ['done', 'Done']
+  ] as const;
+  const normalized = phase === 'thinking' || phase === 'streaming' ? 'planning' : phase;
+  const activeIndex = task ? Math.max(0, steps.findIndex(([key]) => key === normalized)) : -1;
+  return `
+    <div class="mission-stepper" aria-label="Task lifecycle">
+      ${steps.map(([, label], index) => `
+        <span class="${index < activeIndex ? 'complete' : index === activeIndex ? 'active' : ''}">
+          <i></i>${escapeHtml(label)}
+        </span>
+      `).join('')}
     </div>
   `;
 }
@@ -2694,6 +2908,16 @@ function wireActiveTaskActions() {
     const summary = summarizeTaskForCopy(task);
     await navigator.clipboard.writeText(summary);
     voiceStatus.textContent = 'Task summary copied.';
+  });
+  commandChatFeed.querySelector<HTMLButtonElement>('[data-copy-task-commands]')?.addEventListener('click', async (event) => {
+    const taskId = (event.currentTarget as HTMLButtonElement).dataset.copyTaskCommands;
+    const task = taskId ? visibleTasks.find((entry) => entry.id === taskId) ?? selectedTask() : selectedTask();
+    const commands = task?.commandsRun ?? [];
+    if (commands.length === 0) {
+      return;
+    }
+    await navigator.clipboard.writeText(commands.join('\n'));
+    voiceStatus.textContent = 'Task commands copied.';
   });
 }
 
@@ -3141,12 +3365,14 @@ function selectedTask() {
 
 function currentChatTasks(activeTask: TaskRecord | null) {
   if (reviewingHistoricalTask) {
-    return activeTask ? [activeTask] : [];
+    if (!activeTask?.chatId) {
+      return activeTask ? [activeTask] : [];
+    }
   }
-  ensureCurrentChatWindow();
+  const chatId = activeTask?.chatId ?? selectedChatId;
   const tasks = visibleTasks
     .map((task) => activeTask && task.id === activeTask.id ? activeTask : task)
-    .filter((task) => !currentChatStartedAt || task.createdAt >= currentChatStartedAt)
+    .filter((task) => chatId ? task.chatId === chatId : false)
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   if (activeTask && !tasks.some((task) => task.id === activeTask.id)) {
     tasks.push(activeTask);

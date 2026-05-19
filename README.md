@@ -12,7 +12,14 @@ context for a task.
 
 Use the Windows installer from the latest GitHub Release:
 
-- `Jarvis-Neural-Command-Interface-Setup-0.2.0.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.6.0.exe`
+
+## Current Highlights
+
+- Persistent chat sessions with New Chat, rename, archive, and task-linked history.
+- A Memory Center with recall reasons, type filtering, ignore/archive controls, and duplicate cleanup.
+- A safer updater/recovery path with verified installer handoff, storage cleanup, backups, logs, and Windows shortcut repair.
+- A neural memory graph that keeps memory nodes on a clearer shell around the core orb.
 
 ## Requirements
 

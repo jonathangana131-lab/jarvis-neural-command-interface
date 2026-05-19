@@ -156,16 +156,41 @@ try {
   if (typeof logs.tail !== 'string' || !logs.path) {
     throw new Error(`Logs endpoint did not return a log path and tail: ${JSON.stringify(logs)}`);
   }
-  const first = await runTask(appPort, workspace, 'first live smoke message');
-  const second = await runTask(appPort, workspace, 'second live smoke message');
+  const chat = await postJson(appPort, '/api/chats', { title: 'Smoke chat', workspace });
+  if (!chat.chat?.id || chat.chat.title !== 'Smoke chat') {
+    throw new Error(`Chat create did not return a usable session: ${JSON.stringify(chat)}`);
+  }
+  const first = await runTask(appPort, workspace, 'first live smoke message', chat.chat.id);
+  const second = await runTask(appPort, workspace, 'second live smoke message', chat.chat.id);
 
   for (const [label, task] of [['first', first], ['second', second]]) {
     if (task.status !== 'completed') {
       throw new Error(`${label} task did not complete: ${task.status}`);
     }
+    if (task.chatId !== chat.chat.id) {
+      throw new Error(`${label} task did not preserve chat id: ${JSON.stringify(task)}`);
+    }
     if (!task.output.includes('stream token update complete.')) {
       throw new Error(`${label} task did not capture streamed output: ${task.output}`);
     }
+  }
+  const chats = await getJson(appPort, '/api/chats');
+  const listedChat = chats.chats.find((entry) => entry.id === chat.chat.id);
+  if (!listedChat || listedChat.taskCount !== 2 || listedChat.lastStatus !== 'completed') {
+    throw new Error(`Chat list did not summarize the completed tasks: ${JSON.stringify(chats)}`);
+  }
+  const chatTasks = await getJson(appPort, `/api/chats/${chat.chat.id}/tasks`);
+  if (chatTasks.tasks.length !== 2 || chatTasks.tasks[0].prompt !== 'first live smoke message') {
+    throw new Error(`Chat task listing was not ordered oldest to newest: ${JSON.stringify(chatTasks)}`);
+  }
+  const renamed = await putJson(appPort, `/api/chats/${chat.chat.id}`, { title: 'Renamed smoke chat' });
+  if (renamed.chat.title !== 'Renamed smoke chat') {
+    throw new Error(`Chat rename failed: ${JSON.stringify(renamed)}`);
+  }
+  await deleteJson(appPort, `/api/chats/${chat.chat.id}`);
+  const afterArchive = await getJson(appPort, '/api/chats');
+  if (afterArchive.chats.some((entry) => entry.id === chat.chat.id)) {
+    throw new Error(`Archived chat should not appear in active list: ${JSON.stringify(afterArchive)}`);
   }
 
   console.log('live stream smoke passed');
@@ -175,12 +200,34 @@ try {
   removeTempRoot(tempRoot);
 }
 
-async function runTask(port, workspacePath, prompt) {
-  const data = await postJson(port, '/api/tasks', { prompt, workspace: workspacePath });
+async function runTask(port, workspacePath, prompt, chatId) {
+  const data = await postJson(port, '/api/tasks', { prompt, workspace: workspacePath, chatId });
   if (!data.task?.id) {
     throw new Error(data.error ?? 'Task create did not return an id.');
   }
   return waitForTask(port, data.task.id);
+}
+
+async function putJson(port, pathname, body) {
+  const response = await fetch(`http://127.0.0.1:${port}${pathname}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error ?? `${pathname} failed with ${response.status}`);
+  }
+  return data;
+}
+
+async function deleteJson(port, pathname) {
+  const response = await fetch(`http://127.0.0.1:${port}${pathname}`, { method: 'DELETE' });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error ?? `${pathname} failed with ${response.status}`);
+  }
+  return data;
 }
 
 async function postJson(port, pathname, body) {

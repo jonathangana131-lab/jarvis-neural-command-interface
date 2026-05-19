@@ -66,8 +66,22 @@ export type MemoryRecord = {
   createdAt: string;
 };
 
+export type ChatSessionRecord = {
+  id: string;
+  title: string;
+  workspace: string;
+  archived?: boolean;
+  createdAt: string;
+  updatedAt: string;
+  taskCount?: number;
+  lastTaskAt?: string | null;
+  lastPrompt?: string | null;
+  lastStatus?: TaskRecord['status'] | null;
+};
+
 export type TaskRecord = {
   id: string;
+  chatId?: string | null;
   prompt: string;
   workspace: string;
   status: 'queued' | 'running' | 'completed' | 'failed' | 'timed_out' | 'cancelled';

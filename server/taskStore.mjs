@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
 export class TaskStore {
@@ -9,6 +10,7 @@ export class TaskStore {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS tasks (
         id TEXT PRIMARY KEY,
+        chat_id TEXT,
         prompt TEXT NOT NULL,
         workspace TEXT NOT NULL,
         status TEXT NOT NULL,
@@ -26,9 +28,19 @@ export class TaskStore {
         tests_run TEXT NOT NULL DEFAULT '[]',
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE TABLE IF NOT EXISTS chat_sessions (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        workspace TEXT NOT NULL DEFAULT '',
+        archived INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
       CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+      CREATE INDEX IF NOT EXISTS idx_chat_sessions_updated_at ON chat_sessions(updated_at DESC);
     `);
+    this.#ensureColumn('chat_id', 'TEXT');
     this.#ensureColumn('phase', "TEXT NOT NULL DEFAULT 'queued'");
     this.#ensureColumn('logs', "TEXT NOT NULL DEFAULT ''");
     this.#ensureColumn('remembered_memory_ids', "TEXT NOT NULL DEFAULT '[]'");
@@ -38,6 +50,7 @@ export class TaskStore {
     this.#ensureColumn('commands_run', "TEXT NOT NULL DEFAULT '[]'");
     this.#ensureColumn('tests_run', "TEXT NOT NULL DEFAULT '[]'");
     this.#ensureColumn('updated_at', 'TEXT');
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_chat_id ON tasks(chat_id)');
     this.#markInterruptedRunning();
   }
 
@@ -45,6 +58,13 @@ export class TaskStore {
     return this.db
       .prepare(`${selectTaskRows()} ORDER BY created_at DESC LIMIT ?`)
       .all(limit)
+      .map(normalizeTaskRow);
+  }
+
+  listByChat(chatId, limit = 80) {
+    return this.db
+      .prepare(`${selectTaskRows()} WHERE chat_id = ? ORDER BY created_at ASC LIMIT ?`)
+      .all(chatId, limit)
       .map(normalizeTaskRow);
   }
 
@@ -59,11 +79,12 @@ export class TaskStore {
     this.db
       .prepare(`
         INSERT INTO tasks (
-          id, prompt, workspace, status, phase, output, logs, created_at, finished_at, exit_code,
+          id, chat_id, prompt, workspace, status, phase, output, logs, created_at, finished_at, exit_code,
           remembered_memory_ids, created_memory_ids, memory_skipped, files_changed, commands_run,
           tests_run, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(id) DO UPDATE SET
+          chat_id = excluded.chat_id,
           prompt = excluded.prompt,
           workspace = excluded.workspace,
           status = excluded.status,
@@ -82,6 +103,7 @@ export class TaskStore {
       `)
       .run(
         task.id,
+        task.chatId ?? null,
         task.prompt,
         task.workspace,
         task.status,
@@ -112,6 +134,123 @@ export class TaskStore {
     return Boolean(this.db
       .prepare("SELECT id FROM tasks WHERE status = 'running' LIMIT 1")
       .get());
+  }
+
+  listChats(limit = 80) {
+    return this.db
+      .prepare(`
+        SELECT
+          c.id,
+          c.title,
+          c.workspace,
+          c.archived,
+          c.created_at AS createdAt,
+          c.updated_at AS updatedAt,
+          COUNT(t.id) AS taskCount,
+          MAX(t.created_at) AS lastTaskAt,
+          (
+            SELECT prompt
+            FROM tasks
+            WHERE chat_id = c.id
+            ORDER BY created_at DESC
+            LIMIT 1
+          ) AS lastPrompt,
+          (
+            SELECT status
+            FROM tasks
+            WHERE chat_id = c.id
+            ORDER BY created_at DESC
+            LIMIT 1
+          ) AS lastStatus
+        FROM chat_sessions c
+        LEFT JOIN tasks t ON t.chat_id = c.id
+        WHERE c.archived = 0
+        GROUP BY c.id
+        ORDER BY COALESCE(MAX(t.created_at), c.updated_at) DESC
+        LIMIT ?
+      `)
+      .all(limit)
+      .map(normalizeChatRow);
+  }
+
+  getChat(id) {
+    const row = this.db
+      .prepare(`
+        SELECT
+          id,
+          title,
+          workspace,
+          archived,
+          created_at AS createdAt,
+          updated_at AS updatedAt
+        FROM chat_sessions
+        WHERE id = ?
+      `)
+      .get(id);
+    return row ? normalizeChatRow(row) : null;
+  }
+
+  createChat({ title, workspace } = {}) {
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+    const cleanTitle = compactTitle(title, 'New Chat');
+    const cleanWorkspace = String(workspace ?? '').trim();
+    this.db
+      .prepare(`
+        INSERT INTO chat_sessions (id, title, workspace, archived, created_at, updated_at)
+        VALUES (?, ?, ?, 0, ?, ?)
+      `)
+      .run(id, cleanTitle, cleanWorkspace, now, now);
+    return this.getChat(id);
+  }
+
+  updateChat(id, updates = {}) {
+    const existing = this.getChat(id);
+    if (!existing) {
+      return null;
+    }
+    const title = updates.title === undefined
+      ? existing.title
+      : compactTitle(updates.title, existing.title || 'New Chat');
+    const archived = updates.archived === undefined ? existing.archived : Boolean(updates.archived);
+    const workspace = updates.workspace === undefined
+      ? existing.workspace
+      : String(updates.workspace ?? '').trim();
+    this.db
+      .prepare(`
+        UPDATE chat_sessions
+        SET title = ?,
+            workspace = ?,
+            archived = ?,
+            updated_at = ?
+        WHERE id = ?
+      `)
+      .run(title, workspace, archived ? 1 : 0, new Date().toISOString(), id);
+    return this.getChat(id);
+  }
+
+  archiveChat(id) {
+    return this.updateChat(id, { archived: true });
+  }
+
+  touchChat(id, task = null) {
+    const existing = this.getChat(id);
+    if (!existing) {
+      return null;
+    }
+    const title = existing.title === 'New Chat' && task?.prompt
+      ? titleFromPrompt(task.prompt)
+      : existing.title;
+    this.db
+      .prepare(`
+        UPDATE chat_sessions
+        SET title = ?,
+            workspace = COALESCE(NULLIF(?, ''), workspace),
+            updated_at = ?
+        WHERE id = ?
+      `)
+      .run(title, task?.workspace ?? '', new Date().toISOString(), id);
+    return this.getChat(id);
   }
 
   close() {
@@ -150,6 +289,7 @@ function selectTaskRows() {
   return `
     SELECT
       id,
+      chat_id AS chatId,
       prompt,
       workspace,
       status,
@@ -180,6 +320,27 @@ function normalizeTaskRow(row) {
     commandsRun: parseJsonArray(row.commandsRun),
     testsRun: parseJsonArray(row.testsRun)
   };
+}
+
+function normalizeChatRow(row) {
+  return {
+    ...row,
+    archived: Boolean(row.archived),
+    taskCount: Number(row.taskCount ?? 0),
+    lastTaskAt: row.lastTaskAt ?? null,
+    lastPrompt: row.lastPrompt ?? null,
+    lastStatus: row.lastStatus ?? null
+  };
+}
+
+function compactTitle(value, fallback) {
+  const title = String(value ?? '').replace(/\s+/g, ' ').trim();
+  return (title || fallback).slice(0, 96);
+}
+
+function titleFromPrompt(prompt) {
+  const cleaned = String(prompt ?? '').replace(/\s+/g, ' ').trim().replace(/[.!?]+$/g, '');
+  return compactTitle(cleaned || 'New Chat', 'New Chat');
 }
 
 function parseJsonArray(value) {

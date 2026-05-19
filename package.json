@@ -1,6 +1,6 @@
 {
   "name": "jarvis-neural-command-interface",
-  "version": "0.5.3",
+  "version": "0.6.0",
   "private": false,
   "type": "module",
   "main": "electron/main.cjs",

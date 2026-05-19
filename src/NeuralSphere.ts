@@ -74,17 +74,17 @@ const MODE_EXECUTE = new THREE.Color(0xffa64d);
 const MODE_LISTEN = new THREE.Color(0x96c7ff);
 const MODE_LEARN = new THREE.Color(0x76ffd1);
 const MODE_ERROR = new THREE.Color(0xff6174);
-const MEMORY_CORE_CLEARANCE = 1.18;
-const MEMORY_SHELL_MIN = 1.34;
-const MEMORY_SHELL_MAX = 1.92;
+const MEMORY_CORE_CLEARANCE = 1.52;
+const MEMORY_SHELL_MIN = 1.68;
+const MEMORY_SHELL_MAX = 2.28;
 
 const KIND_PALETTE: Record<string, { color: number; accent: number; direction: [number, number, number] }> = {
   preference: { color: 0x73f3ff, accent: 0xe9fdff, direction: [-0.78, 0.08, -0.22] },
   constraint: { color: 0x63d8ff, accent: 0xdaf7ff, direction: [0.78, 0.08, -0.18] },
   project: { color: 0x45a8ff, accent: 0xc8ecff, direction: [-0.56, -0.04, 0.12] },
   task: { color: 0x7cf2ff, accent: 0xf2feff, direction: [0.58, -0.04, 0.02] },
-  fact: { color: 0x6fffd8, accent: 0xe2fff6, direction: [0.06, 0.08, -0.46] },
-  conversation: { color: 0x94c7ff, accent: 0xeaf6ff, direction: [0.0, 0.04, 0.28] }
+  fact: { color: 0x73f3ff, accent: 0xe9fdff, direction: [0.06, 0.08, -0.46] },
+  conversation: { color: 0x82e9ff, accent: 0xe9fdff, direction: [0.0, 0.04, 0.28] }
 };
 
 function clamp01(value: number): number {
@@ -189,7 +189,7 @@ function makeSemanticCurve(
   }
   arcAxis.normalize();
   const shellRadius = Math.max(from.length(), to.length(), MEMORY_SHELL_MIN);
-  const outwardLift = THREE.MathUtils.lerp(0.42, 0.22, clampedWeight) + Math.min(distance, 1.8) * 0.12;
+  const outwardLift = THREE.MathUtils.lerp(0.5, 0.28, clampedWeight) + Math.min(distance, 1.8) * 0.14;
   const sideSweep = arcAxis.multiplyScalar(Math.sin((from.x + to.y + weight) * 3.41) * 0.18);
   const control = radial.multiplyScalar(shellRadius + outwardLift).add(sideSweep);
   const points: THREE.Vector3[] = [];
@@ -847,7 +847,7 @@ export class NeuralSphere {
     const ringSlot = order % 18;
     const angle = order * 2.399963 + shell * 0.57 + rng() * 0.42;
     const compactRadius = THREE.MathUtils.clamp(
-      1.28 + importance * 0.055 + shell * 0.048 + (ringSlot % 5) * 0.02 + scopePull + (rng() - 0.5) * 0.045,
+      1.64 + importance * 0.055 + shell * 0.048 + (ringSlot % 5) * 0.02 + scopePull + (rng() - 0.5) * 0.045,
       MEMORY_SHELL_MIN,
       MEMORY_SHELL_MAX
     );

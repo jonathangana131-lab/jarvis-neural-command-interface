@@ -83,7 +83,7 @@ export class CodexTaskRunner {
     return publicTask;
   }
 
-  start({ prompt, workspace }) {
+  start({ prompt, workspace, chatId }) {
     const cwd = path.resolve(workspace || this.config.defaultWorkspace);
     const cleanPrompt = String(prompt ?? '').trim();
     if (!cleanPrompt) {
@@ -98,10 +98,16 @@ export class CodexTaskRunner {
     }
     this.#assertPromptAllowed(cleanPrompt);
 
+    const chat = this.#ensureChatSession({
+      id: chatId,
+      prompt: cleanPrompt,
+      workspace: cwd
+    });
     const id = crypto.randomUUID();
     const outputMessagePath = this.#outputMessagePath(id);
     const task = {
       id,
+      chatId: chat?.id ?? null,
       prompt: cleanPrompt,
       workspace: cwd,
       status: 'queued',
@@ -120,6 +126,9 @@ export class CodexTaskRunner {
       exitCode: null
     };
     const publicTask = this.#persistTask(task);
+    if (publicTask.chatId) {
+      this.taskStore?.touchChat(publicTask.chatId, publicTask);
+    }
     this.eventBus.emit('task.queued', publicTask);
     this.#drainQueue();
     return publicTask;
@@ -132,7 +141,7 @@ export class CodexTaskRunner {
       error.status = 404;
       throw error;
     }
-    return this.start({ prompt: task.prompt, workspace: task.workspace });
+    return this.start({ prompt: task.prompt, workspace: task.workspace, chatId: task.chatId });
   }
 
   pauseQueue() {
@@ -630,9 +639,27 @@ export class CodexTaskRunner {
     return this.taskStore?.upsert(publicTask) ?? publicTask;
   }
 
+  #ensureChatSession({ id, prompt, workspace }) {
+    if (!this.taskStore) {
+      return null;
+    }
+    const cleanId = String(id ?? '').trim();
+    if (cleanId) {
+      const existing = this.taskStore.getChat(cleanId);
+      if (existing && !existing.archived) {
+        return this.taskStore.touchChat(existing.id, { prompt, workspace }) ?? existing;
+      }
+    }
+    return this.taskStore.createChat({
+      title: titleFromChatPrompt(prompt),
+      workspace
+    });
+  }
+
   #publicTask(task) {
     return {
       id: task.id,
+      chatId: task.chatId ?? null,
       prompt: task.prompt,
       workspace: task.workspace,
       status: task.status,
@@ -1268,6 +1295,12 @@ function titleFromTaskPrompt(prompt) {
     .replace(/[.!?]+$/g, '')
     .trim();
   return `Mission: ${title || 'Untitled task'}`;
+}
+
+function titleFromChatPrompt(prompt) {
+  return summarizeText(prompt, 84)
+    .replace(/[.!?]+$/g, '')
+    .trim() || 'New Chat';
 }
 
 function pushUnique(values, value) {

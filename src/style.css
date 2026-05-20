@@ -243,6 +243,411 @@
   }
 }
 
+/* v0.7.3 shared UI polish pass. Terminal overrides at the end win where needed. */
+:where(button, input, select, textarea):focus-visible {
+  outline: 2px solid rgba(229, 253, 255, 0.86);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(115, 243, 255, 0.14);
+}
+
+.hud-button,
+.ignite-button,
+.radial-nav button,
+.chat-sidebar-toggle,
+.memory-chip,
+.data-node,
+.dashboard-list-row,
+.model-preset-card {
+  user-select: none;
+}
+
+.panel-header,
+.settings-section,
+.dashboard-card,
+.diagnostics-grid article,
+.release-card,
+.memory-graph-legend,
+.memory-review-queue,
+.command-review-panel article,
+.detail-module,
+.data-node,
+.empty-state,
+.setup-wizard__panel {
+  border-radius: 8px;
+  clip-path: none;
+}
+
+.panel-header strong,
+.mission-title strong,
+.dashboard-card strong,
+.release-card strong,
+.diagnostics-grid strong,
+.settings-section strong,
+.model-profile-summary,
+.chat-session strong,
+.data-node strong {
+  letter-spacing: 0;
+}
+
+.panel-header,
+.command-mast,
+.voice-dock,
+.telemetry-strip article,
+.dashboard-card,
+.diagnostics-grid article,
+.release-card,
+.settings-section {
+  min-width: 0;
+}
+
+.panel-header .hud-button,
+.panel-actions .hud-button,
+.settings-row .hud-button,
+.update-actions .hud-button,
+.setup-wizard__actions .hud-button {
+  min-height: 36px;
+  border-radius: 8px;
+}
+
+.filter-row,
+.settings-section-grid,
+.setup-wizard__grid {
+  align-items: end;
+}
+
+.filter-row input,
+.filter-row select,
+.settings-section-grid input,
+.settings-section-grid select,
+.setup-wizard input,
+.setup-wizard select,
+.chat-search,
+.workspace-switcher select,
+#task-prompt {
+  border-color: rgba(115, 243, 255, 0.2);
+  border-radius: 8px;
+  background-color: rgba(0, 8, 15, 0.56);
+}
+
+.memory-graph-legend {
+  grid-template-columns: minmax(220px, 0.85fr) minmax(0, 1.15fr);
+  overflow: hidden;
+}
+
+.memory-graph-legend::after {
+  position: absolute;
+  inset: 10px 12px auto auto;
+  width: 72px;
+  height: 42px;
+  border: 1px solid rgba(115, 243, 255, 0.16);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 18px 14px, rgba(229, 253, 255, 0.86) 0 2px, transparent 3px),
+    radial-gradient(circle at 54px 12px, rgba(255, 200, 87, 0.9) 0 2px, transparent 3px),
+    radial-gradient(circle at 37px 31px, rgba(136, 255, 202, 0.84) 0 2px, transparent 3px),
+    linear-gradient(25deg, transparent 48%, rgba(115, 243, 255, 0.22) 49% 51%, transparent 52%),
+    linear-gradient(145deg, transparent 48%, rgba(115, 243, 255, 0.18) 49% 51%, transparent 52%);
+  content: "";
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.memory-chip {
+  position: relative;
+  grid-template-columns: minmax(0, 1fr);
+  padding-left: 22px;
+  background:
+    radial-gradient(circle at 10px 15px, rgba(229, 253, 255, 0.78) 0 3px, rgba(115, 243, 255, 0.22) 4px, transparent 8px),
+    linear-gradient(90deg, rgba(115, 243, 255, 0.13), rgba(0, 8, 14, 0.48));
+}
+
+.memory-chip::before {
+  position: absolute;
+  top: 18px;
+  bottom: 12px;
+  left: 10px;
+  width: 1px;
+  background: linear-gradient(180deg, rgba(115, 243, 255, 0.44), transparent);
+  content: "";
+  opacity: 0.78;
+}
+
+.memory-chip:hover,
+.memory-chip.selected {
+  background:
+    radial-gradient(circle at 10px 15px, rgba(255, 226, 162, 0.88) 0 3px, rgba(255, 200, 87, 0.22) 4px, transparent 8px),
+    linear-gradient(90deg, rgba(25, 91, 111, 0.5), rgba(0, 8, 14, 0.54));
+}
+
+.memory-node-card,
+.memory-review-list article,
+.data-node {
+  border-radius: 8px;
+}
+
+.memory-review-empty {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  min-width: 0;
+}
+
+.memory-review-empty strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.memory-review-empty span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.memory-node-card p,
+.data-node p,
+.detail-module p,
+.diagnostics-grid p,
+.dashboard-card p,
+.release-card p,
+.model-instructions,
+.backup-row p {
+  overflow-wrap: anywhere;
+}
+
+.chat-session-rail {
+  gap: 11px;
+}
+
+.chat-session-list {
+  padding-right: 5px;
+}
+
+.chat-session {
+  gap: 9px;
+}
+
+.chat-session__actions {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.chat-session__actions .hud-button {
+  min-width: 0;
+  min-height: 32px;
+  justify-content: center;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.chat-session__actions .hud-button span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.chat-session__actions .hud-button svg {
+  width: 15px;
+  height: 15px;
+}
+
+.chat-search {
+  min-height: 38px;
+}
+
+#new-chat {
+  min-height: 38px;
+  border-radius: 8px;
+}
+
+.release-checklist span,
+.backup-row,
+.storage-meter,
+.fix-grid span,
+.dashboard-list-row,
+.command-review-grid section {
+  border-radius: 8px;
+}
+
+.release-checklist em,
+.diagnostics-grid pre,
+.artifact-group code,
+.artifact-card__files > code,
+.command-review-grid code {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.update-banner {
+  right: clamp(18px, 3vw, 42px);
+  left: clamp(18px, 3vw, 42px);
+  max-width: 1040px;
+  margin-inline: auto;
+}
+
+@media (min-width: 901px) {
+  .command-console.active-view .mission-header {
+    right: 94px;
+    left: 24px;
+    grid-template-columns: minmax(220px, 318px) minmax(340px, 1fr) minmax(154px, 176px);
+    border-radius: 12px;
+  }
+
+  .command-console.active-view .mission-title,
+  .command-console.active-view .mission-vitals span,
+  .command-console.active-view .mission-card,
+  .command-console.active-view .mission-event--response,
+  .command-console.active-view .command-dock__main,
+  .command-console.active-view .workspace-switcher select,
+  .command-console.active-view .workspace-switcher .hud-button {
+    border-radius: 8px;
+  }
+
+  .command-console.active-view .mission-timeline {
+    left: clamp(300px, 22vw, 330px);
+    right: clamp(382px, 30vw, 424px);
+    bottom: 154px;
+    min-height: 194px;
+    max-height: min(310px, calc(100vh - 412px));
+  }
+
+  .command-console.active-view .conversation-stream {
+    padding-right: 8px;
+  }
+
+  .command-console.active-view .conversation-message {
+    width: min(94%, 820px);
+    border-radius: 8px;
+  }
+
+  .command-console.active-view .workspace-switcher,
+  .command-console.active-view .command-dock__main {
+    left: clamp(300px, 22vw, 330px);
+    right: clamp(382px, 30vw, 424px);
+  }
+
+  .command-console.active-view .workspace-switcher {
+    bottom: 94px;
+  }
+
+  .command-console.active-view .command-dock__main {
+    bottom: 22px;
+    grid-template-columns: minmax(0, 1fr) 112px;
+  }
+
+  .command-console.active-view .mission-grid {
+    top: 258px;
+    right: 94px;
+    bottom: 112px;
+    width: clamp(258px, 21vw, 292px);
+    gap: 9px;
+  }
+
+  .command-console.active-view .mission-memory-context {
+    max-height: min(24vh, 218px);
+  }
+
+  .command-console.active-view .mission-artifacts {
+    max-height: min(15vh, 136px);
+  }
+
+  .chat-session-rail,
+  .command-console.active-view .chat-session-rail {
+    top: 154px !important;
+    bottom: 18px !important;
+    width: min(302px, calc(100vw - 48px)) !important;
+    border-radius: 8px !important;
+  }
+
+  .chat-sidebar-toggle {
+    min-height: 42px;
+    border-radius: 8px;
+  }
+
+  #app[data-chat-sidebar="open"] .chat-sidebar-toggle {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transform: translateX(-10px) !important;
+  }
+}
+
+@media (max-width: 1240px) and (min-width: 901px) {
+  .command-console.active-view .mission-header {
+    grid-template-columns: minmax(190px, 0.75fr) minmax(280px, 1fr);
+  }
+
+  .command-console.active-view .mission-header .queue-controls {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .command-console.active-view .mission-grid {
+    width: 258px;
+  }
+}
+
+@media (max-width: 900px) {
+  .command-console.active-view .mission-header,
+  .mission-header,
+  .dashboard-grid,
+  .diagnostics-grid,
+  .settings-section-grid,
+  .filter-row,
+  .memory-graph-legend,
+  .command-review-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .panel-header,
+  .mission-header,
+  .update-banner,
+  .backup-row {
+    align-items: stretch;
+  }
+
+  .chat-session__actions {
+    grid-template-columns: repeat(4, 34px);
+    justify-content: start;
+  }
+
+  .workspace-switcher {
+    flex-direction: column;
+  }
+
+  .workspace-switcher select,
+  .workspace-switcher .hud-button,
+  .update-banner__actions .hud-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 620px) {
+  .command-mast,
+  .voice-dock,
+  .panel-header,
+  .settings-row,
+  .setup-wizard__actions,
+  .update-actions,
+  .dashboard-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .telemetry-strip,
+  .dashboard-actions,
+  .release-checklist {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hud-button,
+  .ignite-button {
+    width: 100%;
+  }
+}
+
 @media (max-width: 900px) {
   .command-console.active-view .mission-control,
   .mission-control {
@@ -6676,4 +7081,81 @@ sl-tooltip::part(base__popup) {
     right: 382px;
     left: 284px;
   }
+}
+
+/* v0.7.3 terminal polish lock. */
+@media (min-width: 901px) {
+  .command-console.active-view .mission-header {
+    right: 94px;
+    left: 24px;
+    grid-template-columns: minmax(220px, 318px) minmax(340px, 1fr) minmax(154px, 176px);
+    border-radius: 12px;
+  }
+
+  .command-console.active-view .mission-title,
+  .command-console.active-view .mission-vitals span,
+  .command-console.active-view .mission-card,
+  .command-console.active-view .mission-event--response,
+  .command-console.active-view .command-dock__main,
+  .command-console.active-view .workspace-switcher select,
+  .command-console.active-view .workspace-switcher .hud-button,
+  .chat-session-rail,
+  .chat-sidebar-toggle {
+    border-radius: 8px !important;
+  }
+
+  .command-console.active-view .mission-timeline {
+    left: clamp(300px, 22vw, 330px);
+    right: clamp(382px, 30vw, 424px);
+    bottom: 154px;
+    min-height: 194px;
+    max-height: min(310px, calc(100vh - 412px));
+  }
+
+  .command-console.active-view .workspace-switcher,
+  .command-console.active-view .command-dock__main {
+    left: clamp(300px, 22vw, 330px);
+    right: clamp(382px, 30vw, 424px);
+  }
+
+  .command-console.active-view .workspace-switcher {
+    bottom: 94px;
+  }
+
+  .command-console.active-view .command-dock__main {
+    bottom: 22px;
+    grid-template-columns: minmax(0, 1fr) 112px;
+  }
+
+  .command-console.active-view .mission-grid {
+    top: 258px;
+    right: 94px;
+    bottom: 112px;
+    width: clamp(258px, 21vw, 292px);
+    gap: 9px;
+  }
+
+  #app[data-chat-sidebar="open"] .chat-sidebar-toggle {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transform: translateX(-10px) !important;
+  }
+}
+
+.memory-review-empty {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+
+.memory-review-empty strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.memory-review-empty span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
 }

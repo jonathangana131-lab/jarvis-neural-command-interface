@@ -1,3 +1,43 @@
+# v0.7.3
+
+Focused UI refinement release.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.7.3.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.7.3.exe.blockmap`
+- `latest.yml`
+
+## Refined
+
+- Added another final UI review layer for Run, chat sessions, memory, diagnostics, settings, updater surfaces, and small-screen layouts.
+- Tightened chat session controls with clearer button labels/tooltips and more stable icon button sizing.
+- Improved neural memory surfaces with better node-style chip styling, wrapping, spacing, and scroll behavior.
+- Added stronger focus states, consistent panel radii, safer text wrapping, and calmer update/diagnostics cards.
+- Rebalanced desktop Run spacing so the timeline, workspace selector, prompt dock, side cards, and radial navigation do not crowd each other.
+
+## Verified
+
+- `npm run build`
+- Browser UI review across Run, Memory, Diagnostics, Settings, and chat drawer states
+- Recovery Dismiss action verified in the Run view
+- Chat drawer open state verified with the bottom Chats toggle hidden and non-clickable
+- `npm run test:memory`
+- `npm run test:voice-settings`
+- `node --check electron/main.cjs`
+- `npm run test:artifacts`
+- `npm run test:stream-parser`
+- `npm run test:live-smoke`
+- `npm run package:win`
+- `npm run test:packaged-smoke`
+- `npm run dist:win`
+- `npm run test:installed-ui-smoke`
+- Local install verified at `0.7.3` with Desktop and Start Menu shortcuts targeting the installed executable
+
+SHA256: `B857453716ABF8DC74BA727BFA78772E9653844BEBBB85921EE50AFAACC17192`
+
 # v0.7.2
 
 Updater reliability and five-pass UI refinement release.

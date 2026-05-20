@@ -3070,10 +3070,10 @@ function renderChatSessionButton(chat: ChatSessionRecord) {
         <p>${escapeHtml(preview)}</p>
       </button>
       <div class="chat-session__actions">
-        <button type="button" class="hud-button hud-button--icon" data-icon="pin" data-chat-pin="${escapeHtml(chat.id)}" aria-label="Pin chat"><span>${chat.pinned ? 'Unpin' : 'Pin'}</span></button>
-        <button type="button" class="hud-button hud-button--icon" data-icon="save" data-chat-rename="${escapeHtml(chat.id)}" aria-label="Rename chat"><span>Rename</span></button>
-        <button type="button" class="hud-button hud-button--icon" data-icon="rotate-ccw" data-chat-clear="${escapeHtml(chat.id)}" aria-label="Clear chat"><span>Clear</span></button>
-        <button type="button" class="hud-button hud-button--icon" data-icon="trash-2" data-chat-archive="${escapeHtml(chat.id)}" aria-label="Archive chat"><span>Archive</span></button>
+        <button type="button" class="hud-button hud-button--icon" data-icon="pin" data-chat-pin="${escapeHtml(chat.id)}" aria-label="${chat.pinned ? 'Unpin chat' : 'Pin chat'}" title="${chat.pinned ? 'Unpin chat' : 'Pin chat'}"><span>${chat.pinned ? 'Unpin' : 'Pin'}</span></button>
+        <button type="button" class="hud-button hud-button--icon" data-icon="save" data-chat-rename="${escapeHtml(chat.id)}" aria-label="Rename chat" title="Rename chat"><span>Rename</span></button>
+        <button type="button" class="hud-button hud-button--icon" data-icon="rotate-ccw" data-chat-clear="${escapeHtml(chat.id)}" aria-label="Clear chat transcript" title="Clear chat transcript"><span>Clear</span></button>
+        <button type="button" class="hud-button hud-button--icon" data-icon="trash-2" data-chat-archive="${escapeHtml(chat.id)}" aria-label="Archive chat" title="Archive chat"><span>Archive</span></button>
       </div>
     </article>
   `;

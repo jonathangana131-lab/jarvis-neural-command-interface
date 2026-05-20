@@ -1,3 +1,47 @@
+# v0.7.2
+
+Updater reliability and five-pass UI refinement release.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.7.2.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.7.2.exe.blockmap`
+- `latest.yml`
+
+## Fixed
+
+- Hardened the desktop update handoff so a silent NSIS installer cannot leave Jarvis waiting forever after the EXE has already been replaced.
+- The update handoff now times out stale installer processes, verifies the installed executable version, repairs Desktop and Start Menu shortcuts, and relaunches Jarvis from the installed path.
+- The frontend now passes the target update version into the desktop bridge so the handoff log can compare expected and installed versions.
+
+## Five UI Passes
+
+- Pass 1, Run cockpit: refined mission panel spacing, prompt/workspace anchoring, transcript height, and side-card memory clipping.
+- Pass 2, global chrome and updater: tightened nav active states, update banner contrast, and missing theme token fallbacks.
+- Pass 3, memory surfaces: improved memory chip wrapping, memory card height, review queue readability, and action wrapping.
+- Pass 4, dashboard/diagnostics/release: normalized card radius, release checklist wrapping, storage/fix grids, and long-path handling.
+- Pass 5, chat/history/responsive: tightened chat drawer actions, long code/file wrapping, mobile update banner stacking, and small-screen grid behavior.
+
+## Verified
+
+- `npm run build`
+- `npm run test:memory`
+- `npm run test:voice-settings`
+- `node --check electron/main.cjs`
+- `npm run test:artifacts`
+- `npm run test:stream-parser`
+- `npm run test:live-smoke`
+- Browser UI review across Run, Memory, Diagnostics, and History views
+- `npm run package:win`
+- `npm run test:packaged-smoke`
+- `npm run dist:win`
+- `npm run test:installed-ui-smoke`
+- Local install verified at `0.7.2` with Desktop and Start Menu shortcuts targeting the installed executable
+
+SHA256: `F4D1AB85A897082954B7BFB52533075BAEBD1AC8DABDC8A9BC6996E52F10FFA7`
+
 # v0.7.1
 
 Patch release for the Run cockpit update path.

@@ -175,7 +175,7 @@ function scheduleVerifiedUpdateInstall(payload) {
     }
   }
 
-  const handoffScript = writeUpdateHandoffScript(installerPath);
+  const handoffScript = writeUpdateHandoffScript(installerPath, String(payload.version || '').trim());
   const child = spawn('powershell.exe', [
     '-NoProfile',
     '-ExecutionPolicy',
@@ -196,7 +196,7 @@ function scheduleVerifiedUpdateInstall(payload) {
   };
 }
 
-function writeUpdateHandoffScript(installerPath) {
+function writeUpdateHandoffScript(installerPath, targetVersion = '') {
   const userData = app.getPath('userData');
   const scriptPath = path.join(userData, 'run-verified-update.ps1');
   const logPath = path.join(userData, 'update-install.log');
@@ -205,29 +205,61 @@ function writeUpdateHandoffScript(installerPath) {
   const currentExe = process.execPath;
   const installDir = path.dirname(currentExe);
   const fallbackExe = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Jarvis Neural Command Interface', 'Jarvis Neural Command Interface.exe');
+  const startMenuShortcut = path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Jarvis Neural Command Interface', 'Jarvis Neural Command Interface.lnk');
+  const desktopShortcut = path.join(process.env.USERPROFILE || '', 'Desktop', 'Jarvis Neural Command Interface.lnk');
   const lines = [
     '$ErrorActionPreference = "Continue"',
     `$installer = ${psQuote(installerPath)}`,
+    `$targetVersion = ${psQuote(targetVersion)}`,
     `$currentPid = ${currentPid}`,
     `$backendPid = ${backendPid}`,
     `$currentExe = ${psQuote(currentExe)}`,
     `$fallbackExe = ${psQuote(fallbackExe)}`,
     `$installDir = ${psQuote(installDir)}`,
+    `$startMenuShortcut = ${psQuote(startMenuShortcut)}`,
+    `$desktopShortcut = ${psQuote(desktopShortcut)}`,
     `$log = ${psQuote(logPath)}`,
     'function Log($message) { Add-Content -LiteralPath $log -Value "[$(Get-Date -Format o)] $message" }',
+    'function VersionOf($exe) { try { if (Test-Path -LiteralPath $exe) { return [string]((Get-Item -LiteralPath $exe).VersionInfo.ProductVersion) } } catch {} return "" }',
+    'function RepairShortcut($shortcutPath, $target) {',
+    '  try {',
+    '    if (-not $shortcutPath -or -not $target -or -not (Test-Path -LiteralPath $target)) { return }',
+    '    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $shortcutPath) | Out-Null',
+    '    $shell = New-Object -ComObject WScript.Shell',
+    '    $shortcut = $shell.CreateShortcut($shortcutPath)',
+    '    $shortcut.TargetPath = $target',
+    '    $shortcut.WorkingDirectory = Split-Path -Parent $target',
+    '    $shortcut.IconLocation = "$target,0"',
+    '    $shortcut.Description = "Jarvis Neural Command Interface"',
+    '    $shortcut.Save()',
+    '    Log "Shortcut repaired: $shortcutPath -> $target"',
+    '  } catch { Log "Shortcut repair failed for ${shortcutPath}: $($_.Exception.Message)" }',
+    '}',
     'New-Item -ItemType Directory -Force -Path (Split-Path -Parent $log) | Out-Null',
     'Log "Waiting for Jarvis to exit before installing update."',
     'try { Wait-Process -Id $currentPid -Timeout 120 -ErrorAction SilentlyContinue } catch {}',
     'if ($backendPid -gt 0) { try { Wait-Process -Id $backendPid -Timeout 45 -ErrorAction SilentlyContinue } catch {} }',
     'Start-Sleep -Seconds 2',
     'Log "Starting verified installer: $installer"',
-    '$installerProcess = Start-Process -FilePath $installer -ArgumentList @("/S") -Wait -PassThru',
-    'Log "Installer exited with code $($installerProcess.ExitCode)."',
+    '$installerProcess = Start-Process -FilePath $installer -ArgumentList @("/S") -PassThru',
+    '$installerFinished = $installerProcess.WaitForExit(600000)',
+    'if ($installerFinished) {',
+    '  Log "Installer exited with code $($installerProcess.ExitCode)."',
+    '} else {',
+    '  Log "Installer did not exit before timeout; checking installed version before cleanup."',
+    '  try { Stop-Process -Id $installerProcess.Id -Force -ErrorAction SilentlyContinue } catch {}',
+    '}',
     'Start-Sleep -Seconds 2',
     '$candidates = @($currentExe, $fallbackExe) | Where-Object { $_ -and (Test-Path -LiteralPath $_) }',
     'if ($candidates.Count -gt 0) {',
-    '  Log "Restarting Jarvis from $($candidates[0])."',
-    '  Start-Process -FilePath $candidates[0] -WorkingDirectory (Split-Path -Parent $candidates[0])',
+    '  $targetExe = $candidates[0]',
+    '  $installedVersion = VersionOf $targetExe',
+    '  Log "Installed Jarvis candidate: $targetExe version $installedVersion."',
+    '  if ($targetVersion -and $installedVersion -and $installedVersion -ne $targetVersion) { Log "Expected version $targetVersion but found $installedVersion." }',
+    '  RepairShortcut $desktopShortcut $targetExe',
+    '  RepairShortcut $startMenuShortcut $targetExe',
+    '  Log "Restarting Jarvis from $targetExe."',
+    '  Start-Process -FilePath $targetExe -WorkingDirectory (Split-Path -Parent $targetExe)',
     '} else {',
     '  Log "Jarvis executable was not found after install."',
     '}'

@@ -21,6 +21,273 @@
   color-scheme: dark;
 }
 
+/* v0.7.2 five-pass UI review:
+   1) Run cockpit, 2) global chrome/updater, 3) memory surfaces,
+   4) dashboard/diagnostics/release, 5) chat/history/responsive. */
+:root {
+  --text-strong: var(--cyan-hot);
+  --text-muted: var(--muted);
+  --green-hot: var(--ok);
+}
+
+@media (min-width: 901px) {
+  .command-console.active-view .mission-timeline {
+    right: 408px;
+    bottom: 154px;
+    left: 316px;
+    min-height: 188px;
+    max-height: min(300px, calc(100vh - 420px));
+  }
+
+  .command-console.active-view .mission-event--response {
+    padding: 13px 15px;
+    border-radius: 10px;
+  }
+
+  .command-console.active-view .conversation-stream {
+    gap: 8px;
+    padding-right: 6px;
+  }
+
+  .command-console.active-view .conversation-message {
+    width: min(94%, 780px);
+    padding: 9px 11px;
+    border-radius: 8px;
+  }
+
+  .command-console.active-view .workspace-switcher {
+    bottom: 92px;
+    align-items: stretch;
+  }
+
+  .command-console.active-view .command-dock__main {
+    bottom: 22px;
+    min-height: 66px;
+    border-radius: 10px;
+  }
+
+  .command-console.active-view .mission-grid {
+    width: min(292px, calc(100vw - 1030px));
+    min-width: 260px;
+  }
+
+  .command-console.active-view .mission-card {
+    border-radius: 8px;
+  }
+
+  .command-console.active-view .mission-memory-context,
+  .mission-memory-context {
+    max-height: 206px;
+    gap: 8px;
+    padding-right: 6px;
+  }
+
+  .command-console.active-view .memory-chip,
+  .memory-chip {
+    min-height: 54px;
+    padding: 9px 10px;
+  }
+
+  .command-console.active-view .memory-chip strong,
+  .memory-chip strong {
+    display: -webkit-box;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .command-console.active-view .memory-chip span,
+  .command-console.active-view .memory-chip em,
+  .memory-chip span,
+  .memory-chip em {
+    white-space: normal;
+  }
+}
+
+.update-banner {
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 12% 0, rgba(115, 243, 255, 0.16), transparent 34%),
+    linear-gradient(135deg, rgba(4, 20, 31, 0.96), rgba(0, 5, 11, 0.92));
+}
+
+.update-banner__actions .hud-button,
+.update-actions .hud-button {
+  white-space: nowrap;
+}
+
+.radial-nav button.active {
+  border-color: rgba(229, 253, 255, 0.9);
+  box-shadow: 0 0 22px rgba(115, 243, 255, 0.22), inset 0 0 18px rgba(115, 243, 255, 0.08);
+}
+
+.telemetry-strip article,
+.brand-lockup,
+.voice-dock {
+  min-width: 0;
+}
+
+.filter-row {
+  align-items: stretch;
+}
+
+.filter-row input,
+.filter-row select,
+.chat-search,
+.workspace-switcher select {
+  border-radius: 8px;
+}
+
+.memory-graph-legend,
+.memory-review-queue,
+.dashboard-card,
+.release-card,
+.command-review-panel article {
+  border-radius: 8px;
+}
+
+.memory-review-list article,
+.dashboard-list-row,
+.command-review-grid section,
+.release-checklist span {
+  border-radius: 8px;
+}
+
+.memory-review-head > span,
+.memory-review-list article span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.memory-node-card {
+  min-height: 118px;
+}
+
+.memory-node-card p {
+  -webkit-line-clamp: 4;
+}
+
+.memory-node-card__footer {
+  flex-wrap: wrap;
+}
+
+.memory-node-card__footer .hud-button {
+  flex: 0 0 auto;
+}
+
+.dashboard-card,
+.release-card,
+.diagnostics-grid article {
+  overflow: hidden;
+}
+
+.dashboard-card strong,
+.release-card strong,
+.command-review-panel strong,
+.diagnostics-grid strong {
+  white-space: normal;
+}
+
+.release-checklist span {
+  grid-template-columns: auto minmax(120px, 0.65fr) minmax(0, 1fr);
+}
+
+.release-checklist em {
+  white-space: normal;
+}
+
+.storage-meter-grid,
+.fix-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.chat-session-rail {
+  border-radius: 8px;
+}
+
+.chat-session {
+  border-radius: 8px;
+}
+
+.chat-session__actions {
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+}
+
+.chat-session__actions .hud-button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-actions {
+  gap: 9px;
+}
+
+.command-review-grid code,
+.artifact-card__files > code,
+.artifact-group code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1240px) and (min-width: 901px) {
+  .command-console.active-view .mission-grid {
+    width: 270px;
+  }
+
+  .command-console.active-view .mission-timeline,
+  .command-console.active-view .workspace-switcher,
+  .command-console.active-view .command-dock__main {
+    right: 382px;
+    left: 284px;
+  }
+}
+
+@media (max-width: 900px) {
+  .command-console.active-view .mission-control,
+  .mission-control {
+    gap: 12px;
+  }
+
+  .workspace-switcher {
+    gap: 8px;
+  }
+
+  .workspace-switcher .hud-button {
+    min-height: 38px;
+  }
+
+  .conversation-message {
+    width: 100%;
+  }
+
+  .release-checklist span {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .release-checklist em {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 620px) {
+  .mission-header,
+  .memory-review-head,
+  .memory-review-list article {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .update-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .update-banner__actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* v0.5.2 polish: memory cards now read like neural nodes instead of generic rows. */
 .memory-node-card {
   isolation: isolate;
@@ -6344,5 +6611,69 @@ sl-tooltip::part(base__popup) {
   .command-console.active-view .mission-event--command,
   .command-console.active-view .mission-event--signal {
     display: none;
+  }
+}
+
+/* v0.7.2 final reviewed desktop layout. */
+@media (min-width: 901px) {
+  .command-console.active-view .mission-timeline {
+    right: 408px;
+    bottom: 154px;
+    left: 316px;
+    min-height: 188px;
+    max-height: min(300px, calc(100vh - 420px));
+  }
+
+  .command-console.active-view .mission-event--response {
+    padding: 13px 15px;
+    border-radius: 10px;
+  }
+
+  .command-console.active-view .command-dock__main {
+    bottom: 22px;
+    min-height: 66px;
+    border-radius: 10px;
+  }
+
+  .command-console.active-view .workspace-switcher {
+    bottom: 92px;
+  }
+
+  .command-console.active-view .mission-grid {
+    width: min(292px, calc(100vw - 1030px));
+    min-width: 260px;
+  }
+
+  .command-console.active-view .mission-card,
+  .command-console.active-view .memory-chip {
+    border-radius: 8px;
+  }
+
+  .command-console.active-view .memory-chip strong,
+  .memory-chip strong {
+    display: -webkit-box;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .command-console.active-view .memory-chip span,
+  .command-console.active-view .memory-chip em,
+  .memory-chip span,
+  .memory-chip em {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 1240px) and (min-width: 901px) {
+  .command-console.active-view .mission-grid {
+    width: 270px;
+  }
+
+  .command-console.active-view .mission-timeline,
+  .command-console.active-view .workspace-switcher,
+  .command-console.active-view .command-dock__main {
+    right: 382px;
+    left: 284px;
   }
 }

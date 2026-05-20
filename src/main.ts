@@ -361,7 +361,7 @@ declare global {
   interface Window {
     jarvisDesktop?: {
       platform: string;
-      installUpdate(payload: { installerPath: string; sha256: string; expectedSha256?: string | null }): Promise<{ scheduled: boolean; message: string }>;
+      installUpdate(payload: { installerPath: string; sha256: string; expectedSha256?: string | null; version?: string | null }): Promise<{ scheduled: boolean; message: string }>;
     };
   }
 }
@@ -1787,7 +1787,8 @@ async function installDownloadedUpdate() {
     const result = await window.jarvisDesktop.installUpdate({
       installerPath: prepared.installerPath,
       sha256: prepared.sha256,
-      expectedSha256: prepared.expectedSha256
+      expectedSha256: prepared.expectedSha256,
+      version: prepared.version
     });
     window.alert(result.message);
   } catch (error) {

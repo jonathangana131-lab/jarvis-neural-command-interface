@@ -1,3 +1,36 @@
+# v0.7.1
+
+Patch release for the Run cockpit update path.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.7.1.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.7.1.exe.blockmap`
+- `latest.yml`
+
+## Fixed
+
+- Removed the extra task template strip from the Run view.
+- Rebalanced the mission transcript and workspace selector spacing so the UI feels cleaner around the orb.
+- Kept the release metadata compatible with the in-app updater so v0.7.0 can see and install v0.7.1.
+
+## Verified
+
+- `npm run build`
+- `npm run test:memory`
+- `npm run test:voice-settings`
+- `npm run test:artifacts`
+- `npm run test:stream-parser`
+- `npm run test:live-smoke`
+- `npm run package:win`
+- `npm run test:packaged-smoke`
+- `npm run dist:win`
+- `npm run test:installed-ui-smoke`
+
+SHA256: `B40BDB52C1890A704CB23BA0999CD82F024907B8102BEC52523F94F4B03D9B56`
+
 # v0.7.0
 
 Polish release for a stronger daily-use cockpit: better chat control, dashboard visibility, release readiness, memory review, and a refined neural UI pass.

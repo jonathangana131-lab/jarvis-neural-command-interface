@@ -500,13 +500,13 @@
     position: fixed;
     z-index: 4;
     right: 408px;
-    bottom: 276px;
+    bottom: 154px;
     left: 316px;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
     min-height: 176px;
-    max-height: min(220px, calc(100vh - 560px));
+    max-height: min(250px, calc(100vh - 438px));
     margin: 0;
     pointer-events: auto;
   }
@@ -3830,8 +3830,7 @@ sl-tooltip::part(base__popup) {
     transform: none;
   }
 
-  .workspace-switcher,
-  .task-template-row {
+  .workspace-switcher {
     right: 176px;
     left: 24px;
   }
@@ -3969,8 +3968,7 @@ sl-tooltip::part(base__popup) {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .workspace-switcher,
-  .task-template-row {
+  .workspace-switcher {
     position: relative;
     z-index: 2;
     right: auto;
@@ -3982,10 +3980,6 @@ sl-tooltip::part(base__popup) {
   .workspace-switcher {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .task-template-row {
-    margin-top: 2px;
   }
 
   .dashboard-grid,
@@ -4055,7 +4049,6 @@ sl-tooltip::part(base__popup) {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .task-template-row .hud-button,
   .dashboard-actions .hud-button,
   .fix-grid .hud-button {
     width: 100%;
@@ -5273,8 +5266,7 @@ sl-tooltip::part(base__popup) {
   line-height: 1.35;
 }
 
-.workspace-switcher,
-.task-template-row {
+.workspace-switcher {
   position: fixed;
   z-index: 3;
   right: 408px;
@@ -5289,22 +5281,12 @@ sl-tooltip::part(base__popup) {
   bottom: 92px;
 }
 
-.task-template-row {
-  bottom: 142px;
-}
-
 .workspace-switcher select {
   min-width: min(360px, 100%);
   min-height: 34px;
   flex: 1 1 240px;
   padding: 0 10px;
   font-size: 12px;
-}
-
-.task-template-row .hud-button {
-  min-height: 30px;
-  padding: 0 9px;
-  font-size: 10px;
 }
 
 .chat-search {
@@ -6288,13 +6270,13 @@ sl-tooltip::part(base__popup) {
     position: fixed;
     z-index: 4;
     right: 408px;
-    bottom: 276px;
+    bottom: 154px;
     left: 316px;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
     min-height: 176px;
-    max-height: min(220px, calc(100vh - 560px));
+    max-height: min(250px, calc(100vh - 438px));
     margin: 0;
     pointer-events: auto;
   }

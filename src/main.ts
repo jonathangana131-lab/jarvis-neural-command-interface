@@ -160,7 +160,6 @@ const diagnosticsList = required<HTMLElement>('#diagnostics-list');
 const releaseAssistant = required<HTMLElement>('#release-assistant');
 const workspaceSwitcher = required<HTMLSelectElement>('#workspace-switcher');
 const saveWorkspace = required<HTMLButtonElement>('#save-workspace');
-const taskTemplateRow = required<HTMLElement>('#task-template-row');
 const taskHud = new TaskHud(required<HTMLElement>('#task-hud'), cancelTask, renderIcons);
 const scene = new JarvisScene(canvas, {
   onRendererStatus: (status) => {
@@ -226,13 +225,6 @@ let eventsReconnectAttempts = 0;
 let eventsConnected = false;
 const queuedWatchTimers = new Map<string, number>();
 let savedWorkspaces: string[] = loadSavedWorkspaces();
-const taskTemplates = [
-  { id: 'fix-bugs', label: 'Fix Bugs', prompt: 'Find and fix the most important bugs in this project. Run focused tests and summarize the fixes.' },
-  { id: 'polish-ui', label: 'Polish UI', prompt: 'Review the UI for rough edges, spacing, responsiveness, and text overflow. Refine it carefully and verify with a build.' },
-  { id: 'run-tests', label: 'Run Tests', prompt: 'Run the relevant test suite, diagnose any failures, fix the root causes, and rerun the checks.' },
-  { id: 'explain-project', label: 'Explain Project', prompt: 'Explain the current project architecture, important files, and risky areas in a concise engineering summary.' },
-  { id: 'prepare-release', label: 'Prepare Release', prompt: 'Prepare the next release: update version notes, run checks, package the app, verify release assets, and summarize readiness.' }
-];
 
 type ModelProvider = NonNullable<AppConfig['localModel']>['provider'];
 type ArtifactCatalogItem = {
@@ -750,7 +742,6 @@ async function boot() {
   memoryCount.textContent = formatMemoryCount(config.memoryCount);
   apiKeyStatus.textContent = config.openAiApiKeyPresent ? 'API key ready' : 'Local login';
   hydrateSetupWizard();
-  renderTaskTemplates();
   renderWorkspaceSwitcher();
   renderModelPresets();
   renderModelProfile();
@@ -1424,27 +1415,6 @@ function compareChats(a: ChatSessionRecord, b: ChatSessionRecord) {
     return a.pinned ? -1 : 1;
   }
   return (b.lastTaskAt ?? b.updatedAt).localeCompare(a.lastTaskAt ?? a.updatedAt);
-}
-
-function renderTaskTemplates() {
-  taskTemplateRow.innerHTML = taskTemplates.map((template) => `
-    <button class="hud-button" type="button" data-task-template="${escapeHtml(template.id)}" data-icon="sparkles">
-      <span>${escapeHtml(template.label)}</span>
-    </button>
-  `).join('');
-  taskTemplateRow.querySelectorAll<HTMLButtonElement>('[data-task-template]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const template = taskTemplates.find((entry) => entry.id === button.dataset.taskTemplate);
-      if (!template) return;
-      taskPrompt.value = taskPrompt.value.trim()
-        ? `${taskPrompt.value.trim()}\n\n${template.prompt}`
-        : template.prompt;
-      taskPrompt.focus();
-      lastCommandPhase = 'ready';
-      renderCommandChat(true);
-    });
-  });
-  renderIcons();
 }
 
 function renderWorkspaceSwitcher(summary?: WorkspaceSummary) {
@@ -3816,7 +3786,7 @@ function setTab(tab: string) {
   });
   // Hide task HUD and chat sidebar elements when not on Run tab
   const isRun = tab === 'run';
-  document.querySelectorAll('#task-hud, #chat-sidebar-toggle, #chat-session-rail, .workspace-switcher, .task-template-row').forEach((el) => {
+  document.querySelectorAll('#task-hud, #chat-sidebar-toggle, #chat-session-rail, .workspace-switcher').forEach((el) => {
     (el as HTMLElement).hidden = !isRun;
   });
   if (tab === 'diagnostics') {

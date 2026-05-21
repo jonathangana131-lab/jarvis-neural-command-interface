@@ -1,3 +1,36 @@
+# v0.7.5
+
+Chat interface refinement release.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.7.5.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.7.5.exe.blockmap`
+- `latest.yml`
+
+## Refined
+
+- Moved the desktop Run transcript and composer into a lower-left console stack so the neural orb stays visible instead of being covered by the chat surface.
+- Restyled the response area as a denser coding transcript with full-width role rows, subtle rails, monospace assistant output, calmer live state glow, and compact task actions.
+- Reworked the prompt composer with a focused terminal-style shell, smaller Run button, improved focus treatment, and textarea auto-growth for multi-line prompts.
+- Reduced top HUD and right-side mission panel weight so chat, memory, and artifact context feel present without dominating the orb.
+- Tightened the chat drawer footprint and visual density to keep session management available without turning it into the main surface.
+
+## Verified
+
+- `npm run build`
+- `npm run test:stream-parser`
+- `npm run test:live-smoke`
+- `npm run test:memory`
+- Browser UI review across desktop and mobile Run chat layouts
+- `npm run dist:win`
+- Silent local install verified at `0.7.5` with Desktop and Start Menu shortcuts targeting the installed executable
+- `npm run test:installed-ui-smoke`
+
+SHA256: `DEDD6D2357FCD8EADF933EE487DDEC620A48D00315D063D2317820FB62AC4D7D`
+
 # v0.7.4
 
 Reliability, stability, and UI hardening release.

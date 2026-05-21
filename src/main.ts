@@ -479,6 +479,10 @@ taskPrompt.addEventListener('keydown', (event) => {
   }
 });
 
+taskPrompt.addEventListener('focus', () => {
+  syncTaskPromptHeight();
+});
+
 async function dispatchTask() {
   if (taskDispatchInFlight) {
     return;
@@ -531,6 +535,7 @@ async function dispatchTask() {
       return;
     }
     taskPrompt.value = '';
+    syncTaskPromptHeight();
     taskPrompt.focus();
     taskHud.upsert(data.task);
     upsertVisibleTask(data.task, true);
@@ -565,6 +570,7 @@ memorySortFilter.addEventListener('change', () => {
 });
 
 taskPrompt.addEventListener('input', () => {
+  syncTaskPromptHeight();
   // Update prompt preview without full re-render to prevent shaking
   const draftPrompt = taskPrompt.value.trim();
   if (draftPrompt && lastCommandPhase === 'ready') {
@@ -578,6 +584,12 @@ taskPrompt.addEventListener('input', () => {
 memoryScopeFilter.addEventListener('change', () => {
   void loadMemories(true);
 });
+
+function syncTaskPromptHeight() {
+  taskPrompt.style.height = 'auto';
+  const maxHeight = window.matchMedia('(min-width: 901px)').matches ? 132 : 154;
+  taskPrompt.style.height = `${Math.min(Math.max(taskPrompt.scrollHeight, 54), maxHeight)}px`;
+}
 
 memoryKindFilter.addEventListener('change', () => {
   void loadMemories(false);

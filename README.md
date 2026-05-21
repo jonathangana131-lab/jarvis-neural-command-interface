@@ -12,7 +12,7 @@ context for a task.
 
 Use the Windows installer from the latest GitHub Release:
 
-- `Jarvis-Neural-Command-Interface-Setup-0.7.6.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.7.8.exe`
 
 ## Current Highlights
 

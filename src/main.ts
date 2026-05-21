@@ -32,7 +32,7 @@ import { JarvisScene } from './JarvisScene';
 import { MemoryAnimator } from './MemoryAnimator';
 import { TaskHud } from './TaskHud';
 import { VoiceSession } from './VoiceSession';
-import type { AppConfig, AssistantMode, ChatSessionRecord, MemoryRecord, ModelKeyStatus, SessionRecoveryState, TaskRecord, VoiceSettings } from './types';
+import type { AppConfig, AssistantMode, ChatSessionRecord, MemoryRecord, ModelKeyStatus, ProviderFailureKind, ProviderHealth, SessionRecoveryState, TaskRecord, VoiceSettings } from './types';
 
 const jarvisIcons = {
   Activity,
@@ -247,6 +247,8 @@ type LocalModelScanResult = {
   endpoint: string;
   available: boolean;
   models: string[];
+  failureKind?: ProviderFailureKind | null;
+  failureAction?: string | null;
   detail: string;
 };
 
@@ -256,6 +258,7 @@ type HealthReport = {
   session: SessionRecoveryState;
   modelKey: ModelKeyStatus;
   localModel: LocalModelScanResult;
+  providerHealth: ProviderHealth;
   memory: {
     databasePath: string;
     exists: boolean;
@@ -1547,6 +1550,7 @@ async function loadDiagnostics() {
     fetchJson<{
       codex: { available: boolean; detail: string };
       localModel: { available: boolean; detail: string; provider: string; endpoint: string; models: string[] };
+      providerHealth: ProviderHealth;
       modelKey: ModelKeyStatus;
       voice: { speechRecognition: string; microphone: string; detail: string; settings: VoiceSettings };
       session: SessionRecoveryState;
@@ -1579,6 +1583,7 @@ async function loadDiagnostics() {
     <article><strong>Model</strong><span>${escapeHtml(data.config.codexModel ?? 'default')}</span><p>${escapeHtml([data.config.codexCommand, data.config.codexReasoningEffort, data.config.codexEphemeral ? 'ephemeral' : 'persistent'].filter(Boolean).join(' / '))}</p></article>
     <article><strong>OpenCode Key</strong><span>${data.modelKey.present ? 'Ready' : 'Missing'}</span><p>${escapeHtml(data.modelKey.present ? `Loaded from ${data.modelKey.source}.` : 'Save a key in Settings to scan hosted models.')}</p></article>
     <article><strong>Model Router</strong><span>${data.localModel.available ? 'Connected' : 'Offline'}</span><p>${escapeHtml(`${data.localModel.provider} / ${data.localModel.endpoint} / ${data.localModel.detail}`)}</p></article>
+    <article class="diagnostics-grid__wide"><strong>Provider Health</strong><span>${escapeHtml(providerHealthStatus(data.providerHealth))}</span><p>${escapeHtml(providerHealthDetail(data.providerHealth))}</p>${renderProviderHealthActions(data.providerHealth)}</article>
     <article><strong>Embeddings</strong><span>${health.memory.embeddings.disabled ? 'Fallback' : 'Ready'}</span><p>${escapeHtml(embeddingDetail)}</p></article>
     <article><strong>Updates</strong><span>${updateStatus.status === 'downloading' ? 'Downloading' : update.updateAvailable ? 'Available' : update.error ? 'Check failed' : 'Current'}</span><p>${escapeHtml(updateDetail)}</p>${updateActions}</article>
     <article><strong>Voice</strong><span>${data.voice.settings.voiceEnabled ? 'Enabled' : 'Disabled'}</span><p>${escapeHtml(`${voiceCapabilityLabel()} Spoken summaries ${data.voice.settings.spokenResponses ? 'on' : 'off'}.`)}</p></article>
@@ -1595,11 +1600,52 @@ async function loadDiagnostics() {
   wireUpdateActions(update, updateStatus);
   wireSessionRecoveryActions();
   wireRecoveryActions();
+  wireProviderHealthActions();
   wireStorageActions();
   wireBackupActions();
   void loadReleaseAssistant();
   renderIcons();
   renderQueueStatus(data.queue);
+}
+
+function providerHealthStatus(health: ProviderHealth) {
+  if (health.available) {
+    return 'Ready';
+  }
+  return health.failureKind ? titleCase(health.failureKind.replace(/_/g, ' ')) : 'Needs attention';
+}
+
+function providerHealthDetail(health: ProviderHealth) {
+  const detail = `${providerLabel(health.provider)} / ${health.model || 'default'}: ${health.detail}`;
+  return health.available ? detail : `${detail} ${health.failureAction ?? ''}`.trim();
+}
+
+function renderProviderHealthActions(health: ProviderHealth) {
+  return `
+    <div class="update-actions">
+      <button class="hud-button" type="button" data-provider-health-refresh data-icon="refresh-cw"><span>Refresh Health</span></button>
+      <button class="hud-button" type="button" data-provider-health-settings data-icon="sliders-horizontal"><span>Open Settings</span></button>
+      ${health.available ? '' : '<button class="hud-button" type="button" data-provider-health-codex data-icon="terminal-square"><span>Use Codex</span></button>'}
+    </div>
+  `;
+}
+
+function wireProviderHealthActions() {
+  diagnosticsList.querySelector<HTMLButtonElement>('[data-provider-health-refresh]')?.addEventListener('click', async () => {
+    const health = await fetchJson<ProviderHealth>('/api/provider-health?force=1');
+    if (config) {
+      config.providerHealth = health;
+    }
+    voiceStatus.textContent = providerHealthDetail(health);
+    await loadDiagnostics();
+  });
+  diagnosticsList.querySelector<HTMLButtonElement>('[data-provider-health-settings]')?.addEventListener('click', () => {
+    setTab('settings');
+  });
+  diagnosticsList.querySelector<HTMLButtonElement>('[data-provider-health-codex]')?.addEventListener('click', async () => {
+    await switchSettingsToCodex();
+    setTab('settings');
+  });
 }
 
 function renderFixCommonProblems(
@@ -2119,6 +2165,19 @@ async function saveLocalModelSelection() {
   }
 }
 
+async function switchSettingsToCodex() {
+  settingsModelProvider.value = 'codex';
+  settingsModelEndpoint.value = '';
+  settingsLocalModel.innerHTML = '<option value="gpt-5.5">GPT-5.5</option>';
+  settingsLocalModel.value = 'gpt-5.5';
+  await saveLocalModelSelection();
+  config = await fetchJson<AppConfig>('/api/config');
+  modelKeyMessage.textContent = 'Switched to Codex CLI fallback.';
+  renderModelPresets();
+  renderModelProfile();
+  renderModelInstructions();
+}
+
 async function applySelectedModel() {
   const model = settingsLocalModel.value || providerDefaultModel(localProvider());
   if (!model) {
@@ -2228,7 +2287,7 @@ async function runSetupTest() {
     }
     const task = await waitForTaskTerminal(response.task.id, 45000);
     if (task.status !== 'completed') {
-      throw new Error(`Setup test ended with status ${task.status}.`);
+      throw new Error(`Setup test ended with status ${task.status}. ${task.failureAction ?? providerFailureAction(task.failureKind)}`);
     }
     lastCommandPrompt = task.prompt;
     lastCommandPhase = task.phase ?? task.status;
@@ -2239,6 +2298,8 @@ async function runSetupTest() {
     setupStatus.textContent = 'Setup test complete. Jarvis is ready.';
   } catch (error) {
     setupStatus.textContent = error instanceof Error ? error.message : 'Setup test failed.';
+    config = await fetchJson<AppConfig>('/api/config').catch(() => config);
+    renderModelPresets();
   } finally {
     setupTest.disabled = false;
     renderIcons();
@@ -2384,13 +2445,19 @@ function renderModelPresets() {
   }
 
   const selected = settingsLocalModel.value || providerDefaultModel(provider);
+  const unhealthyModel = config?.providerHealth?.available === false && config.providerHealth.provider === 'opencode'
+    ? config.providerHealth.model
+    : '';
   modelPresetGrid.innerHTML = opencodeZenModelPresets
-    .map((preset) => `
-      <button type="button" class="model-preset-card ${preset.id === selected ? 'selected' : ''}" data-model-preset="${escapeHtml(preset.id)}" data-icon="${preset.icon}">
+    .map((preset) => {
+      const blocked = preset.id === unhealthyModel;
+      return `
+      <button type="button" class="model-preset-card ${preset.id === selected ? 'selected' : ''} ${blocked ? 'is-unavailable' : ''}" data-model-preset="${escapeHtml(preset.id)}" data-icon="${blocked ? 'octagon-x' : preset.icon}">
         <span>${escapeHtml(preset.name)}</span>
-        <strong>${escapeHtml(preset.note)}</strong>
+        <strong>${escapeHtml(blocked ? `Unavailable: ${config?.providerHealth?.failureKind ?? 'check failed'}` : preset.note)}</strong>
       </button>
-    `)
+    `;
+    })
     .join('');
   bindModelPresetCards();
   renderIcons();
@@ -3298,14 +3365,14 @@ function renderCommandChat(immediate = false) {
   });
   wireArtifactOpenButtons(missionArtifacts);
 
-  // Restore scroll positions after re-render, auto-scroll to bottom when task is live
-  const isTaskLive = latestTask?.status === 'running' || latestTask?.status === 'queued';
+  // Restore scroll positions after re-render. If the user was already following
+  // the bottom of the transcript, keep the final recovery/result controls visible.
   const conversationStreams = commandChatFeed.querySelectorAll('.conversation-stream');
   conversationStreams.forEach((stream) => {
     const el = stream as HTMLElement;
     const key = el.dataset.streamTask ?? 'default';
     const saved = scrollPositions.get(key);
-    if (isTaskLive && (saved?.atBottom ?? true)) {
+    if (saved?.atBottom ?? true) {
       requestAnimationFrame(() => {
         el.scrollTop = el.scrollHeight;
       });
@@ -3347,6 +3414,9 @@ function renderActiveTaskActions(task: TaskRecord | null, output: string) {
     return '';
   }
   const live = task.status === 'running' || task.status === 'queued';
+  if (!live && (task.status === 'failed' || task.status === 'timed_out')) {
+    return '';
+  }
   return `
     <div class="task-actions task-actions--inline">
       ${live ? `<button type="button" data-icon="octagon-x" data-cancel-active-task="${escapeHtml(task.id)}"><span>Stop</span></button>` : ''}
@@ -3411,6 +3481,9 @@ function renderMissionConversation(
             ? ''
             : 'No response captured for this run.';
       messages.push(renderConversationMessage('assistant', assistantBody, 'Jarvis', entryPhase, active && entryStatus === 'running'));
+      if (entryStatus === 'failed' || entryStatus === 'timed_out') {
+        messages.push(renderRunRecoveryCard(entry));
+      }
     }
   } else if (promptPreview && promptPreview !== 'Standing by.') {
     messages.push(renderConversationMessage('user', promptPreview, 'Draft command', 'Not sent yet', false));
@@ -3429,6 +3502,28 @@ function renderMissionConversation(
   return messages.join('');
 }
 
+function renderRunRecoveryCard(task: TaskRecord) {
+  const kind = task.failureKind ?? (isRateLimitOutput(task.output) ? 'rate_limit' : task.status === 'timed_out' ? 'timeout' : 'unknown');
+  const action = task.failureAction ?? providerFailureAction(kind);
+  const canRetryCodex = config?.providerHealth?.provider !== 'codex' && config?.codexStatus?.available === true;
+  return `
+    <section class="run-recovery-card">
+      <div>
+        <span>${escapeHtml(titleCase(kind.replace(/_/g, ' ')))}</span>
+        <strong>Run recovery</strong>
+        <p>${escapeHtml(action)}</p>
+      </div>
+      <div class="run-recovery-actions">
+        <button type="button" data-icon="rotate-cw" data-retry-active-task="${escapeHtml(task.id)}"><span>Retry</span></button>
+        ${canRetryCodex ? `<button type="button" data-icon="terminal-square" data-retry-task-codex="${escapeHtml(task.id)}"><span>Retry with Codex</span></button>` : ''}
+        <button type="button" data-icon="sliders-horizontal" data-open-settings-from-task="${escapeHtml(task.id)}"><span>Open Settings</span></button>
+        <button type="button" data-icon="activity" data-open-diagnostics-from-task="${escapeHtml(task.id)}"><span>Open Diagnostics</span></button>
+        <button type="button" data-icon="save" data-copy-task-error="${escapeHtml(task.id)}"><span>Copy Error</span></button>
+      </div>
+    </section>
+  `;
+}
+
 function wireActiveTaskActions() {
   commandChatFeed.querySelector<HTMLButtonElement>('[data-cancel-active-task]')?.addEventListener('click', async (event) => {
     const taskId = (event.currentTarget as HTMLButtonElement).dataset.cancelActiveTask;
@@ -3436,7 +3531,7 @@ function wireActiveTaskActions() {
       await cancelTask(taskId);
     }
   });
-  commandChatFeed.querySelector<HTMLButtonElement>('[data-retry-active-task]')?.addEventListener('click', async (event) => {
+  commandChatFeed.querySelectorAll<HTMLButtonElement>('[data-retry-active-task]').forEach((button) => button.addEventListener('click', async (event) => {
     const taskId = (event.currentTarget as HTMLButtonElement).dataset.retryActiveTask;
     if (!taskId) {
       return;
@@ -3444,7 +3539,31 @@ function wireActiveTaskActions() {
     const data = await postJson<{ task: TaskRecord }>(`/api/tasks/${taskId}/retry`, {});
     upsertVisibleTask(data.task, true);
     setTab('run');
-  });
+  }));
+  commandChatFeed.querySelectorAll<HTMLButtonElement>('[data-retry-task-codex]').forEach((button) => button.addEventListener('click', async (event) => {
+    const taskId = (event.currentTarget as HTMLButtonElement).dataset.retryTaskCodex;
+    if (!taskId) {
+      return;
+    }
+    const data = await postJson<{ task: TaskRecord }>(`/api/tasks/${taskId}/retry`, { provider: 'codex' });
+    upsertVisibleTask(data.task, true);
+    setTab('run');
+  }));
+  commandChatFeed.querySelectorAll<HTMLButtonElement>('[data-open-settings-from-task]').forEach((button) => button.addEventListener('click', () => {
+    setTab('settings');
+  }));
+  commandChatFeed.querySelectorAll<HTMLButtonElement>('[data-open-diagnostics-from-task]').forEach((button) => button.addEventListener('click', () => {
+    setTab('diagnostics');
+  }));
+  commandChatFeed.querySelectorAll<HTMLButtonElement>('[data-copy-task-error]').forEach((button) => button.addEventListener('click', async (event) => {
+    const taskId = (event.currentTarget as HTMLButtonElement).dataset.copyTaskError;
+    const task = taskId ? visibleTasks.find((entry) => entry.id === taskId) ?? selectedTask() : selectedTask();
+    if (!task) {
+      return;
+    }
+    await navigator.clipboard.writeText(providerErrorForCopy(task));
+    voiceStatus.textContent = 'Task error copied.';
+  }));
   commandChatFeed.querySelector<HTMLButtonElement>('[data-copy-task-summary]')?.addEventListener('click', async (event) => {
     const taskId = (event.currentTarget as HTMLButtonElement).dataset.copyTaskSummary;
     const task = taskId ? visibleTasks.find((entry) => entry.id === taskId) ?? selectedTask() : selectedTask();
@@ -3770,6 +3889,36 @@ function missionNextActionFor(task: TaskRecord | null, output: string) {
 
 function isRateLimitOutput(value: string) {
   return /429|too many requests|rate limit|usage limit/i.test(value);
+}
+
+function providerFailureAction(kind: ProviderFailureKind | string | null | undefined) {
+  switch (kind) {
+    case 'auth':
+      return 'Save a valid provider key or retry with Codex CLI.';
+    case 'rate_limit':
+      return 'Wait for the provider limit to reset or retry with Codex CLI.';
+    case 'offline':
+      return 'Start the local provider or switch to Codex CLI.';
+    case 'model_missing':
+      return 'Choose a model reported by provider scan.';
+    case 'timeout':
+      return 'Retry with a smaller request or switch providers.';
+    default:
+      return 'Open Diagnostics, copy the error, then retry with another provider.';
+  }
+}
+
+function providerErrorForCopy(task: TaskRecord) {
+  return [
+    `Task: ${task.id}`,
+    `Prompt: ${task.prompt}`,
+    `Status: ${task.status}${task.phase ? ` / ${task.phase}` : ''}`,
+    `Provider: ${task.providerUsed ?? config?.localModel?.provider ?? 'unknown'}`,
+    `Failure: ${task.failureKind ?? 'unknown'}`,
+    `Action: ${task.failureAction ?? providerFailureAction(task.failureKind)}`,
+    '',
+    stripUiArtifactBlocks(task.output || task.logs || 'No error output captured.')
+  ].join('\n');
 }
 
 function memoryReason(memory: MemoryRecord) {

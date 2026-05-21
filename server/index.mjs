@@ -11,6 +11,7 @@ import { MemoryExtractor } from './memoryExtractor.mjs';
 import { MemoryStore } from './memoryStore.mjs';
 import { CodexTaskRunner } from './codexTaskRunner.mjs';
 import { TaskStore } from './taskStore.mjs';
+import { checkProviderHealth, classifyProviderFailure, providerFailureAction } from './providerHealth.mjs';
 
 const app = express();
 const config = loadConfig();
@@ -24,7 +25,10 @@ const embedder = new Embedder({
 });
 const memoryStore = new MemoryStore(config.memory.databasePath, eventBus, { embedder });
 const taskStore = new TaskStore(config.memory.databasePath);
-const taskRunner = new CodexTaskRunner(config, eventBus, memoryStore, memoryExtractor, taskStore);
+const taskRunner = new CodexTaskRunner(config, eventBus, memoryStore, memoryExtractor, taskStore, {
+  getProviderHealth,
+  getCodexStatus: () => checkCodexStatus(config.codex.command)
+});
 const localModelStatePath = path.resolve(config.dataDir, 'local-model.json');
 const secretDir = path.resolve(process.env.JARVIS_SECRET_DIR ?? config.dataDir);
 const modelSecretPath = path.resolve(secretDir, 'model-secrets.json');
@@ -64,17 +68,20 @@ const opencodeFreeModels = [
   'hy3-preview-free',
   'nemotron-3-super-free'
 ];
+let providerHealthCache = null;
 loadModelSecrets(modelSecretPath);
 loadLocalModelState(config, localModelStatePath);
 
 app.use(express.json({ limit: '1mb' }));
 
-app.get('/api/config', (_req, res) => {
+app.get('/api/config', async (_req, res) => {
   res.json({
     ...publicConfig(config),
     appVersion: packageInfo.version,
     modelKey: modelKeyStatus(),
-    memoryCount: memoryStore.count()
+    memoryCount: memoryStore.count(),
+    codexStatus: await checkCodexStatus(config.codex.command),
+    providerHealth: await getProviderHealth()
   });
 });
 
@@ -95,6 +102,7 @@ app.get('/api/health', async (_req, res) => {
     session: publicSessionState(),
     modelKey: modelKeyStatus(),
     localModel,
+    providerHealth: await getProviderHealth(),
     memory: {
       databasePath: config.memory.databasePath,
       exists: fs.existsSync(config.memory.databasePath),
@@ -228,6 +236,26 @@ async function safeUpdateCheck() {
   }
 }
 
+async function getProviderHealth({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && providerHealthCache && now - providerHealthCache.cachedAtMs < 15000) {
+    return providerHealthCache.report;
+  }
+  const report = await checkProviderHealth({
+    provider: config.localModel?.provider,
+    endpoint: config.localModel?.endpoint,
+    model: config.localModel?.model,
+    apiKey: process.env.OPENCODE_API_KEY,
+    codexStatus: () => checkCodexStatus(config.codex.command)
+  });
+  providerHealthCache = { cachedAtMs: now, report };
+  return report;
+}
+
+function invalidateProviderHealth() {
+  providerHealthCache = null;
+}
+
 function workspaceSummary() {
   const paths = new Set([
     config.defaultWorkspace,
@@ -329,6 +357,7 @@ app.post('/api/recovery/reset-model', (_req, res, next) => {
     };
     config.codex.model = 'gpt-5.5';
     fs.rmSync(localModelStatePath, { force: true });
+    invalidateProviderHealth();
     res.json({ localModel: config.localModel, message: 'Model settings reset to safe defaults.' });
   } catch (error) {
     next(error);
@@ -341,6 +370,7 @@ app.post('/api/recovery/clear-secrets', (_req, res, next) => {
       fs.rmSync(modelSecretPath, { force: true });
     }
     delete process.env.OPENCODE_API_KEY;
+    invalidateProviderHealth();
     res.json({ modelKey: modelKeyStatus(), message: 'Saved model secrets cleared.' });
   } catch (error) {
     next(error);
@@ -367,6 +397,7 @@ app.post('/api/backups/:id/restore-settings', (req, res, next) => {
     const restored = restoreSettingsFromBackup(backup.path);
     loadModelSecrets(modelSecretPath);
     loadLocalModelState(config, localModelStatePath);
+    invalidateProviderHealth();
     res.json({ restored, localModel: config.localModel, modelKey: modelKeyStatus() });
   } catch (error) {
     next(error);
@@ -542,6 +573,7 @@ app.post('/api/model-key', (req, res, next) => {
     }
     saveModelSecret(modelSecretPath, apiKey);
     process.env.OPENCODE_API_KEY = apiKey;
+    invalidateProviderHealth();
     res.json(modelKeyStatus());
   } catch (error) {
     next(error);
@@ -554,6 +586,7 @@ app.delete('/api/model-key', (_req, res, next) => {
       fs.rmSync(modelSecretPath, { force: true });
     }
     delete process.env.OPENCODE_API_KEY;
+    invalidateProviderHealth();
     res.json(modelKeyStatus());
   } catch (error) {
     next(error);
@@ -577,6 +610,7 @@ app.post('/api/local-model-selection', (req, res, next) => {
     }
     fs.mkdirSync(path.dirname(localModelStatePath), { recursive: true });
     fs.writeFileSync(localModelStatePath, JSON.stringify(config.localModel, null, 2));
+    invalidateProviderHealth();
     res.json({ localModel: config.localModel });
   } catch (error) {
     next(error);
@@ -650,9 +684,11 @@ function psQuote(value) {
 app.get('/api/diagnostics', async (_req, res) => {
   const codex = await checkCodexStatus(config.codex.command);
   const localModel = await listLocalModels(config.localModel?.provider, config.localModel?.endpoint);
+  const providerHealth = await getProviderHealth();
   res.json({
     codex,
     localModel,
+    providerHealth,
     modelKey: modelKeyStatus(),
     voice: {
       speechRecognition: 'browser',
@@ -783,6 +819,11 @@ app.get('/api/chats', (req, res) => {
   }) });
 });
 
+app.get('/api/provider-health', async (req, res) => {
+  const force = String(req.query.force ?? '') === '1' || String(req.query.force ?? '').toLowerCase() === 'true';
+  res.json(await getProviderHealth({ force }));
+});
+
 app.post('/api/chats', (req, res, next) => {
   try {
     const chat = taskStore.createChat({
@@ -906,7 +947,7 @@ app.post('/api/tasks/:id/cancel', (req, res, next) => {
 
 app.post('/api/tasks/:id/retry', (req, res, next) => {
   try {
-    const task = taskRunner.retry(req.params.id);
+    const task = taskRunner.retry(req.params.id, req.body ?? {});
     res.status(202).json({ task });
   } catch (error) {
     next(error);
@@ -1650,11 +1691,14 @@ async function listLocalModels(providerInput, endpointInput) {
   const provider = normalizeProvider(providerInput);
   const endpoint = String(endpointInput ?? defaultEndpoint(provider)).trim() || defaultEndpoint(provider);
   if (provider === 'opencode' && !process.env.OPENCODE_API_KEY) {
+    const failureKind = 'auth';
     return {
       provider,
       endpoint,
       available: false,
       models: opencodeFreeModels,
+      failureKind,
+      failureAction: providerFailureAction(failureKind),
       detail: 'Missing OpenCode API key. Save a key to scan live models.'
     };
   }
@@ -1667,7 +1711,9 @@ async function listLocalModels(providerInput, endpointInput) {
     const response = await fetch(target, { headers, signal: AbortSignal.timeout(3500) });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data?.error?.message ?? data?.error ?? `${response.status} ${response.statusText}`);
+      const error = new Error(data?.error?.message ?? data?.error ?? `${response.status} ${response.statusText}`);
+      error.status = response.status;
+      throw error;
     }
     const models = provider === 'ollama'
       ? (data.models ?? []).map((model) => model.name).filter(Boolean)
@@ -1682,19 +1728,25 @@ async function listLocalModels(providerInput, endpointInput) {
     };
   } catch (error) {
     if (provider === 'opencode') {
+      const failureKind = classifyProviderFailure(error);
       return {
         provider,
         endpoint,
         available: false,
         models: opencodeFreeModels,
+        failureKind,
+        failureAction: providerFailureAction(failureKind),
         detail: `${error instanceof Error ? error.message : 'OpenCode Zen is not reachable.'} Showing preset free models.`
       };
     }
+    const failureKind = classifyProviderFailure(error);
     return {
       provider,
       endpoint,
       available: false,
       models: [],
+      failureKind,
+      failureAction: providerFailureAction(failureKind),
       detail: error instanceof Error ? error.message : 'Local model server is not reachable.'
     };
   }

@@ -43,6 +43,13 @@ const mockServer = http.createServer(async (req, res) => {
 
 const mockPort = await listen(mockServer);
 const appPort = await freePort();
+const jarvisDataDir = path.join(userData, 'data');
+fs.mkdirSync(jarvisDataDir, { recursive: true });
+fs.writeFileSync(path.join(jarvisDataDir, 'local-model.json'), JSON.stringify({
+  provider: 'opencode',
+  endpoint: `http://127.0.0.1:${mockPort}/v1`,
+  model: 'mock-stream-model'
+}, null, 2));
 
 const appProcess = spawn(exePath, [], {
   env: {

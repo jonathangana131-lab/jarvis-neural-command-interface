@@ -13,9 +13,11 @@ export type AppConfig = {
   codexEphemeral?: boolean;
   modelApiKeyPresent?: boolean;
   modelKey?: ModelKeyStatus;
+  codexStatus?: CodexStatus;
   openAiApiKeyPresent: boolean;
   memoryCount: number;
   localModel?: LocalModelConfig;
+  providerHealth?: ProviderHealth;
 };
 
 export type ModelKeyStatus = {
@@ -27,6 +29,25 @@ export type LocalModelConfig = {
   provider: 'opencode' | 'lmstudio' | 'ollama' | 'codex';
   endpoint: string;
   model: string;
+};
+
+export type CodexStatus = {
+  available: boolean;
+  command: string;
+  detail: string;
+};
+
+export type ProviderFailureKind = 'auth' | 'rate_limit' | 'offline' | 'model_missing' | 'timeout' | 'unknown';
+
+export type ProviderHealth = {
+  provider: LocalModelConfig['provider'];
+  endpoint: string;
+  model: string;
+  available: boolean;
+  failureKind: ProviderFailureKind | null;
+  failureAction: string | null;
+  detail: string;
+  checkedAt: string;
 };
 
 export type VoiceSettings = {
@@ -99,6 +120,9 @@ export type TaskRecord = {
   filesChanged?: string[];
   commandsRun?: string[];
   testsRun?: string[];
+  failureKind?: ProviderFailureKind | null;
+  failureAction?: string | null;
+  providerUsed?: LocalModelConfig['provider'] | string | null;
 };
 
 export type MemorySkippedRecord = {

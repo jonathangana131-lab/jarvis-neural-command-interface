@@ -3,14 +3,17 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { isPathAllowed } from './config.mjs';
+import { classifyProviderFailure, providerFailureAction, providerFailureSummary } from './providerHealth.mjs';
 
 export class CodexTaskRunner {
-  constructor(config, eventBus, memoryStore, memoryExtractor, taskStore) {
+  constructor(config, eventBus, memoryStore, memoryExtractor, taskStore, options = {}) {
     this.config = config;
     this.eventBus = eventBus;
     this.memoryStore = memoryStore;
     this.memoryExtractor = memoryExtractor;
     this.taskStore = taskStore;
+    this.getProviderHealth = options.getProviderHealth ?? null;
+    this.getCodexStatus = options.getCodexStatus ?? null;
     this.tasks = new Map();
     this.queuePaused = false;
   }
@@ -83,7 +86,7 @@ export class CodexTaskRunner {
     return publicTask;
   }
 
-  start({ prompt, workspace, chatId }) {
+  start({ prompt, workspace, chatId, providerOverride }) {
     const cwd = path.resolve(workspace || this.config.defaultWorkspace);
     const cleanPrompt = String(prompt ?? '').trim();
     if (!cleanPrompt) {
@@ -121,6 +124,9 @@ export class CodexTaskRunner {
       filesChanged: [],
       commandsRun: [],
       testsRun: [],
+      failureKind: null,
+      failureAction: null,
+      providerUsed: normalizeProviderOverride(providerOverride) ?? this.config.localModel?.provider ?? 'codex',
       createdAt: new Date().toISOString(),
       finishedAt: null,
       exitCode: null
@@ -134,14 +140,19 @@ export class CodexTaskRunner {
     return publicTask;
   }
 
-  retry(id) {
+  retry(id, options = {}) {
     const task = this.get(id);
     if (!task) {
       const error = new Error('Task not found.');
       error.status = 404;
       throw error;
     }
-    return this.start({ prompt: task.prompt, workspace: task.workspace, chatId: task.chatId });
+    return this.start({
+      prompt: task.prompt,
+      workspace: task.workspace,
+      chatId: task.chatId,
+      providerOverride: normalizeProviderOverride(options.provider)
+    });
   }
 
   pauseQueue() {
@@ -164,6 +175,66 @@ export class CodexTaskRunner {
     };
   }
 
+  async #selectedProviderHealth() {
+    if (!this.getProviderHealth) {
+      return null;
+    }
+    try {
+      return await this.getProviderHealth({ force: true });
+    } catch (error) {
+      const kind = classifyProviderFailure(error);
+      return {
+        available: false,
+        failureKind: kind,
+        failureAction: providerFailureAction(kind),
+        detail: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
+  async #canFallbackToCodex() {
+    if (!this.getCodexStatus) {
+      return false;
+    }
+    try {
+      const status = await this.getCodexStatus();
+      return Boolean(status?.available);
+    } catch {
+      return false;
+    }
+  }
+
+  #failQueuedProviderTask(queued, failure) {
+    const kind = failure.failureKind ?? 'unknown';
+    const message = providerFailureSummary({
+      kind,
+      provider: failure.providerUsed ?? this.config.localModel?.provider,
+      model: this.config.localModel?.model,
+      detail: failure.detail
+    });
+    const task = {
+      ...queued,
+      status: 'failed',
+      phase: 'done',
+      output: `Provider check failed: ${message}`,
+      logs: message,
+      failureKind: kind,
+      failureAction: failure.failureAction ?? providerFailureAction(kind),
+      providerUsed: failure.providerUsed ?? this.config.localModel?.provider ?? 'unknown',
+      finishedAt: new Date().toISOString(),
+      exitCode: 1,
+      memorySkipped: [{
+        reason: failure.failureAction ?? providerFailureAction(kind),
+        content: message,
+        confidence: 0
+      }]
+    };
+    const publicTask = this.#persistTask(task);
+    this.eventBus.emit('task.finished', publicTask);
+    this.#drainQueue();
+    return publicTask;
+  }
+
   #drainQueue() {
     if (this.queuePaused || this.tasks.size > 0) {
       return;
@@ -178,12 +249,40 @@ export class CodexTaskRunner {
   }
 
   async #runQueuedTask(queued) {
-    const provider = this.config.localModel?.provider;
+    const provider = normalizeProviderOverride(queued.providerUsed) ?? this.config.localModel?.provider;
 
     if (provider === 'opencode') {
+      const health = await this.#selectedProviderHealth();
+      if (health && !health.available) {
+        if (await this.#canFallbackToCodex()) {
+          return this.#runCodexCliTask(queued, {
+            providerOverride: 'codex',
+            providerUsed: 'codex',
+            fallbackNotice: `${providerFailureSummary({
+              kind: health.failureKind ?? 'unknown',
+              provider: 'opencode',
+              model: this.config.localModel?.model,
+              detail: health.detail
+            })}\nRetrying automatically with Codex CLI.`
+          });
+        }
+        return this.#failQueuedProviderTask(queued, {
+          failureKind: health.failureKind ?? 'unknown',
+          failureAction: health.failureAction ?? providerFailureAction(health.failureKind ?? 'unknown'),
+          providerUsed: 'opencode',
+          detail: health.detail
+        });
+      }
       return this.#runOpenCodeApiTask(queued);
     }
 
+    return this.#runCodexCliTask(queued, {
+      providerOverride: provider,
+      providerUsed: provider
+    });
+  }
+
+  async #runCodexCliTask(queued, options = {}) {
     const relevantMemories = await this.#relevantMemoriesForTask(queued);
     const executionPrompt = buildPromptWithMemories(queued.prompt, relevantMemories);
     const outputMessagePath = this.#outputMessagePath(queued.id);
@@ -191,19 +290,24 @@ export class CodexTaskRunner {
       ...queued,
       status: 'running',
       phase: 'planning',
-      output: '',
+      output: options.fallbackNotice ? `${options.fallbackNotice}\n\n` : '',
       logs: '',
       outputMessagePath,
       rememberedMemoryIds: relevantMemories.map((memory) => memory.id),
-      createdMemoryIds: [],
-      memorySkipped: [],
+      createdMemoryIds: queued.createdMemoryIds ?? [],
+      memorySkipped: queued.memorySkipped ?? [],
       filesChanged: [],
       commandsRun: [],
       testsRun: [],
+      failureKind: null,
+      failureAction: null,
+      providerUsed: options.providerUsed ?? this.config.localModel?.provider ?? 'codex',
       finishedAt: null,
       exitCode: null
     };
-    this.#rememberPromptIntent(task);
+    if (options.rememberIntent !== false && task.createdMemoryIds.length === 0) {
+      this.#rememberPromptIntent(task);
+    }
     this.tasks.set(task.id, task);
     this.#persistTask(task);
     this.eventBus.emit('task.started', this.#publicTask(task));
@@ -214,7 +318,7 @@ export class CodexTaskRunner {
       cwd: task.workspace,
       outputMessagePath
     });
-    const child = this.#spawnCodex(args, task.workspace);
+    const child = this.#spawnCodex(args, task.workspace, { providerOverride: options.providerOverride });
     child.stdin?.end(executionPrompt);
     task.child = child;
 
@@ -255,6 +359,10 @@ export class CodexTaskRunner {
       task.output += `\n${error.message}`;
       task.logs += `\n${error.stack ?? error.message}`;
       task.finishedAt = new Date().toISOString();
+      const failureKind = classifyProviderFailure(error);
+      task.failureKind = failureKind;
+      task.failureAction = providerFailureAction(failureKind);
+      task.providerUsed = options.providerUsed ?? task.providerUsed;
       task.memorySkipped = [{
         reason: 'Codex task failed before memory extraction.',
         content: error.message,
@@ -286,6 +394,14 @@ export class CodexTaskRunner {
       task.filesChanged = artifacts.filesChanged;
       task.commandsRun = artifacts.commandsRun;
       task.testsRun = artifacts.testsRun;
+      if (task.status === 'failed') {
+        const failureKind = classifyProviderFailure(task.output || task.logs);
+        task.failureKind = failureKind;
+        task.failureAction = providerFailureAction(failureKind);
+      } else {
+        task.failureKind = null;
+        task.failureAction = null;
+      }
       this.#rememberAssistantOutcome(task);
       task.memorySkipped = [{
         reason: 'Memory extraction is running in the background.',
@@ -304,6 +420,8 @@ export class CodexTaskRunner {
         task.status = 'timed_out';
         task.phase = 'done';
         task.finishedAt = new Date().toISOString();
+        task.failureKind = 'timeout';
+        task.failureAction = providerFailureAction('timeout');
         task.memorySkipped = [{
           reason: 'Task timed out before memory extraction.',
           content: task.prompt,
@@ -334,6 +452,9 @@ export class CodexTaskRunner {
       filesChanged: [],
       commandsRun: [],
       testsRun: [],
+      failureKind: null,
+      failureAction: null,
+      providerUsed: 'opencode',
       finishedAt: null,
       exitCode: null
     };
@@ -428,16 +549,52 @@ export class CodexTaskRunner {
       void this.#extractTaskMemories(task);
     } catch (error) {
       clearTimeout(timeout);
+      const failureKind = classifyProviderFailure(error);
+      const failureAction = providerFailureAction(failureKind);
+      const failureMessage = providerFailureSummary({
+        kind: failureKind,
+        provider: 'opencode',
+        model,
+        detail: error instanceof Error ? error.message : String(error)
+      });
+      if (!task.output.trim() && await this.#canFallbackToCodex()) {
+        this.tasks.delete(task.id);
+        task.output = `${failureMessage}\nRetrying automatically with Codex CLI.`;
+        task.failureKind = null;
+        task.failureAction = null;
+        const fallbackQueued = {
+          ...task,
+          status: 'queued',
+          phase: 'queued',
+          providerUsed: 'codex'
+        };
+        this.#persistTask(fallbackQueued);
+        this.eventBus.emit('task.output', {
+          id: task.id,
+          chunk: `\n${failureMessage}\nRetrying automatically with Codex CLI.\n`,
+          output: task.output,
+          phase: 'planning'
+        });
+        return this.#runCodexCliTask(fallbackQueued, {
+          providerOverride: 'codex',
+          providerUsed: 'codex',
+          rememberIntent: false,
+          fallbackNotice: `${failureMessage}\nRetrying automatically with Codex CLI.`
+        });
+      }
       task.status = 'failed';
       task.phase = 'done';
-      task.output += `\nError: ${error.message}`;
+      task.output += `\n${failureMessage}`;
       task.output = task.output.slice(-24000);
       task.exitCode = 1;
       task.finishedAt = new Date().toISOString();
-      task.memorySkipped = [{ reason: error.message, content: executionPrompt.slice(0, 180), confidence: 0 }];
+      task.failureKind = failureKind;
+      task.failureAction = failureAction;
+      task.providerUsed = 'opencode';
+      task.memorySkipped = [{ reason: failureAction, content: executionPrompt.slice(0, 180), confidence: 0 }];
       
       // Emit task.output event for frontend animation feedback
-      this.eventBus.emit('task.output', { id: task.id, chunk: `\nError: ${error.message}`, output: task.output, phase: 'done' });
+      this.eventBus.emit('task.output', { id: task.id, chunk: `\n${failureMessage}`, output: task.output, phase: 'done' });
       
       const publicTask = this.#persistTask(task);
       this.tasks.delete(task.id);
@@ -504,8 +661,8 @@ export class CodexTaskRunner {
     this.eventBus.emit('task.updated', publicTask);
   }
 
-#spawnCodex(args, cwd) {
-    const provider = this.config.localModel?.provider;
+  #spawnCodex(args, cwd, options = {}) {
+    const provider = normalizeProviderOverride(options.providerOverride) ?? this.config.localModel?.provider;
     
     if (provider === 'opencode' || provider === 'ollama' || provider === 'lmstudio') {
       return this.#spawnApiModel(provider, args, cwd);
@@ -674,9 +831,21 @@ export class CodexTaskRunner {
       memorySkipped: task.memorySkipped ?? [],
       filesChanged: task.filesChanged ?? [],
       commandsRun: task.commandsRun ?? [],
-      testsRun: task.testsRun ?? []
+      testsRun: task.testsRun ?? [],
+      failureKind: task.failureKind ?? null,
+      failureAction: task.failureAction ?? null,
+      providerUsed: task.providerUsed ?? null
     };
   }
+}
+
+function normalizeProviderOverride(provider) {
+  const value = String(provider ?? '').toLowerCase();
+  if (value === 'opencode') return 'opencode';
+  if (value === 'ollama') return 'ollama';
+  if (value === 'lmstudio') return 'lmstudio';
+  if (value === 'codex') return 'codex';
+  return null;
 }
 
 export function buildPromptWithMemories(prompt, memories = [], options = {}) {
@@ -797,13 +966,34 @@ async function chatCompletionHttpError(response, label) {
   let detail = '';
   try {
     const text = await response.text();
-    detail = text ? ` ${text.slice(0, 420)}` : '';
+    detail = extractProviderErrorText(text);
   } catch {}
   if (response.status === 429) {
     const wait = retryAfter ? ` Retry after ${retryAfter} seconds.` : ' Retry later or switch provider/model in Settings.';
-    return new Error(`${label} rate limit: 429 Too Many Requests.${wait}`);
+    const error = new Error(`${label} rate limit: 429 Too Many Requests.${wait}`);
+    error.status = response.status;
+    error.failureKind = 'rate_limit';
+    return error;
   }
-  return new Error(`${label} error: ${response.status} ${response.statusText}${detail}`);
+  const error = new Error(`${label} error: ${response.status} ${response.statusText}${detail ? ` ${detail}` : ''}`);
+  error.status = response.status;
+  error.failureKind = classifyProviderFailure(detail || response.statusText, response.status);
+  return error;
+}
+
+function extractProviderErrorText(text) {
+  const raw = String(text ?? '').trim();
+  if (!raw) {
+    return '';
+  }
+  try {
+    const data = JSON.parse(raw);
+    const message = data?.error?.message ?? data?.message ?? data?.detail ?? data?.error;
+    if (message) {
+      return String(message).replace(/\s+/g, ' ').slice(0, 420);
+    }
+  } catch {}
+  return raw.replace(/\s+/g, ' ').slice(0, 420);
 }
 
 function formatFetchFailure(error) {

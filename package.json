@@ -1,6 +1,6 @@
 {
   "name": "jarvis-neural-command-interface",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "private": false,
   "type": "module",
   "main": "electron/main.cjs",
@@ -21,9 +21,15 @@
     "test:installed-ui-smoke": "node --experimental-sqlite scripts/test-installed-ui-smoke.mjs",
     "preview": "node --experimental-sqlite server/index.mjs",
     "package:win": "npm run build && electron-builder --win --dir",
+    "package:win:dir": "npm run build && electron-builder --win --dir --publish never",
     "package:mac": "npm run build && electron-builder --mac --dir",
     "installer:win": "npm run build && electron-builder --win nsis",
-    "dist:win": "npm run installer:win"
+    "installer:win:from-dir": "electron-builder --win nsis --prepackaged release/win-unpacked --publish never",
+    "installer:win:quick": "electron-builder --win nsis --prepackaged release/win-unpacked --publish never --config.compression=store",
+    "dist:win": "npm run installer:win",
+    "dist:win:fast": "npm run package:win:dir && npm run installer:win:from-dir",
+    "install:local:from-dir": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-local-fast.ps1",
+    "install:local:fast": "npm run package:win:dir && npm run install:local:from-dir"
   },
   "build": {
     "appId": "local.jarvis.neural-command-interface",

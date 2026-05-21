@@ -7705,3 +7705,103 @@ sl-tooltip::part(base__popup) {
     font-size: 8px;
   }
 }
+
+/* Right rail polish: keep recalled memories and artifact rows legible in narrow cards. */
+.mission-card--memory,
+.mission-card--artifacts {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mission-memory-context,
+.mission-artifacts {
+  min-width: 0;
+  padding-right: 5px;
+  scrollbar-gutter: stable;
+}
+
+.memory-chip {
+  min-width: 0;
+  min-height: 62px;
+  align-content: start;
+  gap: 3px;
+  padding: 9px 10px;
+  overflow: hidden;
+}
+
+.memory-chip strong,
+.memory-chip span,
+.memory-chip em {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.memory-chip strong {
+  display: -webkit-box;
+  line-height: 1.24;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.memory-chip span,
+.memory-chip em {
+  line-height: 1.18;
+  white-space: nowrap;
+}
+
+.artifact-group {
+  min-width: 0;
+  grid-template-columns: 54px minmax(0, 1fr);
+  align-items: start;
+}
+
+.artifact-group > span {
+  min-width: 0;
+  padding-top: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.artifact-group code,
+.artifact-file {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.artifact-file {
+  min-height: 32px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+}
+
+.artifact-file code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-file span {
+  justify-self: end;
+  white-space: nowrap;
+}
+
+.command-console.active-view .conversation-message .task-actions {
+  grid-column: 2 / -1;
+  justify-content: flex-start;
+  gap: 7px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.command-console.active-view .conversation-message .task-actions button {
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 10px;
+}

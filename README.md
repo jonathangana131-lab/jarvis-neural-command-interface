@@ -73,6 +73,38 @@ npm run dist:win
 
 The installer is written to `release/`.
 
+For fast local polish passes, update the installed EXE without launching the
+installer:
+
+```powershell
+npm run install:local:fast
+```
+
+That command builds `release/win-unpacked`, mirrors it into
+`%LOCALAPPDATA%\Programs\Jarvis Neural Command Interface`, and repairs the
+desktop and Start Menu shortcuts. It avoids the slow NSIS extraction step, so
+use it while testing UI and reliability changes. Build the installer only for a
+real release:
+
+```powershell
+npm run dist:win
+```
+
+If `release/win-unpacked` is already fresh and you only need to make an
+installer from it, use:
+
+```powershell
+npm run installer:win:from-dir
+```
+
+The NSIS step is still the slow part because it compresses a roughly 200 MB
+Electron bundle. For a local-only installer smoke test where file size does not
+matter, this skips compression work:
+
+```powershell
+npm run installer:win:quick
+```
+
 ## Privacy Notes
 
 This repository intentionally excludes local databases, logs, screenshots, Playwright traces, `.env` files, saved model keys, and personal workspace paths. Runtime data is stored in the user's application data directory.

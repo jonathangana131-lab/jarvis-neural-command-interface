@@ -7432,3 +7432,276 @@ sl-tooltip::part(base__popup) {
     width: min(440px, calc(50vw - 132px)) !important;
   }
 }
+
+/* v0.7.6 chat console prototype lock: a lighter Codex-style thread that keeps
+   the neural orb readable while preserving the existing chat/session plumbing. */
+@media (min-width: 901px) {
+  .command-console.active-view .mission-timeline {
+    left: clamp(28px, 3vw, 46px) !important;
+    bottom: 154px !important;
+    width: min(620px, calc(48vw - 24px)) !important;
+    min-height: 150px !important;
+    max-height: min(226px, calc(100vh - 454px)) !important;
+  }
+
+  .command-console.active-view .mission-event--response {
+    grid-template-rows: auto auto minmax(0, 1fr) auto !important;
+    padding: 8px !important;
+    overflow: hidden !important;
+    border-color: rgba(115, 243, 255, 0.16) !important;
+    border-radius: 9px !important;
+    background:
+      linear-gradient(180deg, rgba(3, 13, 21, 0.74), rgba(0, 5, 10, 0.48)) !important;
+    box-shadow:
+      0 18px 50px rgba(0, 0, 0, 0.22),
+      inset 0 1px 0 rgba(229, 253, 255, 0.07) !important;
+    backdrop-filter: blur(10px) !important;
+  }
+
+  .command-console.active-view .mission-event--response.is-live::before {
+    opacity: 0.34 !important;
+  }
+
+  .command-console.active-view .conversation-header {
+    min-height: 22px !important;
+    align-items: center !important;
+    padding: 0 1px 6px !important;
+    border-bottom: 1px solid rgba(115, 243, 255, 0.1) !important;
+  }
+
+  .command-console.active-view .conversation-header span {
+    color: var(--dim) !important;
+    font-size: 9px !important;
+    letter-spacing: 0.05em !important;
+  }
+
+  .command-console.active-view .conversation-header strong {
+    color: var(--cyan-hot) !important;
+    font-size: 10px !important;
+    letter-spacing: 0 !important;
+  }
+
+  .command-console.active-view .mission-stepper {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+    min-height: 18px !important;
+    gap: 5px !important;
+    margin: 2px 0 4px !important;
+    opacity: 0.72 !important;
+  }
+
+  .command-console.active-view .mission-stepper span {
+    min-width: 0 !important;
+    justify-content: start !important;
+    gap: 5px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    color: var(--muted) !important;
+    font-size: 8px !important;
+    line-height: 1 !important;
+    text-transform: uppercase !important;
+  }
+
+  .command-console.active-view .mission-stepper span i {
+    width: 6px !important;
+    height: 6px !important;
+    box-shadow: none !important;
+  }
+
+  .command-console.active-view .mission-stepper span.active {
+    color: var(--cyan-hot) !important;
+  }
+
+  .command-console.active-view .mission-stepper span.complete {
+    color: rgba(136, 255, 202, 0.78) !important;
+  }
+
+  .command-console.active-view .conversation-stream {
+    display: grid !important;
+    align-content: start !important;
+    gap: 6px !important;
+    min-height: 0 !important;
+    padding: 7px 2px 3px !important;
+    scroll-behavior: smooth !important;
+  }
+
+  .command-console.active-view .conversation-stream::before,
+  .command-console.active-view .conversation-message::after {
+    display: none !important;
+  }
+
+  .command-console.active-view .conversation-message {
+    display: grid !important;
+    grid-template-columns: 58px minmax(0, 1fr) !important;
+    width: 100% !important;
+    justify-self: stretch !important;
+    gap: 8px !important;
+    padding: 8px 10px !important;
+    border: 1px solid rgba(115, 243, 255, 0.1) !important;
+    border-left: 2px solid rgba(115, 243, 255, 0.58) !important;
+    border-radius: 8px !important;
+    background: rgba(0, 8, 14, 0.34) !important;
+    box-shadow: none !important;
+  }
+
+  .command-console.active-view .conversation-message--user {
+    border-color: rgba(255, 200, 87, 0.12) !important;
+    border-left-color: rgba(255, 200, 87, 0.72) !important;
+    background: rgba(28, 20, 7, 0.3) !important;
+  }
+
+  .command-console.active-view .conversation-message__meta {
+    display: grid !important;
+    align-content: start !important;
+    gap: 2px !important;
+    min-width: 0 !important;
+    font-size: 9px !important;
+    letter-spacing: 0 !important;
+    line-height: 1.12 !important;
+  }
+
+  .command-console.active-view .conversation-message__meta span {
+    color: #e9fdff !important;
+    font-size: 9px !important;
+  }
+
+  .command-console.active-view .conversation-message__meta em {
+    color: var(--dim) !important;
+    font-size: 9px !important;
+  }
+
+  .command-console.active-view .conversation-message p,
+  .command-console.active-view .conversation-message pre,
+  .command-console.active-view .mission-output-stream {
+    min-width: 0 !important;
+    margin: 0 !important;
+    color: #dff7fb !important;
+    font-size: 11px !important;
+    line-height: 1.5 !important;
+    overflow-wrap: anywhere !important;
+    white-space: pre-wrap !important;
+  }
+
+  .command-console.active-view .thinking-signal {
+    min-height: 38px !important;
+    margin: 2px 0 !important;
+    padding: 6px 8px !important;
+    border: 1px solid rgba(115, 243, 255, 0.1) !important;
+    border-radius: 8px !important;
+    background: rgba(0, 8, 14, 0.28) !important;
+  }
+
+  .command-console.active-view .thinking-orbit {
+    width: 28px !important;
+    height: 28px !important;
+  }
+
+  .command-console.active-view .task-actions--inline {
+    justify-content: flex-start !important;
+    gap: 7px !important;
+    padding-top: 6px !important;
+  }
+
+  .command-console.active-view .task-actions--inline button {
+    min-height: 30px !important;
+    padding: 0 10px !important;
+    border-radius: 7px !important;
+  }
+
+  .command-console.active-view .workspace-switcher,
+  .command-console.active-view .command-dock__main {
+    left: clamp(132px, 10vw, 150px) !important;
+    width: min(492px, calc(48vw - 134px)) !important;
+  }
+
+  .command-console.active-view .workspace-switcher {
+    bottom: 98px !important;
+    height: 34px !important;
+    grid-template-columns: minmax(0, 1fr) 124px !important;
+    gap: 7px !important;
+  }
+
+  .command-console.active-view .workspace-switcher select,
+  .command-console.active-view .workspace-switcher .hud-button {
+    min-height: 34px !important;
+    height: 34px !important;
+    border-radius: 7px !important;
+  }
+
+  .command-console.active-view .command-dock__main {
+    bottom: 22px !important;
+    grid-template-columns: minmax(0, 1fr) 88px !important;
+    align-items: end !important;
+    gap: 8px !important;
+    min-height: 66px !important;
+    padding: 8px !important;
+    border-color: rgba(115, 243, 255, 0.18) !important;
+    border-radius: 10px !important;
+    background:
+      linear-gradient(180deg, rgba(4, 16, 25, 0.88), rgba(0, 5, 11, 0.74)) !important;
+    box-shadow:
+      0 20px 54px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(229, 253, 255, 0.08) !important;
+    backdrop-filter: blur(12px) !important;
+  }
+
+  .command-console.active-view #task-prompt {
+    min-height: 50px !important;
+    max-height: 126px !important;
+    height: 50px;
+    padding: 11px 12px !important;
+    border-radius: 8px !important;
+    background: rgba(0, 6, 11, 0.72) !important;
+    font-size: 13px !important;
+    line-height: 1.35 !important;
+  }
+
+  .command-console.active-view #task-prompt:focus {
+    border-color: rgba(229, 253, 255, 0.54) !important;
+    box-shadow:
+      inset 0 0 18px rgba(115, 243, 255, 0.05),
+      0 0 0 2px rgba(115, 243, 255, 0.08) !important;
+  }
+
+  .command-console.active-view .ignite-button {
+    min-height: 50px !important;
+    height: 50px !important;
+    border-radius: 8px !important;
+  }
+
+  .chat-sidebar-toggle {
+    min-height: 40px !important;
+    border-radius: 9px !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .conversation-message {
+    display: grid;
+    grid-template-columns: 54px minmax(0, 1fr);
+    gap: 8px;
+    padding: 9px 10px;
+    border-radius: 8px;
+  }
+
+  .conversation-message p,
+  .conversation-message pre,
+  .mission-output-stream {
+    font-size: 11px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+
+  .mission-stepper {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 4px;
+  }
+
+  .mission-stepper span {
+    min-width: 0;
+    padding-inline: 0;
+    font-size: 8px;
+  }
+}

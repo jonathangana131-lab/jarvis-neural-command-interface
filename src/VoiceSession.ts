@@ -55,7 +55,7 @@ export class VoiceSession {
   private active = false;
   private settings: VoiceSettings = {
     voiceEnabled: true,
-    spokenResponses: true,
+    spokenResponses: false,
     selectedVoiceName: '',
     autoSendAfterFinalTranscript: true,
     summaryMaxLength: 180

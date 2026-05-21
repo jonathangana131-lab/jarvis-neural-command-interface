@@ -214,7 +214,7 @@ let taskDispatchInFlight = false;
 const lastMemoryRecall = new Map<number, { mode: string; prompt: string; at: string }>();
 let voiceSettings: VoiceSettings = {
   voiceEnabled: true,
-  spokenResponses: true,
+  spokenResponses: false,
   selectedVoiceName: '',
   autoSendAfterFinalTranscript: true,
   summaryMaxLength: 180
@@ -500,7 +500,6 @@ async function dispatchTask() {
   lastCommandOutput = '';
   lastCommandPhase = 'queued';
   setMode('executing');
-  voiceSession.speakSummary('I am working on it.');
   scene.setResponseActive(true);
   scene.pulseResponse(1.25);
   scene.pulseMemoryGrowth(0.5);
@@ -587,8 +586,8 @@ memoryScopeFilter.addEventListener('change', () => {
 
 function syncTaskPromptHeight() {
   taskPrompt.style.height = 'auto';
-  const maxHeight = window.matchMedia('(min-width: 901px)').matches ? 132 : 154;
-  taskPrompt.style.height = `${Math.min(Math.max(taskPrompt.scrollHeight, 54), maxHeight)}px`;
+  const maxHeight = window.matchMedia('(min-width: 901px)').matches ? 126 : 154;
+  taskPrompt.style.height = `${Math.min(Math.max(taskPrompt.scrollHeight, 50), maxHeight)}px`;
 }
 
 memoryKindFilter.addEventListener('change', () => {
@@ -702,6 +701,10 @@ saveVoiceSettings.addEventListener('click', () => {
 });
 
 testVoiceSummary.addEventListener('click', () => {
+  if (!voiceSettings.spokenResponses) {
+    voiceSettingsMessage.textContent = 'Turn on Spoken summaries, then test voice.';
+    return;
+  }
   voiceSession.speakSummary('Voice summaries are enabled. I will keep spoken updates short while long code and logs stay on screen.');
 });
 
@@ -815,7 +818,7 @@ function hydrateSettingsFromConfig() {
 function applyVoiceSettings(settings: VoiceSettings) {
   voiceSettings = {
     voiceEnabled: settings.voiceEnabled !== false,
-    spokenResponses: settings.spokenResponses !== false,
+    spokenResponses: settings.spokenResponses === true,
     selectedVoiceName: settings.selectedVoiceName ?? '',
     autoSendAfterFinalTranscript: settings.autoSendAfterFinalTranscript !== false,
     summaryMaxLength: Math.max(80, Math.min(420, Number(settings.summaryMaxLength ?? 180)))
@@ -1145,13 +1148,10 @@ function connectEvents() {
       voiceStatus.textContent = 'Codex CLI update required for gpt-5.5';
     } else if (isRateLimitOutput(task.output)) {
       voiceStatus.textContent = 'OpenCode rate limit hit. Retry later or switch provider/model in Settings.';
-      voiceSession.speakSummary('OpenCode is rate limited. Retry later or switch providers in Settings.');
     } else if (task.status === 'completed') {
       voiceStatus.textContent = 'Task finished.';
-      voiceSession.speakSummary(shortTaskSpeechSummary(task));
     } else {
       voiceStatus.textContent = `Task ${task.status}.`;
-      voiceSession.speakSummary(`Task ${task.status}. Check the response for details.`);
     }
     void loadMemories(false);
     void loadChats();
@@ -2627,7 +2627,6 @@ async function cancelTask(taskId: string) {
     lastCommandPhase = data.task.phase ?? data.task.status;
     lastCommandOutput = data.task.output;
     voiceStatus.textContent = 'Task stopped.';
-    voiceSession.speakSummary('Task stopped.');
     upsertVisibleTask(data.task, true);
     renderCommandChat(true);
     void refreshQueueStatus();
@@ -3476,20 +3475,6 @@ function summarizeTaskForCopy(task: TaskRecord) {
     `Status: ${task.status}${task.phase ? ` / ${task.phase}` : ''}`,
     `Summary: ${shortOutput}`
   ].join('\n');
-}
-
-function shortTaskSpeechSummary(task: TaskRecord) {
-  const output = stripUiArtifactBlocks(task.output || '').replace(/\s+/g, ' ').trim();
-  if (task.filesChanged?.length) {
-    return `Task finished. I changed ${task.filesChanged.length} file${task.filesChanged.length === 1 ? '' : 's'}.`;
-  }
-  if (task.testsRun?.length) {
-    return `Task finished. I ran ${task.testsRun.length} check${task.testsRun.length === 1 ? '' : 's'}.`;
-  }
-  if (!output) {
-    return 'Task finished.';
-  }
-  return output;
 }
 
 function renderConversationMessage(

@@ -9,3 +9,8 @@
 !macro customInit
   StrCpy $INSTDIR "$LOCALAPPDATA\Programs\Jarvis Neural Command Interface"
 !macroend
+
+!macro customInstall
+  CreateShortCut "$DESKTOP\${APP_FILENAME}.lnk" "$INSTDIR\${APP_FILENAME}.exe" "" "$INSTDIR\resources\app\build\icon.ico"
+  CreateShortCut "$SMPROGRAMS\${APP_FILENAME}.lnk" "$INSTDIR\${APP_FILENAME}.exe" "" "$INSTDIR\resources\app\build\icon.ico"
+!macroend

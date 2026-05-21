@@ -36,7 +36,7 @@ const updateRepository = process.env.JARVIS_UPDATE_REPO || 'jonathangana131-lab/
 const startedAt = new Date().toISOString();
 const defaultVoiceSettings = {
   voiceEnabled: true,
-  spokenResponses: true,
+  spokenResponses: false,
   selectedVoiceName: '',
   autoSendAfterFinalTranscript: true,
   summaryMaxLength: 180
@@ -609,6 +609,8 @@ function repairShortcuts() {
   }
   const appName = 'Jarvis Neural Command Interface';
   const exePath = process.execPath;
+  const iconPath = path.join(path.dirname(exePath), 'resources', 'app', 'build', 'icon.ico');
+  const shortcutIcon = fs.existsSync(iconPath) ? iconPath : `${exePath},0`;
   const shortcutTargets = [
     path.join(process.env.USERPROFILE ?? '', 'Desktop', `${appName}.lnk`),
     path.join(process.env.APPDATA ?? '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', `${appName}.lnk`)
@@ -624,7 +626,7 @@ foreach ($shortcutPath in @(${shortcutTargets.map(psQuote).join(',')})) {
   $shortcut = $shell.CreateShortcut($shortcutPath)
   $shortcut.TargetPath = ${psQuote(exePath)}
   $shortcut.WorkingDirectory = ${psQuote(path.dirname(exePath))}
-  $shortcut.IconLocation = ${psQuote(`${exePath},0`)}
+  $shortcut.IconLocation = ${psQuote(shortcutIcon)}
   $shortcut.Description = ${psQuote(appName)}
   $shortcut.Save()
 }
@@ -1031,7 +1033,7 @@ function normalizeVoiceSettings(value) {
   const summaryMaxLength = Math.max(80, Math.min(420, Number(value.summaryMaxLength ?? defaultVoiceSettings.summaryMaxLength)));
   return {
     voiceEnabled: value.voiceEnabled !== false,
-    spokenResponses: value.spokenResponses !== false,
+    spokenResponses: value.spokenResponses === true,
     selectedVoiceName: String(value.selectedVoiceName ?? '').slice(0, 160),
     autoSendAfterFinalTranscript: value.autoSendAfterFinalTranscript !== false,
     summaryMaxLength

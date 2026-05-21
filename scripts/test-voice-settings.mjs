@@ -70,7 +70,7 @@ try {
 
   const defaults = await getJson(appPort, '/api/voice-settings');
   assert.equal(defaults.voiceEnabled, true);
-  assert.equal(defaults.spokenResponses, true);
+  assert.equal(defaults.spokenResponses, false);
   assert.equal(defaults.selectedVoiceName, '');
   assert.equal(defaults.autoSendAfterFinalTranscript, true);
   assert.equal(defaults.summaryMaxLength, 180);

@@ -12,11 +12,12 @@ context for a task.
 
 Use the Windows installer from the latest GitHub Release:
 
-- `Jarvis-Neural-Command-Interface-Setup-0.7.5.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.7.6.exe`
 
 ## Current Highlights
 
 - Persistent chat sessions with New Chat, search, pin, rename, clear, archive, and task-linked history.
+- A lighter Run chat console with a compact coding transcript and cleaner composer that keeps the neural orb visible.
 - A Memory Center with graph legend, review queue, recall reasons, sort/filter controls, ignore/archive controls, and duplicate cleanup.
 - A Project Dashboard for readiness, recent chats, recent tasks, storage, workspace, and release status.
 - Run cockpit helpers for saved workspace switching without the extra template button strip.

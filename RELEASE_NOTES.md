@@ -1,3 +1,39 @@
+# v0.7.6
+
+Chat reliability and desktop polish release.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.7.6.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.7.6.exe.blockmap`
+- `latest.yml`
+
+## Refined
+
+- Redesigned the Run chat as a lighter coding-console transcript with compact message rows, calmer task lifecycle chrome, and a tighter composer/workspace stack.
+- Kept the neural orb readable by reducing chat panel height, glow, and visual weight while preserving persistent chat sessions and task actions.
+- Renamed the chat drawer header to plain Chat History and tightened the prompt placeholder around coding work.
+- Disabled automatic spoken task summaries by default and removed the after-prompt/after-task speech calls; dictation remains available when voice input is enabled.
+- Strengthened Windows shortcut icon repair so repaired and in-app-update-created shortcuts point at the packaged app icon file.
+
+## Verified
+
+- `npm run build`
+- `npm run test:voice-settings`
+- `npm run test:stream-parser`
+- `npm run test:memory`
+- `npm run test:live-smoke`
+- `npm run test:artifacts`
+- Browser UI review of the desktop Run chat layout and Chat History drawer
+- `npm run test:packaged-smoke`
+- `npx electron-builder --win nsis --publish never`
+- Silent local install verified at `0.7.6` with Desktop and Start Menu shortcuts targeting the installed executable and packaged icon
+- `npm run test:installed-ui-smoke`
+
+SHA256: `38683D123ED553664A129DA12BBC55B60C9CDB77B3CDC48AF4341BBE4829808A`
+
 # v0.7.5
 
 Chat interface refinement release.

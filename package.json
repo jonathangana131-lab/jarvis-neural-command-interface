@@ -1,6 +1,6 @@
 {
   "name": "jarvis-neural-command-interface",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "private": false,
   "type": "module",
   "main": "electron/main.cjs",
@@ -28,6 +28,7 @@
   "build": {
     "appId": "local.jarvis.neural-command-interface",
     "productName": "Jarvis Neural Command Interface",
+    "executableName": "Jarvis Neural Command Interface",
     "asar": false,
     "directories": {
       "output": "release"
@@ -64,6 +65,7 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Jarvis Neural Command Interface",
       "uninstallDisplayName": "Jarvis Neural Command Interface",
+      "include": "build/installer.nsh",
       "artifactName": "Jarvis-Neural-Command-Interface-Setup-${version}.${ext}"
     }
   },

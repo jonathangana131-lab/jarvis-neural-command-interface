@@ -1096,7 +1096,9 @@ function readJsonFile(targetPath) {
 
 function writeJsonFile(targetPath, value) {
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-  fs.writeFileSync(targetPath, JSON.stringify(value, null, 2));
+  const tempPath = `${targetPath}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(tempPath, JSON.stringify(value, null, 2));
+  fs.renameSync(tempPath, targetPath);
 }
 
 function formatLogArg(value) {
@@ -1114,19 +1116,24 @@ function formatLogArg(value) {
 }
 
 function readLogTail(targetPath, maxBytes) {
-  if (!fs.existsSync(targetPath)) {
+  try {
+    if (!fs.existsSync(targetPath)) {
+      return '';
+    }
+    const stat = fs.statSync(targetPath);
+    const length = Math.min(maxBytes, stat.size);
+    const buffer = Buffer.alloc(length);
+    const fd = fs.openSync(targetPath, 'r');
+    try {
+      fs.readSync(fd, buffer, 0, length, stat.size - length);
+    } finally {
+      fs.closeSync(fd);
+    }
+    return buffer.toString('utf8');
+  } catch (error) {
+    console.warn(`Unable to read log tail from ${targetPath}: ${error.message}`);
     return '';
   }
-  const stat = fs.statSync(targetPath);
-  const length = Math.min(maxBytes, stat.size);
-  const buffer = Buffer.alloc(length);
-  const fd = fs.openSync(targetPath, 'r');
-  try {
-    fs.readSync(fd, buffer, 0, length, stat.size - length);
-  } finally {
-    fs.closeSync(fd);
-  }
-  return buffer.toString('utf8');
 }
 
 async function fetchLatestRelease() {

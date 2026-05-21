@@ -188,7 +188,7 @@ let visibleTasks: TaskRecord[] = [];
 let visibleChats: ChatSessionRecord[] = [];
 let selectedMemoryId: number | null = null;
 let selectedTaskId: string | null = null;
-let selectedChatId: string | null = window.localStorage.getItem('jarvis.chat.selectedId') || null;
+let selectedChatId: string | null = safeStorageGet('jarvis.chat.selectedId') || null;
 let reviewingHistoricalTask = false;
 let currentTab = 'run';
 let lastCommandPrompt = '';
@@ -225,6 +225,14 @@ let eventsReconnectAttempts = 0;
 let eventsConnected = false;
 const queuedWatchTimers = new Map<string, number>();
 let savedWorkspaces: string[] = loadSavedWorkspaces();
+
+window.addEventListener('error', (event) => {
+  reportClientIssue(event.error ?? event.message, 'Unexpected UI error');
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  reportClientIssue(event.reason, 'Unexpected async UI error');
+});
 
 type ModelProvider = NonNullable<AppConfig['localModel']>['provider'];
 type ArtifactCatalogItem = {
@@ -979,7 +987,8 @@ function connectEvents() {
     }, waitMs);
   };
   events.addEventListener('memory.created', (event) => {
-    const memory = JSON.parse((event as MessageEvent).data) as MemoryRecord;
+    const memory = parseEventData<MemoryRecord>(event, 'memory.created');
+    if (!memory) return;
     scene.pulseMemoryGrowth(1.25);
     lastCommandPhase = 'memory encoded';
     animateMemory(memory);
@@ -1002,32 +1011,30 @@ function connectEvents() {
     scheduleSemanticEdgeRefresh(900);
   });
   events.addEventListener('memory.recalled', (event) => {
-    try {
-      const payload = JSON.parse((event as MessageEvent).data) as {
-        ids?: number[];
-        mode?: 'semantic' | 'keyword' | 'manual';
-        prompt?: string;
-      };
-      const ids = Array.isArray(payload.ids) ? payload.ids.filter((id) => Number.isFinite(id)) : [];
-      if (ids.length === 0) return;
-      const at = new Date().toISOString();
-      ids.forEach((id) => lastMemoryRecall.set(id, {
-        mode: payload.mode ?? 'semantic',
-        prompt: payload.prompt ?? '',
-        at
-      }));
-      memoryAnimator.recall(ids, payload.mode ?? 'semantic');
-      renderMemories(visibleMemories);
-      renderMemoryDetail();
-    } catch (error) {
-      console.warn('[orb] malformed memory.recalled payload', error);
-    }
+    const payload = parseEventData<{
+      ids?: number[];
+      mode?: 'semantic' | 'keyword' | 'manual';
+      prompt?: string;
+    }>(event, 'memory.recalled');
+    if (!payload) return;
+    const ids = Array.isArray(payload.ids) ? payload.ids.filter((id) => Number.isFinite(id)) : [];
+    if (ids.length === 0) return;
+    const at = new Date().toISOString();
+    ids.forEach((id) => lastMemoryRecall.set(id, {
+      mode: payload.mode ?? 'semantic',
+      prompt: payload.prompt ?? '',
+      at
+    }));
+    memoryAnimator.recall(ids, payload.mode ?? 'semantic');
+    renderMemories(visibleMemories);
+    renderMemoryDetail();
   });
   events.addEventListener('memory.edges.updated', () => {
     scheduleSemanticEdgeRefresh(350);
   });
   events.addEventListener('task.started', (event) => {
-    const task = JSON.parse((event as MessageEvent).data) as TaskRecord;
+    const task = parseEventData<TaskRecord>(event, 'task.started');
+    if (!task) return;
     setMode(modeForTaskPhase(task.phase ?? 'planning'));
     scene.setTaskPhase(task.phase ?? 'planning');
     scene.setResponseActive(true);
@@ -1049,7 +1056,8 @@ function connectEvents() {
     void refreshQueueStatus();
   });
   events.addEventListener('task.queued', (event) => {
-    const task = JSON.parse((event as MessageEvent).data) as TaskRecord;
+    const task = parseEventData<TaskRecord>(event, 'task.queued');
+    if (!task) return;
     setMode(modeForTaskPhase(task.phase ?? 'queued'));
     scene.setTaskPhase(task.phase ?? 'queued');
     scene.setResponseActive(true);
@@ -1067,7 +1075,8 @@ function connectEvents() {
     void refreshQueueStatus();
   });
   events.addEventListener('task.output', (event) => {
-    const data = JSON.parse((event as MessageEvent).data) as { id: string; output: string; phase?: TaskRecord['phase'] };
+    const data = parseEventData<{ id: string; output: string; phase?: TaskRecord['phase'] }>(event, 'task.output');
+    if (!data) return;
     taskHud.appendOutput(data.id, data.output, data.phase);
     const phase = data.phase ?? 'streaming';
     setMode(modeForTaskPhase(phase));
@@ -1088,7 +1097,8 @@ function connectEvents() {
     scheduleStreamChromeRender();
   });
   events.addEventListener('task.updated', (event) => {
-    const task = JSON.parse((event as MessageEvent).data) as TaskRecord;
+    const task = parseEventData<TaskRecord>(event, 'task.updated');
+    if (!task) return;
     const wasSelected = selectedTaskId === task.id;
     if (['completed', 'failed', 'timed_out', 'cancelled'].includes(task.status)) {
       clearTaskWatch(task.id);
@@ -1101,7 +1111,8 @@ function connectEvents() {
     }
   });
   events.addEventListener('task.finished', (event) => {
-    const task = JSON.parse((event as MessageEvent).data) as TaskRecord;
+    const task = parseEventData<TaskRecord>(event, 'task.finished');
+    if (!task) return;
     const wasSelected = selectedTaskId === task.id;
     clearTaskWatch(task.id);
     currentRunningTask = null;
@@ -1142,8 +1153,21 @@ function connectEvents() {
     }, 2600);
   });
   events.addEventListener('queue.changed', (event) => {
-    renderQueueStatus(JSON.parse((event as MessageEvent).data) as { paused: boolean; runningTaskId: string | null });
+    const queue = parseEventData<{ paused: boolean; runningTaskId: string | null }>(event, 'queue.changed');
+    if (queue) {
+      renderQueueStatus(queue);
+    }
   });
+}
+
+function parseEventData<T>(event: Event, label: string): T | null {
+  try {
+    return JSON.parse((event as MessageEvent).data) as T;
+  } catch (error) {
+    console.warn(`[events] malformed ${label} payload`, error);
+    voiceStatus.textContent = `Live update skipped: malformed ${label} event.`;
+    return null;
+  }
 }
 
 async function refreshCodexStatus() {
@@ -1450,13 +1474,13 @@ function addSavedWorkspace(workspacePath: string, persist = true) {
   if (!clean) return;
   savedWorkspaces = [clean, ...savedWorkspaces.filter((entry) => entry !== clean)].slice(0, 12);
   if (persist) {
-    window.localStorage.setItem('jarvis.workspaces', JSON.stringify(savedWorkspaces));
+    safeStorageSet('jarvis.workspaces', JSON.stringify(savedWorkspaces));
   }
 }
 
 function loadSavedWorkspaces() {
   try {
-    const parsed = JSON.parse(window.localStorage.getItem('jarvis.workspaces') ?? '[]');
+    const parsed = JSON.parse(safeStorageGet('jarvis.workspaces') ?? '[]');
     return Array.isArray(parsed) ? parsed.filter((entry) => typeof entry === 'string') : [];
   } catch {
     return [];
@@ -1465,9 +1489,44 @@ function loadSavedWorkspaces() {
 
 function persistSelectedChat() {
   if (selectedChatId) {
-    window.localStorage.setItem('jarvis.chat.selectedId', selectedChatId);
+    safeStorageSet('jarvis.chat.selectedId', selectedChatId);
   } else {
-    window.localStorage.removeItem('jarvis.chat.selectedId');
+    safeStorageRemove('jarvis.chat.selectedId');
+  }
+}
+
+function safeStorageGet(key: string) {
+  try {
+    return window.localStorage.getItem(key);
+  } catch (error) {
+    console.warn(`[storage] read failed for ${key}`, error);
+    return null;
+  }
+}
+
+function safeStorageSet(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+    return true;
+  } catch (error) {
+    console.warn(`[storage] write failed for ${key}`, error);
+    return false;
+  }
+}
+
+function safeStorageRemove(key: string) {
+  try {
+    window.localStorage.removeItem(key);
+  } catch (error) {
+    console.warn(`[storage] remove failed for ${key}`, error);
+  }
+}
+
+function reportClientIssue(reason: unknown, fallback: string) {
+  const message = reason instanceof Error ? reason.message : typeof reason === 'string' ? reason : fallback;
+  console.warn('[ui]', reason);
+  if (voiceStatus) {
+    voiceStatus.textContent = `${fallback}: ${message}`;
   }
 }
 
@@ -2076,7 +2135,7 @@ function hydrateSetupWizard() {
     setupModel.innerHTML = `<option value="${escapeHtml(config.localModel.model)}">${escapeHtml(modelDisplayName(config.localModel.model))}</option>`;
     setupModel.value = config.localModel.model;
   }
-  const needsSetup = window.localStorage.getItem('jarvis.setup.v1.complete') !== 'true'
+  const needsSetup = safeStorageGet('jarvis.setup.v1.complete') !== 'true'
     || (provider === 'opencode' && !config?.modelKey?.present && !config?.modelApiKeyPresent);
   setupWizard.classList.toggle('hidden', !needsSetup);
   setupStatus.textContent = needsSetup
@@ -2175,7 +2234,7 @@ async function runSetupTest() {
 }
 
 function completeSetupWizard() {
-  window.localStorage.setItem('jarvis.setup.v1.complete', 'true');
+  safeStorageSet('jarvis.setup.v1.complete', 'true');
   setupWizard.classList.add('hidden');
   setTab('run');
 }

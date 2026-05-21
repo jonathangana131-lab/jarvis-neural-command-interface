@@ -404,6 +404,112 @@
   line-height: 1.35;
 }
 
+/* v0.7.4 reliability/stability UI hardening. */
+.hud-button:disabled,
+.ignite-button:disabled,
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none !important;
+}
+
+.hud-button:disabled svg,
+.ignite-button:disabled svg {
+  opacity: 0.72;
+}
+
+.telemetry-strip strong,
+.brand-lockup strong,
+#workspace,
+.workspace-switcher select,
+.diagnostics-grid span,
+.diagnostics-grid p,
+.release-checklist em,
+.settings-section-grid input,
+.settings-section-grid select,
+.model-profile-summary,
+.model-instructions,
+.chat-session p,
+.conversation-message p,
+.conversation-message pre,
+.mission-card p,
+.mission-card strong {
+  overflow-wrap: anywhere;
+}
+
+.update-banner,
+.diagnostics-grid article,
+.settings-section,
+.dashboard-card,
+.release-card {
+  contain: layout paint;
+}
+
+.update-banner strong,
+.update-banner p {
+  max-width: 70ch;
+}
+
+.diagnostics-grid article,
+.release-card,
+.settings-section {
+  scrollbar-gutter: stable;
+}
+
+.diagnostics-grid pre,
+.conversation-message pre,
+.artifact-card__files,
+.backup-list,
+.chat-session-list,
+.mission-memory-context,
+.mission-artifacts {
+  scrollbar-color: rgba(115, 243, 255, 0.46) rgba(0, 8, 15, 0.42);
+}
+
+.empty-state,
+.diagnostics-grid__note,
+#voice-status,
+#model-key-message,
+#voice-settings-message,
+#setup-status {
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 901px) {
+  .command-console.active-view .mission-header {
+    min-height: 72px;
+  }
+
+  .command-console.active-view .mission-vitals span,
+  .telemetry-strip article {
+    overflow: hidden;
+  }
+
+  .command-console.active-view .mission-timeline,
+  .command-console.active-view .mission-grid,
+  .chat-session-rail {
+    max-height: calc(100vh - 178px);
+  }
+}
+
+@media (max-width: 900px) {
+  .update-banner {
+    max-width: none;
+  }
+
+  .update-banner strong,
+  .update-banner p {
+    max-width: none;
+  }
+
+  .diagnostics-grid article,
+  .settings-section,
+  .release-card,
+  .dashboard-card {
+    padding: 12px;
+  }
+}
+
 .memory-node-card p,
 .data-node p,
 .detail-module p,

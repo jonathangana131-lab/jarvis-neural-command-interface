@@ -1,3 +1,46 @@
+# v0.7.4
+
+Reliability, stability, and UI hardening release.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.7.4.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.7.4.exe.blockmap`
+- `latest.yml`
+
+## Fixed
+
+- Hardened browser storage reads/writes so blocked or unavailable `localStorage` no longer breaks startup, setup, saved workspaces, or selected chat restoration.
+- Guarded live-event JSON parsing so malformed server-sent events are skipped with a visible status instead of taking down the UI handler.
+- Made backend JSON state writes atomic to reduce the chance of corrupted config/session files after crashes or shutdowns.
+- Made diagnostics log-tail reads tolerant of rotated or deleted log files.
+- Locked the Windows installer target back to the existing `Jarvis Neural Command Interface` install folder so in-app updates replace the current app instead of creating a second lowercase install.
+
+## Refined
+
+- Added another UI hardening layer for disabled states, long text wrapping, scroll behavior, update banners, diagnostics cards, settings panels, and small-screen layouts.
+
+## Verified
+
+- `npm run build`
+- `npm run test:memory`
+- `npm run test:voice-settings`
+- `node --check electron/main.cjs`
+- `node --check server/index.mjs`
+- `npm run test:artifacts`
+- `npm run test:stream-parser`
+- `npm run test:live-smoke`
+- Browser UI review across Run, Memory, and Diagnostics views
+- `npm run package:win`
+- `npm run test:packaged-smoke`
+- `npm run dist:win`
+- `npm run test:installed-ui-smoke`
+- Local install verified at `0.7.4` with Desktop and Start Menu shortcuts targeting the installed executable
+
+SHA256: `31C02F4F27F74E6691D9E15CF64001EEF1DDE0BDDE4197065378D6016F800903`
+
 # v0.7.3
 
 Focused UI refinement release.

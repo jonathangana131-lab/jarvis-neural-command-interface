@@ -38,6 +38,7 @@
     "productName": "Jarvis Neural Command Interface",
     "executableName": "Jarvis Neural Command Interface",
     "asar": false,
+    "compression": "store",
     "directories": {
       "output": "release"
     },

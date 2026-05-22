@@ -29,6 +29,8 @@ export class TaskStore {
         failure_kind TEXT,
         failure_action TEXT,
         provider_used TEXT,
+        task_mode TEXT,
+        timing_json TEXT NOT NULL DEFAULT '{}',
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -57,6 +59,8 @@ export class TaskStore {
     this.#ensureColumn('failure_kind', 'TEXT');
     this.#ensureColumn('failure_action', 'TEXT');
     this.#ensureColumn('provider_used', 'TEXT');
+    this.#ensureColumn('task_mode', 'TEXT');
+    this.#ensureColumn('timing_json', "TEXT NOT NULL DEFAULT '{}'");
     this.#ensureColumn('updated_at', 'TEXT');
     this.#ensureChatColumn('pinned', 'INTEGER NOT NULL DEFAULT 0');
     this.#ensureChatColumn('cleared_at', 'TEXT');
@@ -93,8 +97,8 @@ export class TaskStore {
         INSERT INTO tasks (
           id, chat_id, prompt, workspace, status, phase, output, logs, created_at, finished_at, exit_code,
           remembered_memory_ids, created_memory_ids, memory_skipped, files_changed, commands_run,
-          tests_run, failure_kind, failure_action, provider_used, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          tests_run, failure_kind, failure_action, provider_used, task_mode, timing_json, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(id) DO UPDATE SET
           chat_id = excluded.chat_id,
           prompt = excluded.prompt,
@@ -114,6 +118,8 @@ export class TaskStore {
           failure_kind = excluded.failure_kind,
           failure_action = excluded.failure_action,
           provider_used = excluded.provider_used,
+          task_mode = excluded.task_mode,
+          timing_json = excluded.timing_json,
           updated_at = CURRENT_TIMESTAMP
       `)
       .run(
@@ -136,7 +142,9 @@ export class TaskStore {
         stringifyJson(task.testsRun ?? []),
         task.failureKind ?? null,
         task.failureAction ?? null,
-        task.providerUsed ?? null
+        task.providerUsed ?? null,
+        task.taskMode ?? null,
+        stringifyJsonObject(task.timing ?? {})
       );
     return this.get(task.id);
   }
@@ -152,6 +160,27 @@ export class TaskStore {
     return Boolean(this.db
       .prepare("SELECT id FROM tasks WHERE status = 'running' LIMIT 1")
       .get());
+  }
+
+  countQueued() {
+    const row = this.db
+      .prepare("SELECT COUNT(*) AS count FROM tasks WHERE status = 'queued'")
+      .get();
+    return Number(row?.count ?? 0);
+  }
+
+  listQueued(limit = 12) {
+    return this.db
+      .prepare(`${selectTaskRows()} WHERE status = 'queued' ORDER BY created_at ASC LIMIT ?`)
+      .all(limit)
+      .map(normalizeTaskRow);
+  }
+
+  lastFailedTask() {
+    const row = this.db
+      .prepare(`${selectTaskRows()} WHERE status IN ('failed', 'timed_out') ORDER BY COALESCE(finished_at, created_at) DESC LIMIT 1`)
+      .get();
+    return row ? normalizeTaskRow(row) : null;
   }
 
   listChats({ limit = 80, query = '' } = {}) {
@@ -352,7 +381,9 @@ function selectTaskRows() {
       tests_run AS testsRun,
       failure_kind AS failureKind,
       failure_action AS failureAction,
-      provider_used AS providerUsed
+      provider_used AS providerUsed,
+      task_mode AS taskMode,
+      timing_json AS timingJson
     FROM tasks
   `;
 }
@@ -366,7 +397,8 @@ function normalizeTaskRow(row) {
     memorySkipped: parseJsonArray(row.memorySkipped),
     filesChanged: parseJsonArray(row.filesChanged),
     commandsRun: parseJsonArray(row.commandsRun),
-    testsRun: parseJsonArray(row.testsRun)
+    testsRun: parseJsonArray(row.testsRun),
+    timing: parseJsonObject(row.timingJson)
   };
 }
 
@@ -404,6 +436,19 @@ function parseJsonArray(value) {
 
 function stringifyJson(value) {
   return JSON.stringify(Array.isArray(value) ? value : []);
+}
+
+function parseJsonObject(value) {
+  try {
+    const parsed = JSON.parse(String(value ?? '{}'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function stringifyJsonObject(value) {
+  return JSON.stringify(value && typeof value === 'object' && !Array.isArray(value) ? value : {});
 }
 
 function inferPhase(status) {

@@ -72,6 +72,7 @@ const thinkDemo = required<HTMLButtonElement>('#think-demo');
 const voiceStatus = required<HTMLElement>('#voice-status');
 const taskPrompt = required<HTMLTextAreaElement>('#task-prompt');
 const taskWorkspace = required<HTMLInputElement>('#task-workspace');
+const quickTaskMode = required<HTMLInputElement>('#quick-task-mode');
 const runTask = required<HTMLButtonElement>('#run-task');
 const chatSidebarToggle = required<HTMLButtonElement>('#chat-sidebar-toggle');
 const chatSidebarClose = required<HTMLButtonElement>('#chat-sidebar-close');
@@ -266,7 +267,27 @@ type HealthReport = {
     embeddings: { disabled: boolean; dim: number; lastError: string | null };
   };
   codex: { available: boolean; detail: string };
-  queue: { paused: boolean; runningTaskId: string | null };
+  queue: QueueStatus;
+};
+
+type QueueStatus = {
+  paused: boolean;
+  runningTaskId: string | null;
+  queuedCount?: number;
+  nextTaskId?: string | null;
+  nextPrompt?: string | null;
+  reason?: string;
+  items?: Array<{ id: string; prompt: string; status: TaskRecord['status']; phase?: TaskRecord['phase']; taskMode?: string; createdAt: string }>;
+};
+
+type InstallStatus = {
+  version: string;
+  platform: string;
+  packaged: boolean;
+  executablePath: string;
+  installPath: string;
+  dataDir: string;
+  shortcuts: Array<{ path: string; exists: boolean; expectedTarget: string }>;
 };
 
 type UpdateCheck = {
@@ -335,7 +356,7 @@ type DashboardReport = {
   chats: ChatSessionRecord[];
   tasks: TaskRecord[];
   memory: { count: number; embeddings: { ready?: boolean; disabled?: boolean; lastError?: string | null } };
-  queue: { paused: boolean; runningTaskId: string | null };
+  queue: QueueStatus;
   update: {
     currentVersion: string;
     latestVersion: string;
@@ -509,6 +530,7 @@ async function dispatchTask() {
 
   try {
     const chat = await ensureSelectedChat(prompt);
+    const quick = quickTaskMode.checked;
     taskHud.upsert({
       id: `dispatch-${Date.now()}`,
       chatId: chat.id,
@@ -517,6 +539,8 @@ async function dispatchTask() {
       status: 'queued',
       phase: 'queued',
       output: '',
+      taskMode: quick ? 'quick' : 'standard',
+      timing: { queuedAt: new Date().toISOString() },
       createdAt: new Date().toISOString(),
       finishedAt: null,
       exitCode: null
@@ -524,7 +548,7 @@ async function dispatchTask() {
     const response = await fetch('/api/tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, workspace: taskWorkspace.value, chatId: chat.id })
+      body: JSON.stringify({ prompt, workspace: taskWorkspace.value, chatId: chat.id, quick })
     });
     const data = (await response.json()) as { task?: TaskRecord; error?: string };
     if (!response.ok || !data.task) {
@@ -638,12 +662,12 @@ saveWorkspace.addEventListener('click', () => {
 });
 
 pauseQueue.addEventListener('click', async () => {
-  const data = await postJson<{ queue: { paused: boolean; runningTaskId: string | null } }>('/api/queue/pause', {});
+  const data = await postJson<{ queue: QueueStatus }>('/api/queue/pause', {});
   renderQueueStatus(data.queue);
 });
 
 resumeQueue.addEventListener('click', async () => {
-  const data = await postJson<{ queue: { paused: boolean; runningTaskId: string | null } }>('/api/queue/resume', {});
+  const data = await postJson<{ queue: QueueStatus }>('/api/queue/resume', {});
   renderQueueStatus(data.queue);
 });
 
@@ -1554,9 +1578,11 @@ async function loadDiagnostics() {
       modelKey: ModelKeyStatus;
       voice: { speechRecognition: string; microphone: string; detail: string; settings: VoiceSettings };
       session: SessionRecoveryState;
+      install: InstallStatus;
+      lastFailure: TaskRecord | null;
       config: AppConfig;
       sqlite: { databasePath: string; exists: boolean; memoryCount: number; taskCount: number };
-      queue: { paused: boolean; runningTaskId: string | null };
+      queue: QueueStatus;
     }>('/api/diagnostics'),
     fetchJson<HealthReport>('/api/health'),
     fetchJson<UpdateCheck>('/api/update-check'),
@@ -1578,7 +1604,9 @@ async function loadDiagnostics() {
     : `Semantic embeddings ready (${health.memory.embeddings.dim} dimensions).`;
   diagnosticsList.innerHTML = `
     <article><strong>App</strong><span>${escapeHtml(health.app.version)}</span><p>${escapeHtml(health.app.dataDir)}</p></article>
+    <article class="diagnostics-grid__wide"><strong>Recommended Fix</strong><span>${escapeHtml(recommendedFix(data, storage, updateStatus))}</span><p>${escapeHtml(recommendedFixDetail(data, storage, updateStatus))}</p>${renderPrimaryRepairActions()}</article>
     <article><strong>Backend</strong><span>${health.backend.available ? 'Running' : 'Offline'}</span><p>${escapeHtml(`Started ${formatDateTime(health.backend.startedAt)} on port ${health.backend.port}`)}</p></article>
+    <article><strong>Install</strong><span>${data.install.packaged ? 'Packaged' : 'Developer'}</span><p>${escapeHtml(`${data.install.version} / ${data.install.installPath}`)}</p></article>
     <article><strong>Codex</strong><span>${data.codex.available ? 'Available' : 'Unavailable'}</span><p>${escapeHtml(data.codex.detail)}</p></article>
     <article><strong>Model</strong><span>${escapeHtml(data.config.codexModel ?? 'default')}</span><p>${escapeHtml([data.config.codexCommand, data.config.codexReasoningEffort, data.config.codexEphemeral ? 'ephemeral' : 'persistent'].filter(Boolean).join(' / '))}</p></article>
     <article><strong>OpenCode Key</strong><span>${data.modelKey.present ? 'Ready' : 'Missing'}</span><p>${escapeHtml(data.modelKey.present ? `Loaded from ${data.modelKey.source}.` : 'Save a key in Settings to scan hosted models.')}</p></article>
@@ -1591,7 +1619,8 @@ async function loadDiagnostics() {
     <article class="diagnostics-grid__wide"><strong>Fix Common Problems</strong><span>Guided repair</span><p>Use these when the app opens oddly, shortcuts disappear, storage fills up, or model settings are bad.</p>${renderFixCommonProblems(data, storage)}</article>
     <article class="diagnostics-grid__wide"><strong>Update Safety</strong><span>${updateStatus.status}</span><p>${escapeHtml(updateSafetySummary(update, updateStatus))}</p>${renderUpdateSafety(update, updateStatus)}</article>
     <article class="diagnostics-grid__wide"><strong>Storage</strong><span>${escapeHtml(formatBytes(storage.totalSize))}</span><p>${escapeHtml(storageSummary(storage))}</p>${renderStorageManager(storage)}</article>
-    <article><strong>Queue</strong><span>${data.queue.paused ? 'Paused' : 'Active'}</span><p>${data.queue.runningTaskId ? `Running ${escapeHtml(data.queue.runningTaskId)}` : 'No active task'}</p></article>
+    <article class="diagnostics-grid__wide"><strong>Queue</strong><span>${escapeHtml(queueStatusLabel(data.queue))}</span><p>${escapeHtml(data.queue.reason ?? 'Queue ready.')}</p>${renderQueueInspector(data.queue)}</article>
+    <article class="diagnostics-grid__wide"><strong>Last Failure</strong><span>${escapeHtml(data.lastFailure ? `${data.lastFailure.status} / ${data.lastFailure.failureKind ?? 'unknown'}` : 'None')}</span><p>${escapeHtml(data.lastFailure ? `${data.lastFailure.failureAction ?? 'Review the task output.'} ${taskTimingSummary(data.lastFailure)}` : 'No failed task recorded.')}</p></article>
     <article class="diagnostics-grid__wide"><strong>Session Recovery</strong><span>${data.session.previousCrashed ? 'Previous crash detected' : 'Clean'}</span><p>${escapeHtml(sessionRecoveryDetail(data.session))}</p>${renderSessionRecoveryActions(data.session)}</article>
     <article class="diagnostics-grid__wide"><strong>Recovery</strong><span>Safe controls</span><p>Reset bad model settings, repair missing shortcuts, clear saved model secrets, or export a log bundle for bug reports.</p>${renderRecoveryActions()}</article>
     <article class="diagnostics-grid__wide"><strong>Backups</strong><span>${backups.backups.length} saved</span><p>Backups include memory database files, saved provider settings, and local model secrets. Memory database restore requires a restart-safe manual recovery step.</p>${renderBackupManager(backups.backups)}</article>
@@ -1646,6 +1675,68 @@ function wireProviderHealthActions() {
     await switchSettingsToCodex();
     setTab('settings');
   });
+}
+
+function recommendedFix(
+  data: { codex: { available: boolean; detail?: string }; modelKey: ModelKeyStatus; queue: QueueStatus; providerHealth: ProviderHealth; install: InstallStatus },
+  storage: StorageReport,
+  updateStatus: UpdateStatus
+) {
+  if (!data.providerHealth.available) return providerHealthStatus(data.providerHealth);
+  if (!data.codex.available && data.providerHealth.provider === 'codex') return 'Repair Codex CLI';
+  if (data.queue.paused) return 'Resume queue';
+  if (data.install.shortcuts.some((shortcut) => !shortcut.exists)) return 'Repair shortcuts';
+  if (updateStatus.status === 'failed') return 'Export diagnostics';
+  if (storage.updates.size > 100 * 1024 * 1024) return 'Clean old installers';
+  return 'No urgent action';
+}
+
+function recommendedFixDetail(
+  data: { codex: { available: boolean; detail?: string }; modelKey: ModelKeyStatus; queue: QueueStatus; providerHealth: ProviderHealth; install: InstallStatus },
+  storage: StorageReport,
+  updateStatus: UpdateStatus
+) {
+  if (!data.providerHealth.available) return providerHealthDetail(data.providerHealth);
+  if (!data.codex.available && data.providerHealth.provider === 'codex') return data.codex.detail ?? 'Codex CLI is unavailable.';
+  if (data.queue.paused) return `${data.queue.queuedCount ?? 0} task${(data.queue.queuedCount ?? 0) === 1 ? '' : 's'} waiting.`;
+  const missingShortcuts = data.install.shortcuts.filter((shortcut) => !shortcut.exists);
+  if (missingShortcuts.length > 0) return `${missingShortcuts.length} shortcut${missingShortcuts.length === 1 ? '' : 's'} missing.`;
+  if (updateStatus.status === 'failed') return updateStatus.error ?? 'Update download failed.';
+  if (storage.updates.size > 100 * 1024 * 1024) return `${formatBytes(storage.updates.size)} in downloaded installers.`;
+  return 'Jarvis is using the expected provider, queue, shortcuts, and storage profile.';
+}
+
+function renderPrimaryRepairActions() {
+  return `
+    <div class="update-actions">
+      <button class="hud-button hud-button--primary" type="button" data-diagnostics-bundle data-icon="save"><span>Copy Diagnostic Bundle</span></button>
+      <button class="hud-button" type="button" data-recovery-repair-install data-icon="terminal-square"><span>Repair Install</span></button>
+      <button class="hud-button" type="button" data-storage-cleanup="old-updates" data-icon="trash-2"><span>Clean Old Installers</span></button>
+    </div>
+  `;
+}
+
+function queueStatusLabel(queue: QueueStatus) {
+  if (queue.paused) return `Paused / ${queue.queuedCount ?? 0} waiting`;
+  if (queue.runningTaskId) return `Running ${shortId(queue.runningTaskId)} / ${queue.queuedCount ?? 0} waiting`;
+  return (queue.queuedCount ?? 0) > 0 ? `${queue.queuedCount} waiting` : 'Ready';
+}
+
+function renderQueueInspector(queue: QueueStatus) {
+  const items = queue.items ?? [];
+  const rows = items.length === 0
+    ? '<p class="diagnostics-grid__note">No queued tasks.</p>'
+    : items.map((item) => `
+      <article class="queue-row">
+        <div>
+          <strong>${escapeHtml(item.taskMode === 'quick' ? 'Quick task' : 'Standard task')}</strong>
+          <span>${escapeHtml(shortId(item.id))} / ${escapeHtml(formatDateTime(item.createdAt))}</span>
+          <p>${escapeHtml(item.prompt)}</p>
+        </div>
+        <button class="hud-button" type="button" data-cancel-queued-task="${escapeHtml(item.id)}" data-icon="octagon-x"><span>Cancel</span></button>
+      </article>
+    `).join('');
+  return `<div class="queue-inspector">${rows}</div>`;
 }
 
 function renderFixCommonProblems(
@@ -1974,6 +2065,7 @@ function renderStorageManager(storage: StorageReport) {
     </div>
     <div class="update-actions">
       <button class="hud-button" type="button" data-storage-cleanup="updates" data-icon="trash-2"><span>Clear Installers</span></button>
+      <button class="hud-button" type="button" data-storage-cleanup="old-updates" data-icon="trash-2"><span>Clean Old Installers</span></button>
       <button class="hud-button" type="button" data-storage-cleanup="logs" data-icon="trash-2"><span>Trim Logs</span></button>
       <button class="hud-button" type="button" data-storage-cleanup="backups" data-icon="trash-2"><span>Prune Backups</span></button>
     </div>
@@ -2017,6 +2109,34 @@ function wireRecoveryActions() {
     button.addEventListener('click', async () => {
       const result = await postJson<{ message: string; repaired: string[] }>('/api/recovery/repair-shortcuts', {});
       window.alert(result.repaired.length ? `${result.message}\n\n${result.repaired.join('\n')}` : result.message);
+    });
+  });
+  diagnosticsList.querySelectorAll<HTMLButtonElement>('[data-recovery-repair-install]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const result = await postJson<{ message: string; shortcuts: string[]; cleanup: { removedCount: number }; install: InstallStatus }>('/api/recovery/repair-install', {});
+      voiceStatus.textContent = `${result.message} Removed ${result.cleanup.removedCount} old update file${result.cleanup.removedCount === 1 ? '' : 's'}.`;
+      await loadDiagnostics();
+    });
+  });
+  diagnosticsList.querySelectorAll<HTMLButtonElement>('[data-diagnostics-bundle]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const result = await fetchJson<{ path: string; size: number }>('/api/diagnostics/bundle');
+      try {
+        await navigator.clipboard.writeText(result.path);
+      } catch {
+        // Clipboard can be blocked in browser smoke contexts; the alert still shows the path.
+      }
+      window.alert(`Diagnostic bundle exported:\n${result.path}`);
+    });
+  });
+  diagnosticsList.querySelectorAll<HTMLButtonElement>('[data-cancel-queued-task]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const taskId = button.dataset.cancelQueuedTask;
+      if (!taskId || !window.confirm('Cancel this queued task?')) {
+        return;
+      }
+      await postJson<{ task: TaskRecord }>(`/api/tasks/${encodeURIComponent(taskId)}/cancel`, {});
+      await Promise.all([loadTasks(), loadDiagnostics()]);
     });
   });
   diagnosticsList.querySelectorAll<HTMLButtonElement>('[data-log-export]').forEach((button) => {
@@ -2068,7 +2188,7 @@ function wireBackupActions() {
 }
 
 async function refreshQueueStatus() {
-  const data = await fetchJson<{ queue: { paused: boolean; runningTaskId: string | null } }>('/api/queue');
+  const data = await fetchJson<{ queue: QueueStatus }>('/api/queue');
   renderQueueStatus(data.queue);
 }
 
@@ -2278,9 +2398,12 @@ async function runSetupTest() {
       model
     });
     config = await fetchJson<AppConfig>('/api/config');
+    const chat = await ensureSelectedChat('Jarvis setup test complete.');
     const response = await postJson<{ task?: TaskRecord; error?: string }>('/api/tasks', {
       prompt: 'Reply with exactly: Jarvis setup test complete.',
-      workspace: taskWorkspace.value
+      workspace: taskWorkspace.value,
+      chatId: chat.id,
+      quick: true
     });
     if (!response.task?.id) {
       throw new Error(response.error ?? 'Setup test did not start.');
@@ -2293,8 +2416,9 @@ async function runSetupTest() {
     lastCommandPhase = task.phase ?? task.status;
     lastCommandOutput = task.output;
     upsertVisibleTask(task, true);
-    renderCommandChat(true);
     completeSetupWizard();
+    renderCommandChat(true);
+    void loadChats();
     setupStatus.textContent = 'Setup test complete. Jarvis is ready.';
   } catch (error) {
     setupStatus.textContent = error instanceof Error ? error.message : 'Setup test failed.';
@@ -2310,6 +2434,7 @@ function completeSetupWizard() {
   safeStorageSet('jarvis.setup.v1.complete', 'true');
   setupWizard.classList.add('hidden');
   setTab('run');
+  renderCommandChat(true);
 }
 
 async function waitForTaskTerminal(taskId: string, timeoutMs: number) {
@@ -3511,7 +3636,7 @@ function renderRunRecoveryCard(task: TaskRecord) {
       <div>
         <span>${escapeHtml(titleCase(kind.replace(/_/g, ' ')))}</span>
         <strong>Run recovery</strong>
-        <p>${escapeHtml(action)}</p>
+        <p>${escapeHtml(`${action} ${taskTimingSummary(task)}`.trim())}</p>
       </div>
       <div class="run-recovery-actions">
         <button type="button" data-icon="rotate-cw" data-retry-active-task="${escapeHtml(task.id)}"><span>Retry</span></button>
@@ -3522,6 +3647,32 @@ function renderRunRecoveryCard(task: TaskRecord) {
       </div>
     </section>
   `;
+}
+
+function taskTimingSummary(task: TaskRecord) {
+  const timing = task.timing ?? {};
+  const parts = [
+    timing.queuedAt && timing.startedAt ? `queued ${formatDurationBetween(timing.queuedAt, timing.startedAt)}` : '',
+    timing.providerCheckStartedAt && timing.providerCheckFinishedAt ? `provider ${formatDurationBetween(timing.providerCheckStartedAt, timing.providerCheckFinishedAt)}` : '',
+    timing.startedAt && timing.firstOutputAt ? `first output ${formatDurationBetween(timing.startedAt, timing.firstOutputAt)}` : '',
+    timing.startedAt && timing.finishedAt ? `total ${formatDurationBetween(timing.startedAt, timing.finishedAt)}` : ''
+  ].filter(Boolean);
+  return parts.length ? `Timing: ${parts.join(' / ')}.` : '';
+}
+
+function formatDurationBetween(start: string, end: string) {
+  const ms = Date.parse(end) - Date.parse(start);
+  if (!Number.isFinite(ms) || ms < 0) {
+    return 'unknown';
+  }
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
+  const seconds = ms / 1000;
+  if (seconds < 60) {
+    return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
+  }
+  return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
 }
 
 function wireActiveTaskActions() {
@@ -4065,9 +4216,16 @@ function currentChatTasks(activeTask: TaskRecord | null) {
   return tasks.slice(-8);
 }
 
-function renderQueueStatus(queue: { paused: boolean; runningTaskId: string | null }) {
-  missionQueueLabel = queue.paused ? 'Queue paused' : queue.runningTaskId ? `Running ${shortId(queue.runningTaskId)}` : 'Queue ready';
+function renderQueueStatus(queue: QueueStatus) {
+  missionQueueLabel = queue.paused
+    ? `Paused${queue.queuedCount ? ` / ${queue.queuedCount} waiting` : ''}`
+    : queue.runningTaskId
+      ? `Running ${shortId(queue.runningTaskId)}${queue.queuedCount ? ` / ${queue.queuedCount} waiting` : ''}`
+      : queue.queuedCount
+        ? `${queue.queuedCount} queued`
+        : 'Queue ready';
   queueStatus.textContent = missionQueueLabel;
+  queueStatus.title = queue.reason ?? '';
   renderCommandChat();
 }
 

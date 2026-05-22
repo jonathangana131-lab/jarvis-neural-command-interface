@@ -47,6 +47,7 @@ export class CodexTaskRunner {
             status: 'cancelled',
             phase: 'done',
             finishedAt: new Date().toISOString(),
+            timing: markTiming(persisted.timing, 'finishedAt'),
             memorySkipped: [{
               reason: 'Queued task was cancelled before it ran.',
               content: persisted.prompt,
@@ -55,6 +56,7 @@ export class CodexTaskRunner {
           };
           const publicTask = this.taskStore.upsert(cancelled);
           this.eventBus.emit('task.finished', publicTask);
+          this.eventBus.emit('queue.changed', this.queueStatus());
           return publicTask;
         }
         return persisted;
@@ -70,6 +72,7 @@ export class CodexTaskRunner {
     task.status = 'cancelled';
     task.phase = 'done';
     task.finishedAt = new Date().toISOString();
+    task.timing = markTiming(task.timing, 'finishedAt');
     task.exitCode = null;
     task.memorySkipped = [{
       reason: 'Task was cancelled before memory extraction completed.',
@@ -82,11 +85,12 @@ export class CodexTaskRunner {
     const publicTask = this.#persistTask(task);
     this.tasks.delete(id);
     this.eventBus.emit('task.finished', publicTask);
+    this.eventBus.emit('queue.changed', this.queueStatus());
     this.#drainQueue();
     return publicTask;
   }
 
-  start({ prompt, workspace, chatId, providerOverride }) {
+  start({ prompt, workspace, chatId, providerOverride, quick }) {
     const cwd = path.resolve(workspace || this.config.defaultWorkspace);
     const cleanPrompt = String(prompt ?? '').trim();
     if (!cleanPrompt) {
@@ -107,6 +111,7 @@ export class CodexTaskRunner {
       workspace: cwd
     });
     const id = crypto.randomUUID();
+    const now = new Date().toISOString();
     const outputMessagePath = this.#outputMessagePath(id);
     const task = {
       id,
@@ -127,7 +132,11 @@ export class CodexTaskRunner {
       failureKind: null,
       failureAction: null,
       providerUsed: normalizeProviderOverride(providerOverride) ?? this.config.localModel?.provider ?? 'codex',
-      createdAt: new Date().toISOString(),
+      taskMode: quick === true ? 'quick' : 'standard',
+      timing: {
+        queuedAt: now
+      },
+      createdAt: now,
       finishedAt: null,
       exitCode: null
     };
@@ -136,6 +145,7 @@ export class CodexTaskRunner {
       this.taskStore?.touchChat(publicTask.chatId, publicTask);
     }
     this.eventBus.emit('task.queued', publicTask);
+    this.eventBus.emit('queue.changed', this.queueStatus());
     this.#drainQueue();
     return publicTask;
   }
@@ -151,7 +161,8 @@ export class CodexTaskRunner {
       prompt: task.prompt,
       workspace: task.workspace,
       chatId: task.chatId,
-      providerOverride: normalizeProviderOverride(options.provider)
+      providerOverride: normalizeProviderOverride(options.provider),
+      quick: options.quick === true || task.taskMode === 'quick'
     });
   }
 
@@ -169,18 +180,40 @@ export class CodexTaskRunner {
   }
 
   queueStatus() {
+    const queued = this.taskStore?.listQueued(5) ?? [];
+    const runningTaskId = [...this.tasks.keys()][0] ?? null;
+    const next = queued[0] ?? null;
+    const reason = this.queuePaused
+      ? 'Queue paused by user.'
+      : runningTaskId
+        ? 'Waiting for the running task to finish.'
+        : next
+          ? 'Next task is ready to start.'
+          : 'Queue ready.';
     return {
       paused: this.queuePaused,
-      runningTaskId: [...this.tasks.keys()][0] ?? null
+      runningTaskId,
+      queuedCount: queued.length > 0 ? this.taskStore?.countQueued() ?? queued.length : 0,
+      nextTaskId: next?.id ?? null,
+      nextPrompt: next?.prompt ?? null,
+      reason,
+      items: queued.map((task) => ({
+        id: task.id,
+        prompt: task.prompt,
+        status: task.status,
+        phase: task.phase,
+        taskMode: task.taskMode ?? 'standard',
+        createdAt: task.createdAt
+      }))
     };
   }
 
-  async #selectedProviderHealth() {
+  async #selectedProviderHealth({ force = false } = {}) {
     if (!this.getProviderHealth) {
       return null;
     }
     try {
-      return await this.getProviderHealth({ force: true });
+      return await this.getProviderHealth({ force });
     } catch (error) {
       const kind = classifyProviderFailure(error);
       return {
@@ -218,6 +251,7 @@ export class CodexTaskRunner {
       phase: 'done',
       output: `Provider check failed: ${message}`,
       logs: message,
+      timing: markTiming(queued.timing, 'finishedAt'),
       failureKind: kind,
       failureAction: failure.failureAction ?? providerFailureAction(kind),
       providerUsed: failure.providerUsed ?? this.config.localModel?.provider ?? 'unknown',
@@ -231,6 +265,7 @@ export class CodexTaskRunner {
     };
     const publicTask = this.#persistTask(task);
     this.eventBus.emit('task.finished', publicTask);
+    this.eventBus.emit('queue.changed', this.queueStatus());
     this.#drainQueue();
     return publicTask;
   }
@@ -250,9 +285,13 @@ export class CodexTaskRunner {
 
   async #runQueuedTask(queued) {
     const provider = normalizeProviderOverride(queued.providerUsed) ?? this.config.localModel?.provider;
+    queued.timing = markTiming(queued.timing, 'providerCheckStartedAt');
+    this.taskStore?.upsert(queued);
 
     if (provider === 'opencode') {
-      const health = await this.#selectedProviderHealth();
+      const health = await this.#selectedProviderHealth({ force: false });
+      queued.timing = markTiming(queued.timing, 'providerCheckFinishedAt');
+      this.taskStore?.upsert(queued);
       if (health && !health.available) {
         if (await this.#canFallbackToCodex()) {
           return this.#runCodexCliTask(queued, {
@@ -276,6 +315,8 @@ export class CodexTaskRunner {
       return this.#runOpenCodeApiTask(queued);
     }
 
+    queued.timing = markTiming(queued.timing, 'providerCheckFinishedAt');
+    this.taskStore?.upsert(queued);
     return this.#runCodexCliTask(queued, {
       providerOverride: provider,
       providerUsed: provider
@@ -302,6 +343,8 @@ export class CodexTaskRunner {
       failureKind: null,
       failureAction: null,
       providerUsed: options.providerUsed ?? this.config.localModel?.provider ?? 'codex',
+      taskMode: queued.taskMode ?? 'standard',
+      timing: markTiming(queued.timing, 'startedAt'),
       finishedAt: null,
       exitCode: null
     };
@@ -311,6 +354,7 @@ export class CodexTaskRunner {
     this.tasks.set(task.id, task);
     this.#persistTask(task);
     this.eventBus.emit('task.started', this.#publicTask(task));
+    this.eventBus.emit('queue.changed', this.queueStatus());
     const args = buildCodexExecArgs({
       model: this.config.codex.model,
       reasoningEffort: this.config.codex.reasoningEffort,
@@ -328,6 +372,7 @@ export class CodexTaskRunner {
         return;
       }
       task.phase = inferPhaseFromText(task.phase, text);
+      task.timing = markTiming(task.timing, 'firstOutputAt');
       task.output += text;
       task.output = task.output.slice(-24000);
       this.#persistTask(task);
@@ -359,6 +404,7 @@ export class CodexTaskRunner {
       task.output += `\n${error.message}`;
       task.logs += `\n${error.stack ?? error.message}`;
       task.finishedAt = new Date().toISOString();
+      task.timing = markTiming(task.timing, 'finishedAt');
       const failureKind = classifyProviderFailure(error);
       task.failureKind = failureKind;
       task.failureAction = providerFailureAction(failureKind);
@@ -371,6 +417,7 @@ export class CodexTaskRunner {
       const publicTask = this.#persistTask(task);
       this.tasks.delete(task.id);
       this.eventBus.emit('task.finished', publicTask);
+      this.eventBus.emit('queue.changed', this.queueStatus());
       this.#drainQueue();
     });
     child.on('exit', async (code) => {
@@ -384,6 +431,7 @@ export class CodexTaskRunner {
       task.phase = 'done';
       task.exitCode = code;
       task.finishedAt = new Date().toISOString();
+      task.timing = markTiming(task.timing, 'finishedAt');
       const finalMessage = this.#readFinalMessage(task);
       if (finalMessage) {
         task.output = finalMessage;
@@ -411,6 +459,7 @@ export class CodexTaskRunner {
       const publicTask = this.#persistTask(task);
       this.tasks.delete(task.id);
       this.eventBus.emit('task.finished', publicTask);
+      this.eventBus.emit('queue.changed', this.queueStatus());
       this.#drainQueue();
       void this.#extractTaskMemories(task);
     });
@@ -420,6 +469,7 @@ export class CodexTaskRunner {
         task.status = 'timed_out';
         task.phase = 'done';
         task.finishedAt = new Date().toISOString();
+        task.timing = markTiming(task.timing, 'finishedAt');
         task.failureKind = 'timeout';
         task.failureAction = providerFailureAction('timeout');
         task.memorySkipped = [{
@@ -431,6 +481,7 @@ export class CodexTaskRunner {
         const publicTask = this.#persistTask(task);
         this.tasks.delete(task.id);
         this.eventBus.emit('task.finished', publicTask);
+        this.eventBus.emit('queue.changed', this.queueStatus());
         this.#drainQueue();
       }
     }, this.config.codex.maxTaskRuntimeMs);
@@ -455,6 +506,8 @@ export class CodexTaskRunner {
       failureKind: null,
       failureAction: null,
       providerUsed: 'opencode',
+      taskMode: queued.taskMode ?? 'standard',
+      timing: markTiming(queued.timing, 'startedAt'),
       finishedAt: null,
       exitCode: null
     };
@@ -462,6 +515,7 @@ export class CodexTaskRunner {
     this.tasks.set(task.id, task);
     this.#persistTask(task);
     this.eventBus.emit('task.started', this.#publicTask(task));
+    this.eventBus.emit('queue.changed', this.queueStatus());
 
     const apiKey = process.env.OPENCODE_API_KEY;
     const endpoint = this.config.localModel?.endpoint || 'https://opencode.ai/zen/v1';
@@ -472,6 +526,7 @@ export class CodexTaskRunner {
     const append = (text) => {
       if (!text) return;
       task.phase = inferPhaseFromText(task.phase, text);
+      task.timing = markTiming(task.timing, 'firstOutputAt');
       task.output += text;
       task.output = task.output.slice(-24000);
       this.#persistTask(task);
@@ -536,6 +591,7 @@ export class CodexTaskRunner {
       task.phase = 'done';
       task.exitCode = 0;
       task.finishedAt = new Date().toISOString();
+      task.timing = markTiming(task.timing, 'finishedAt');
       this.#rememberAssistantOutcome(task);
       task.memorySkipped = [{
         reason: 'Memory extraction is running in the background.',
@@ -545,6 +601,7 @@ export class CodexTaskRunner {
       const publicTask = this.#persistTask(task);
       this.tasks.delete(task.id);
       this.eventBus.emit('task.finished', publicTask);
+      this.eventBus.emit('queue.changed', this.queueStatus());
       this.#drainQueue();
       void this.#extractTaskMemories(task);
     } catch (error) {
@@ -588,6 +645,7 @@ export class CodexTaskRunner {
       task.output = task.output.slice(-24000);
       task.exitCode = 1;
       task.finishedAt = new Date().toISOString();
+      task.timing = markTiming(task.timing, 'finishedAt');
       task.failureKind = failureKind;
       task.failureAction = failureAction;
       task.providerUsed = 'opencode';
@@ -599,6 +657,7 @@ export class CodexTaskRunner {
       const publicTask = this.#persistTask(task);
       this.tasks.delete(task.id);
       this.eventBus.emit('task.finished', publicTask);
+      this.eventBus.emit('queue.changed', this.queueStatus());
       this.#drainQueue();
     }
   }
@@ -834,9 +893,19 @@ export class CodexTaskRunner {
       testsRun: task.testsRun ?? [],
       failureKind: task.failureKind ?? null,
       failureAction: task.failureAction ?? null,
-      providerUsed: task.providerUsed ?? null
+      providerUsed: task.providerUsed ?? null,
+      taskMode: task.taskMode ?? 'standard',
+      timing: task.timing ?? {}
     };
   }
+}
+
+function markTiming(timing, key) {
+  const next = { ...(timing ?? {}) };
+  if (!next[key]) {
+    next[key] = new Date().toISOString();
+  }
+  return next;
 }
 
 function normalizeProviderOverride(provider) {

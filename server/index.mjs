@@ -238,7 +238,7 @@ async function safeUpdateCheck() {
 
 async function getProviderHealth({ force = false } = {}) {
   const now = Date.now();
-  if (!force && providerHealthCache && now - providerHealthCache.cachedAtMs < 15000) {
+  if (!force && providerHealthCache && now - providerHealthCache.cachedAtMs < 120000) {
     return providerHealthCache.report;
   }
   const report = await checkProviderHealth({
@@ -348,6 +348,15 @@ app.get('/api/logs/export', (_req, res, next) => {
   }
 });
 
+app.get('/api/diagnostics/bundle', async (_req, res, next) => {
+  try {
+    const bundle = await exportDiagnosticBundle();
+    res.json(bundle);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post('/api/recovery/reset-model', (_req, res, next) => {
   try {
     config.localModel = {
@@ -381,6 +390,21 @@ app.post('/api/recovery/repair-shortcuts', (_req, res, next) => {
   try {
     const repaired = repairShortcuts();
     res.json({ repaired, message: repaired.length ? 'Jarvis shortcuts repaired.' : 'Shortcut repair is only available in the Windows desktop build.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/recovery/repair-install', (_req, res, next) => {
+  try {
+    const shortcuts = repairShortcuts();
+    const cleanup = cleanupOldUpdateInstallers({ keepReady: true });
+    res.json({
+      install: installStatus(),
+      shortcuts,
+      cleanup,
+      message: 'Install repair checked shortcuts and removed old update downloads.'
+    });
   } catch (error) {
     next(error);
   }
@@ -456,6 +480,7 @@ async function runUpdateDownload(asset, latestVersion, fileName, expected) {
     }
     fs.renameSync(tempPath, targetPath);
     const backup = backupUserDataForUpdate('update');
+    const cleanup = cleanupOldUpdateInstallers({ keepPath: targetPath, keepReady: true });
     updateDownloadState = {
       status: 'ready',
       version: latestVersion,
@@ -468,6 +493,7 @@ async function runUpdateDownload(asset, latestVersion, fileName, expected) {
       backupPath: backup.path,
       backupFiles: backup.files,
       error: null,
+      cleanupRemoved: cleanup.removed,
       updatedAt: new Date().toISOString()
     };
   } catch (error) {
@@ -677,6 +703,57 @@ foreach ($shortcutPath in @(${shortcutTargets.map(psQuote).join(',')})) {
   return shortcutTargets;
 }
 
+function installStatus() {
+  const appName = 'Jarvis Neural Command Interface';
+  const exePath = process.execPath;
+  const runningFromPackagedExe = process.platform === 'win32' && !/node(\.exe)?$/i.test(path.basename(exePath));
+  const installPath = runningFromPackagedExe ? path.dirname(exePath) : config.rootDir;
+  return {
+    version: packageInfo.version,
+    platform: process.platform,
+    packaged: runningFromPackagedExe,
+    executablePath: exePath,
+    installPath,
+    dataDir: config.dataDir,
+    shortcuts: shortcutStatus(appName, exePath)
+  };
+}
+
+function shortcutStatus(appName = 'Jarvis Neural Command Interface', exePath = process.execPath) {
+  if (process.platform !== 'win32') {
+    return [];
+  }
+  const targets = [
+    path.join(process.env.USERPROFILE ?? '', 'Desktop', `${appName}.lnk`),
+    path.join(process.env.APPDATA ?? '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', `${appName}.lnk`)
+  ].filter(Boolean);
+  return targets.map((shortcutPath) => ({
+    path: shortcutPath,
+    exists: fs.existsSync(shortcutPath),
+    expectedTarget: exePath
+  }));
+}
+
+function cleanupOldUpdateInstallers({ keepPath = updateDownloadState.installerPath, keepReady = false } = {}) {
+  const keep = keepPath ? path.resolve(keepPath) : '';
+  const removed = [];
+  for (const file of listFiles(updateDir)) {
+    if (!/\.(exe|download|blockmap|yml)$/i.test(file.name)) {
+      continue;
+    }
+    const resolved = path.resolve(file.path);
+    if (keepReady && keep && resolved === keep) {
+      continue;
+    }
+    if (keepReady && keep && resolved === `${keep}.blockmap`) {
+      continue;
+    }
+    fs.rmSync(resolved, { force: true });
+    removed.push(resolved);
+  }
+  return { removed, removedCount: removed.length };
+}
+
 function psQuote(value) {
   return `'${String(value ?? '').replace(/'/g, "''")}'`;
 }
@@ -697,6 +774,8 @@ app.get('/api/diagnostics', async (_req, res) => {
       settings: voiceSettings
     },
     session: publicSessionState(),
+    install: installStatus(),
+    lastFailure: taskStore.lastFailedTask(),
     config: publicConfig(config),
     sqlite: {
       databasePath: config.memory.databasePath,
@@ -1372,12 +1451,16 @@ function storageReport() {
 }
 
 function cleanupStorage(target) {
-  if (!['updates', 'backups', 'logs', 'all'].includes(target)) {
+  if (!['updates', 'old-updates', 'backups', 'logs', 'all'].includes(target)) {
     const error = new Error('Unknown cleanup target.');
     error.status = 400;
     throw error;
   }
   const removed = [];
+  if (target === 'old-updates') {
+    const result = cleanupOldUpdateInstallers({ keepReady: true });
+    return { target, removed: result.removed, removedCount: result.removedCount };
+  }
   if (target === 'updates' || target === 'all') {
     for (const file of listFiles(updateDir)) {
       if (!/\.(exe|download|blockmap|yml)$/i.test(file.name)) {
@@ -1524,6 +1607,66 @@ function exportLogBundle() {
     `Memory database: ${config.memory.databasePath}`,
     '',
     '--- Local log tail ---',
+    readLogTail(logPath, 64000) || 'No log output yet.'
+  ];
+  fs.writeFileSync(bundlePath, lines.join('\n'));
+  return { path: bundlePath, size: fs.statSync(bundlePath).size };
+}
+
+async function exportDiagnosticBundle() {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const bundlePath = path.resolve(config.dataDir, `jarvis-diagnostic-bundle-${stamp}.txt`);
+  const providerHealth = await getProviderHealth();
+  const codex = await checkCodexStatus(config.codex.command);
+  const update = await safeUpdateCheck();
+  const storage = storageReport();
+  const install = installStatus();
+  const lastFailure = taskStore.lastFailedTask();
+  const lines = [
+    `Jarvis Neural Command Interface diagnostics ${packageInfo.version}`,
+    `Created: ${new Date().toISOString()}`,
+    '',
+    '--- Install ---',
+    JSON.stringify(install, null, 2),
+    '',
+    '--- Provider ---',
+    JSON.stringify({
+      providerHealth,
+      localModel: config.localModel,
+      modelKey: modelKeyStatus(),
+      codex
+    }, null, 2),
+    '',
+    '--- Queue ---',
+    JSON.stringify(taskRunner.queueStatus(), null, 2),
+    '',
+    '--- Last Failure ---',
+    JSON.stringify(lastFailure ? {
+      id: lastFailure.id,
+      status: lastFailure.status,
+      phase: lastFailure.phase,
+      providerUsed: lastFailure.providerUsed,
+      failureKind: lastFailure.failureKind,
+      failureAction: lastFailure.failureAction,
+      timing: lastFailure.timing,
+      prompt: lastFailure.prompt,
+      output: String(lastFailure.output ?? '').slice(-1800)
+    } : null, null, 2),
+    '',
+    '--- Update ---',
+    JSON.stringify({ update, updateDownloadState }, null, 2),
+    '',
+    '--- Storage ---',
+    JSON.stringify({
+      dataDir: storage.dataDir,
+      totalSize: storage.totalSize,
+      updates: storage.updates,
+      backups: { path: storage.backups.path, size: storage.backups.size, count: storage.backups.count },
+      logs: storage.logs,
+      memory: storage.memory
+    }, null, 2),
+    '',
+    '--- Log Tail ---',
     readLogTail(logPath, 64000) || 'No log output yet.'
   ];
   fs.writeFileSync(bundlePath, lines.join('\n'));

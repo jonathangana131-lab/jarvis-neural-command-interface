@@ -123,6 +123,17 @@ export type TaskRecord = {
   failureKind?: ProviderFailureKind | null;
   failureAction?: string | null;
   providerUsed?: LocalModelConfig['provider'] | string | null;
+  taskMode?: 'standard' | 'quick' | string | null;
+  timing?: TaskTiming;
+};
+
+export type TaskTiming = {
+  queuedAt?: string;
+  providerCheckStartedAt?: string;
+  providerCheckFinishedAt?: string;
+  startedAt?: string;
+  firstOutputAt?: string;
+  finishedAt?: string;
 };
 
 export type MemorySkippedRecord = {

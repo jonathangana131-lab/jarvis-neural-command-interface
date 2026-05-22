@@ -41,6 +41,7 @@ const mockServer = http.createServer(async (req, res) => {
   res.end('not found');
 });
 const mockRequests = [];
+const rendererEvents = [];
 mockServer.on('close', () => {
   mockRequests.push('SERVER close');
 });
@@ -91,6 +92,12 @@ try {
   }
   client = await connectToRenderer(debugPort);
   await client.call('Runtime.enable');
+  await client.call('Log.enable').catch(() => undefined);
+  client.onEvent((event) => {
+    if (event.method === 'Runtime.exceptionThrown' || event.method === 'Log.entryAdded') {
+      rendererEvents.push(JSON.stringify(event.params).slice(0, 1200));
+    }
+  });
   await waitForUi(client, '!document.querySelector("#setup-wizard")?.classList.contains("hidden")', 30000);
   await client.evaluate(`(() => {
     const provider = document.querySelector('#setup-provider');
@@ -152,9 +159,13 @@ try {
     const postFailMockPing = await waitForJson(`http://127.0.0.1:${mockPort}/v1/models`, 3000).catch((pingError) => ({ error: pingError.message }));
     throw new Error(`${error.message}\nUI state: ${JSON.stringify(state)}\nConfig: ${JSON.stringify(backendState)}\nTasks: ${JSON.stringify(tasks)}\nLogs: ${JSON.stringify(logs)}\nPost-failure mock ping: ${JSON.stringify(postFailMockPing)}\nMock requests: ${JSON.stringify(mockRequests)}`);
   }
+  await waitForUi(client, 'document.querySelector("#command-chat-feed")?.textContent?.includes("Jarvis setup test complete.")', 8000).catch(() => undefined);
   const transcript = await client.evaluate('document.querySelector("#command-chat-feed")?.textContent ?? ""');
   if (!String(transcript).includes('Jarvis setup test complete.')) {
-    throw new Error(`UI did not show streamed setup response. Transcript:\n${transcript}`);
+    const state = await collectUiState(client);
+    const tasks = await waitForJson(`http://127.0.0.1:${appPort}/api/tasks`, 3000).catch((taskError) => ({ error: taskError.message }));
+    const chats = await waitForJson(`http://127.0.0.1:${appPort}/api/chats`, 3000).catch((chatError) => ({ error: chatError.message }));
+    throw new Error(`UI did not show streamed setup response. Transcript:\n${transcript}\nUI state: ${JSON.stringify(state)}\nTasks: ${JSON.stringify(tasks)}\nChats: ${JSON.stringify(chats)}\nRenderer events: ${rendererEvents.join('\n')}\nMock requests: ${JSON.stringify(mockRequests)}`);
   }
   await client.evaluate(`(() => {
     document.querySelector('[data-console-tab="settings"]').click();
@@ -211,10 +222,16 @@ function createCdpClient(url) {
   const ws = new WebSocket(url);
   let nextId = 1;
   const pendingMessages = new Map();
+  const eventHandlers = new Set();
 
   ws.on('message', (message) => {
       const data = JSON.parse(message.toString());
-      if (!data.id) return;
+      if (!data.id) {
+        for (const handler of eventHandlers) {
+          handler(data);
+        }
+        return;
+      }
       const pending = pendingMessages.get(data.id);
       if (!pending) return;
       pendingMessages.delete(data.id);
@@ -254,8 +271,27 @@ function createCdpClient(url) {
     },
     close() {
       ws.close();
+    },
+    onEvent(handler) {
+      eventHandlers.add(handler);
+      return () => eventHandlers.delete(handler);
     }
   };
+}
+
+async function collectUiState(client) {
+  return client.evaluate(`(() => ({
+    setupHidden: document.querySelector('#setup-wizard')?.classList.contains('hidden') ?? null,
+    setupStatus: document.querySelector('#setup-status')?.textContent ?? '',
+    activeTab: Array.from(document.querySelectorAll('[data-console-tab]')).find((button) => button.classList.contains('active'))?.dataset.consoleTab ?? '',
+    selectedChatId: localStorage.getItem('jarvis.chat.selectedId'),
+    feedHtml: document.querySelector('#command-chat-feed')?.innerHTML?.slice(0, 2000) ?? '',
+    feedText: document.querySelector('#command-chat-feed')?.textContent ?? '',
+    missionObjective: document.querySelector('#mission-objective')?.textContent ?? '',
+    missionPhase: document.querySelector('#mission-phase')?.textContent ?? '',
+    taskCards: Array.from(document.querySelectorAll('[data-task-id]')).slice(0, 5).map((node) => node.textContent?.trim() ?? ''),
+    visibleError: document.querySelector('#ui-error')?.textContent ?? ''
+  }))()`);
 }
 
 async function waitForUi(client, expression, timeoutMs) {

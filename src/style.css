@@ -7871,3 +7871,68 @@ sl-tooltip::part(base__popup) {
     radial-gradient(circle at 12% 0, rgba(255, 116, 116, 0.12), transparent 34%),
     rgba(16, 4, 8, 0.62);
 }
+
+.quick-task-toggle {
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+  min-width: 58px;
+  min-height: 50px;
+  border: 1px solid rgba(115, 243, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(0, 8, 14, 0.62);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.quick-task-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.quick-task-toggle:has(input:checked) {
+  border-color: rgba(255, 200, 87, 0.54);
+  color: var(--amber-hot);
+  background: rgba(42, 28, 7, 0.72);
+  box-shadow: inset 0 0 18px rgba(255, 200, 87, 0.08);
+}
+
+.queue-inspector {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.queue-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid rgba(115, 243, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(0, 8, 14, 0.42);
+}
+
+.queue-row p,
+.queue-row span,
+.queue-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-row p {
+  margin: 3px 0 0;
+  white-space: nowrap;
+}
+
+@media (min-width: 901px) {
+  .command-console.active-view .command-dock__main {
+    grid-template-columns: minmax(0, 1fr) 58px 88px !important;
+  }
+}

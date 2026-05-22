@@ -26,7 +26,10 @@ import {
   Trash2,
   Volume2,
   Zap,
-  createIcons
+  createIcons,
+  LayoutGrid,
+  Columns,
+  MessageSquare
 } from 'lucide';
 import { JarvisScene } from './JarvisScene';
 import { MemoryAnimator } from './MemoryAnimator';
@@ -59,7 +62,10 @@ const jarvisIcons = {
   TerminalSquare,
   Trash2,
   Volume2,
-  Zap
+  Zap,
+  LayoutGrid,
+  Columns,
+  MessageSquare
 };
 
 const app = required<HTMLElement>('#app');
@@ -96,6 +102,10 @@ const apiKeyStatus = required<HTMLElement>('#api-key-status');
 const pauseQueue = required<HTMLButtonElement>('#pause-queue');
 const resumeQueue = required<HTMLButtonElement>('#resume-queue');
 const queueStatus = required<HTMLElement>('#queue-status');
+const layoutCockpitBtn = required<HTMLButtonElement>('#layout-cockpit');
+const layoutTerminalBtn = required<HTMLButtonElement>('#layout-terminal');
+const layoutBubblesBtn = required<HTMLButtonElement>('#layout-bubbles');
+const missionControl = required<HTMLElement>('.mission-control');
 const updateBanner = required<HTMLElement>('#update-banner');
 const updateBannerTitle = required<HTMLElement>('#update-banner-title');
 const updateBannerDetail = required<HTMLElement>('#update-banner-detail');
@@ -583,6 +593,32 @@ async function dispatchTask() {
   }
 }
 
+commandChatFeed.addEventListener('click', async (event) => {
+  const target = event.target as HTMLElement;
+  const button = target.closest('.code-block-copy') as HTMLButtonElement;
+  if (!button) {
+    return;
+  }
+  const wrapper = button.closest('.code-block-wrapper');
+  const codeEl = wrapper?.querySelector('code');
+  if (codeEl) {
+    const codeText = codeEl.textContent || '';
+    try {
+      await navigator.clipboard.writeText(codeText);
+      const span = button.querySelector('span');
+      if (span) {
+        const originalText = span.textContent;
+        span.textContent = 'Copied!';
+        setTimeout(() => {
+          span.textContent = originalText;
+        }, 1500);
+      }
+    } catch (err) {
+      console.error('Failed to copy code: ', err);
+    }
+  }
+});
+
 refreshMemory.addEventListener('click', () => {
   void loadMemories(true);
 });
@@ -670,6 +706,10 @@ resumeQueue.addEventListener('click', async () => {
   const data = await postJson<{ queue: QueueStatus }>('/api/queue/resume', {});
   renderQueueStatus(data.queue);
 });
+
+layoutCockpitBtn.addEventListener('click', () => applyChatLayout('cockpit'));
+layoutTerminalBtn.addEventListener('click', () => applyChatLayout('terminal'));
+layoutBubblesBtn.addEventListener('click', () => applyChatLayout('bubbles'));
 
 refreshDiagnostics.addEventListener('click', () => {
   void loadDiagnostics();
@@ -787,6 +827,8 @@ async function boot() {
   config = loadedConfig;
   applyVoiceSettings(loadedVoiceSettings);
   setTab('run');
+  const storedLayout = safeStorageGet('jarvis.chat.layoutMode') as ChatLayoutMode | null;
+  applyChatLayout(storedLayout || 'cockpit');
   hydrateSettingsFromConfig();
   hydrateVoiceSettingsForm();
   memoryCount.textContent = formatMemoryCount(config.memoryCount);
@@ -1559,6 +1601,26 @@ function safeStorageRemove(key: string) {
   } catch (error) {
     console.warn(`[storage] remove failed for ${key}`, error);
   }
+}
+
+type ChatLayoutMode = 'cockpit' | 'terminal' | 'bubbles';
+
+let activeChatLayout: ChatLayoutMode = 'cockpit';
+
+function applyChatLayout(layout: ChatLayoutMode) {
+  activeChatLayout = layout;
+  console.log(`[ui] Chat layout mode activated: ${activeChatLayout}`);
+  safeStorageSet('jarvis.chat.layoutMode', layout);
+  missionControl.setAttribute('data-chat-layout', layout);
+
+  const buttons = [layoutCockpitBtn, layoutTerminalBtn, layoutBubblesBtn];
+  buttons.forEach((btn) => {
+    if (btn.dataset.chatLayout === layout) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
 }
 
 function reportClientIssue(reason: unknown, fallback: string) {
@@ -3133,7 +3195,7 @@ function startStreamOutput(taskId: string, output: string, phase: TaskRecord['ph
     streamScrollContainer = commandChatFeed.querySelector<HTMLElement>(`[data-stream-task="${taskId}"]`);
   }
   if (streamElement) {
-    streamElement.textContent = output;
+    streamElement.innerHTML = renderMarkdown(output);
   }
   if (streamScrollContainer) {
     streamScrollContainer.scrollTop = streamScrollContainer.scrollHeight;
@@ -3747,6 +3809,187 @@ function summarizeTaskForCopy(task: TaskRecord) {
   ].join('\n');
 }
 
+function renderMarkdown(markdown: string): string {
+  if (!markdown) return '';
+
+  const escapeHTMLText = (str: string) => {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+
+  const lines = markdown.split('\n');
+  let html = '';
+  let inCodeBlock = false;
+  let codeLanguage = '';
+  let codeContent: string[] = [];
+  let inList = false;
+  let listType: 'ul' | 'ol' | null = null;
+  let inBlockquote = false;
+
+  const closeListIfActive = () => {
+    if (inList && listType) {
+      html += `</${listType}>\n`;
+      inList = false;
+      listType = null;
+    }
+  };
+
+  const closeBlockquoteIfActive = () => {
+    if (inBlockquote) {
+      html += `</blockquote>\n`;
+      inBlockquote = false;
+    }
+  };
+
+  const parseInlineMarkdown = (text: string): string => {
+    let escaped = escapeHTMLText(text);
+    
+    // Inline code: `code`
+    escaped = escaped.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+    
+    // Bold: **text**
+    escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    
+    // Italic: *text*
+    escaped = escaped.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    
+    return escaped;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Check code blocks
+    if (line.trim().startsWith('```')) {
+      if (inCodeBlock) {
+        // Close code block
+        const joinedContent = codeContent.join('\n');
+        const escapedCode = escapeHTMLText(joinedContent);
+        html += `
+          <div class="code-block-wrapper">
+            <div class="code-block-header">
+              <span class="code-block-lang">${escapeHTMLText(codeLanguage || 'code')}</span>
+              <button class="code-block-copy" type="button">
+                <span>Copy</span>
+              </button>
+            </div>
+            <pre><code class="language-${escapeHTMLText(codeLanguage || 'plaintext')}">${escapedCode}</code></pre>
+          </div>
+        `;
+        inCodeBlock = false;
+        codeContent = [];
+        codeLanguage = '';
+      } else {
+        // Open code block
+        closeListIfActive();
+        closeBlockquoteIfActive();
+        inCodeBlock = true;
+        codeLanguage = line.trim().slice(3).trim();
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      codeContent.push(line);
+      continue;
+    }
+
+    // Blockquotes
+    if (line.trim().startsWith('&gt;') || line.trim().startsWith('>')) {
+      closeListIfActive();
+      if (!inBlockquote) {
+        html += `<blockquote>\n`;
+        inBlockquote = true;
+      }
+      const blockquoteText = line.trim().replace(/^(&gt;|>)\s?/, '');
+      html += `<p>${parseInlineMarkdown(blockquoteText)}</p>\n`;
+      continue;
+    } else {
+      closeBlockquoteIfActive();
+    }
+
+    // Headings
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      closeListIfActive();
+      const level = headingMatch[1].length;
+      const headingText = headingMatch[2].trim();
+      html += `<h${level}>${parseInlineMarkdown(headingText)}</h${level}>\n`;
+      continue;
+    }
+
+    // Horizontal Rules
+    if (line.trim() === '---' || line.trim() === '***' || line.trim() === '___') {
+      closeListIfActive();
+      html += `<hr />\n`;
+      continue;
+    }
+
+    // Unordered Lists
+    const ulMatch = line.match(/^(\*|-|\+)\s+(.*)$/);
+    if (ulMatch) {
+      if (!inList || listType !== 'ul') {
+        closeListIfActive();
+        html += `<ul>\n`;
+        inList = true;
+        listType = 'ul';
+      }
+      const itemText = ulMatch[2].trim();
+      html += `<li>${parseInlineMarkdown(itemText)}</li>\n`;
+      continue;
+    }
+
+    // Ordered Lists
+    const olMatch = line.match(/^(\d+)\.\s+(.*)$/);
+    if (olMatch) {
+      if (!inList || listType !== 'ol') {
+        closeListIfActive();
+        html += `<ol>\n`;
+        inList = true;
+        listType = 'ol';
+      }
+      const itemText = olMatch[2].trim();
+      html += `<li>${parseInlineMarkdown(itemText)}</li>\n`;
+      continue;
+    }
+
+    // Paragraph or Empty Line
+    if (line.trim() === '') {
+      closeListIfActive();
+      continue;
+    }
+
+    // Regular line
+    closeListIfActive();
+    html += `<p>${parseInlineMarkdown(line)}</p>\n`;
+  }
+
+  // Handle open block cleanups (useful for streaming output)
+  if (inCodeBlock) {
+    const joinedContent = codeContent.join('\n');
+    const escapedCode = escapeHTMLText(joinedContent);
+    html += `
+      <div class="code-block-wrapper">
+        <div class="code-block-header">
+          <span class="code-block-lang">${escapeHTMLText(codeLanguage || 'code')} (streaming)</span>
+          <button class="code-block-copy" type="button">
+            <span>Copy</span>
+          </button>
+        </div>
+        <pre><code class="language-${escapeHTMLText(codeLanguage || 'plaintext')}">${escapedCode}</code></pre>
+      </div>
+    `;
+  }
+  closeListIfActive();
+  closeBlockquoteIfActive();
+
+  return html;
+}
+
 function renderConversationMessage(
   role: 'user' | 'assistant',
   body: string,
@@ -3756,7 +3999,7 @@ function renderConversationMessage(
 ) {
   const displayText = body.trim() || (live ? '' : 'No content yet.');
   const block = role === 'assistant'
-    ? `<pre class="mission-output-stream ${live ? 'is-typing' : ''}">${escapeHtml(displayText)}</pre>`
+    ? `<div class="mission-output-stream conversation-markdown ${live ? 'is-typing' : ''}">${renderMarkdown(displayText)}</div>`
     : `<p>${escapeHtml(displayText)}</p>`;
   return `
     <section class="conversation-message conversation-message--${role} ${live ? 'is-live' : ''}">

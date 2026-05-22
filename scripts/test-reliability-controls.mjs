@@ -113,14 +113,17 @@ try {
   assert.ok(finished.timing?.firstOutputAt, 'task should include first output timing');
   assert.ok(finished.timing?.finishedAt, 'task should include finished timing');
 
+  const packageInfo = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../package.json'), 'utf8'));
+  const expectedVersion = packageInfo.version;
+
   const diagnostics = await getJson(appPort, '/api/diagnostics');
-  assert.equal(diagnostics.install.version, '0.7.9', 'diagnostics should expose install version');
+  assert.equal(diagnostics.install.version, expectedVersion, 'diagnostics should expose install version');
   assert.equal(typeof diagnostics.queue.reason, 'string', 'diagnostics should expose queue reason');
   const bundle = await getJson(appPort, '/api/diagnostics/bundle');
   assert.ok(fs.existsSync(bundle.path), 'diagnostic bundle should be written');
   assert.ok(bundle.size > 100, 'diagnostic bundle should contain useful content');
   const repair = await postJson(appPort, '/api/recovery/repair-install', {});
-  assert.equal(repair.install.version, '0.7.9', 'repair install should report install status');
+  assert.equal(repair.install.version, expectedVersion, 'repair install should report install status');
   assert.equal(typeof repair.cleanup.removedCount, 'number', 'repair install should report cleanup count');
 
   console.log('reliability controls tests passed');

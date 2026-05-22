@@ -1,3 +1,122 @@
+# v0.8.0
+
+Markdown chat rendering and interactive copy controls.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.8.0.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.8.0.exe.blockmap`
+- `latest.yml`
+
+## Added
+
+- Integrated a custom high-performance Markdown parser in the main UI console to render assistant prose with proper paragraphs, headings, bullet lists, numbered lists, blockquotes, and inline emphasis.
+- Redesigned assistant code blocks as clean, isolated containers featuring code syntax wrappers, language badges, and direct "Copy" buttons.
+- Integrated a global click event delegate to handle copy actions on dynamically streamed and history-loaded code blocks safely.
+
+## Refined
+
+- Transitioned the main assistant chat feed from a raw `<pre>` tag dump to a fully styled Markdown document format using the cockpit's neon design system.
+- Upgraded live text streaming and recovery signals to render Markdown in real-time, safely auto-closing block formatting at stream completion.
+
+## Verified
+
+- `npm run build`
+- `npm run test:stream-parser`
+- `npm run test:memory`
+- `npm run test:reliability-controls`
+- Visual review of markdown styling, headers, lists, code containers, and copy buttons
+- `npm run dist:win`
+- `npm run test:packaged-smoke`
+- `npm run test:installed-ui-smoke`
+
+SHA256: `PENDING_BUILD`
+
+# v0.7.9
+
+Stability, task queue diagnostics, and timing controls.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.7.9.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.7.9.exe.blockmap`
+- `latest.yml`
+
+## Added
+
+- Integrated task queue diagnostics, tracking task durations across all execution phases (queued, planning, first output, total).
+- Added local task bus pause and resume queue controls in the main console header.
+- Added quick task run profile toggle to switch between standard and lighter execution footprints.
+
+## Verified
+
+- `npm run build`
+- `npm run test:reliability-controls`
+- `npm run test:stream-parser`
+- `npm run test:memory`
+- `npm run test:installed-ui-smoke`
+
+SHA256: `7F6E45E8D23AB9029CF6E87A5E9555C09B4232C0AE3E91219CE95B6082498263`
+
+# v0.7.8
+
+Provider health failover check and reliability controls.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.7.8.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.7.8.exe.blockmap`
+- `latest.yml`
+
+## Added
+
+- Integrated LLM provider health check service (`server/providerHealth.mjs`) to verify provider connectivity.
+- Added automatic failover and run recovery actions (retry, fallback to Codex, settings adjustments) on model failures.
+- Added provider health state status checks and settings endpoints.
+- Added provider failure simulation testing (`scripts/test-provider-failures.mjs`).
+
+## Verified
+
+- `npm run build`
+- `npm run test:provider-failures`
+- `npm run test:reliability-controls`
+- `npm run test:memory`
+- `npm run test:packaged-smoke`
+
+SHA256: `8DE4532B4527718A9EBDCE23D87B420CBE2877B6D90C8A906F8CE2D7E95BCB5B`
+
+# v0.7.7
+
+Faster local updates and build pipeline improvements.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.7.7.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.7.7.exe.blockmap`
+- `latest.yml`
+
+## Added
+
+- Added `scripts/install-local-fast.ps1` PowerShell script to deploy locally built unpackaged binaries.
+- Introduced `npm run install:local:fast` to test client-server changes immediately without a full installer build.
+- Updated styling for model presets and instructions grids.
+
+## Verified
+
+- `npm run build`
+- `npm run package:win:dir`
+- Local silent installer deploy via PowerShell
+
+SHA256: `A5C8E75C418EBDCE89547B228DE890C05CE8D92AECE3B87A89DECD5298EA0CD8`
+
 # v0.7.6
 
 Chat reliability and desktop polish release.

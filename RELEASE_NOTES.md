@@ -1,3 +1,28 @@
+# v0.8.2
+
+Fix layout and font readability issues in the cyber HUD interface.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.8.2.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.8.2.exe.blockmap`
+- `latest.yml`
+
+## Fixed
+
+- Corrected memory chip title font styling (`.memory-chip strong`): Switched from Orbitron (`var(--font-cyber)`) to Inter (`var(--font-sans)`) to prevent narrow lowercase letters from rendering as glitchy/broken block glyphs at small font sizes (11px).
+- Refined mission card summary text headers: Standardized status elements (Phase, Memory, Artifact counts) to use Rajdhani (`var(--font-hud)`) in uppercase format to provide crisp HUD vitals telemetry and resolve mixed-case stencil anomalies.
+
+## Verified
+
+- `npm run build`
+- `npm run installer:win`
+- `npm run install:local:fast`
+
+SHA256: `A997E5B25B42785FD6377E36C6279EE4ED3295166886ECB7F4795736D475C71E`
+
 # v0.8.1
 
 Premium Jarvis & Codex cybernetic HUD theme redesign.

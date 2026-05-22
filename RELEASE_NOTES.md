@@ -1,3 +1,37 @@
+# v0.8.1
+
+Premium Jarvis & Codex cybernetic HUD theme redesign.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.8.1.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.8.1.exe.blockmap`
+- `latest.yml`
+
+## Added
+
+- Designed and integrated an immersive, premium, high-tech cybernetic HUD theme inspired by Jarvis and Codex.
+- Added sci-fi corner bracket decoration markers (`::before`/`::after`) on the main command dock container (`.command-dock__main`) that dynamically expand and glow when hovered or focused.
+- Upgraded the prompt input `#task-prompt` and workspace switchers/inputs to feature translucent glassmorphism (`backdrop-filter: blur(16px)`), neon cyan borders, and glowing active states.
+- Replaced the simple yellow gradient Run button with a high-visibility glowing ignition pad layout (`.ignite-button`) featuring hover translation and micro-animated rocket indicators.
+- Refined mission timeline cards, stepper steps, and message bubbles (in bubbles layout mode) to feature glowing border indicators, high-contrast typography, and smooth scale transitions.
+- Redesigned task recovery elements (`.run-recovery-card`) as critical warning/override blocks with black-and-amber hazard stripes, warning glow highlights, and glowing control buttons.
+- Integrated modern cyber fonts: `Orbitron` (for primary titles/actions), `Rajdhani` (for metadata labels and vitals), and `Share Tech Mono` (for inputs, workspaces, and system paths).
+- Customized sleek, narrow neon scrollbars across the chat console.
+
+## Verified
+
+- `npm run build`
+- `npm run test:reliability-controls`
+- `npm run test:stream-parser`
+- `npm run dist:win`
+- `npm run test:packaged-smoke`
+- `npm run test:installed-ui-smoke`
+
+SHA256: `FA09CFF3B812AD84171A308B8747351352C381AC3DF1B39FB860C9975F62F4C8`
+
 # v0.8.0
 
 Markdown chat rendering and interactive copy controls.

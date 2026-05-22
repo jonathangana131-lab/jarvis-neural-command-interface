@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;600;700;800&family=Share+Tech+Mono&family=Inter:wght@300;400;600;800&display=swap');
+
 :root {
   --void: #010308;
   --void-2: #030914;
@@ -19,6 +21,17 @@
   --ok: #88ffca;
   --panel-shadow: 0 28px 90px rgba(0, 0, 0, 0.48), 0 0 54px rgba(55, 219, 255, 0.12);
   color-scheme: dark;
+
+  /* Premium HUD/Cybernetic Typography Tokens */
+  --font-cyber: 'Orbitron', 'Inter', sans-serif;
+  --font-hud: 'Rajdhani', sans-serif;
+  --font-mono: 'Share Tech Mono', 'Cascadia Mono', monospace;
+  --font-sans: 'Inter', sans-serif;
+
+  /* Cybernetic Neon Glow Tokens */
+  --glow-cyan: 0 0 15px rgba(115, 243, 255, 0.4), 0 0 5px rgba(115, 243, 255, 0.2);
+  --glow-amber: 0 0 15px rgba(255, 200, 87, 0.4), 0 0 5px rgba(255, 200, 87, 0.2);
+  --glow-red: 0 0 15px rgba(255, 97, 116, 0.4), 0 0 5px rgba(255, 97, 116, 0.2);
 }
 
 /* v0.7.2 five-pass UI review:
@@ -2085,9 +2098,7 @@ body,
   overflow: hidden;
   background: var(--void);
   color: var(--text);
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  font-family: var(--font-sans);
 }
 
 button,
@@ -8197,3 +8208,394 @@ sl-tooltip::part(base__popup) {
 .mission-control[data-chat-layout="bubbles"] .conversation-stream .conversation-message + .conversation-message {
   margin-top: 6px;
 }
+
+/* ==========================================================================
+   Jarvis/Codex Premium Cybernetic HUD Theme Overrides
+   ========================================================================== */
+
+/* 1. Typography & Global Accents */
+.micro-label, 
+.conversation-message__meta em,
+.mission-vitals span b {
+  font-family: var(--font-hud) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+  color: var(--cyan) !important;
+}
+
+.brand-lockup strong,
+.panel-header strong,
+.mission-title strong,
+.mission-card strong,
+.chat-session-rail__head strong,
+.hud-button span,
+.ignite-button span {
+  font-family: var(--font-cyber) !important;
+  letter-spacing: 0.05em !important;
+}
+
+/* 2. Scrollbars Overhaul */
+* {
+  scrollbar-color: rgba(115, 243, 255, 0.35) rgba(2, 8, 13, 0.4) !important;
+  scrollbar-width: thin !important;
+}
+::-webkit-scrollbar {
+  width: 5px !important;
+  height: 5px !important;
+}
+::-webkit-scrollbar-track {
+  background: rgba(1, 8, 14, 0.3) !important;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(115, 243, 255, 0.3) !important;
+  border-radius: 4px !important;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(115, 243, 255, 0.6) !important;
+  box-shadow: 0 0 6px rgba(115, 243, 255, 0.5) !important;
+}
+
+/* 3. The Command Dock (.command-dock__main) Cyber Deck */
+.command-console.active-view .command-dock__main {
+  position: relative !important;
+  background: rgba(4, 14, 24, 0.72) !important;
+  border: 1px solid rgba(115, 243, 255, 0.22) !important;
+  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.6), inset 0 0 16px rgba(115, 243, 255, 0.06) !important;
+  backdrop-filter: blur(16px) !important;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.command-console.active-view .command-dock__main:hover,
+.command-console.active-view .command-dock__main:focus-within {
+  border-color: rgba(115, 243, 255, 0.45) !important;
+  box-shadow: 
+    0 20px 50px rgba(0, 0, 0, 0.7), 
+    0 0 25px rgba(115, 243, 255, 0.15), 
+    inset 0 0 20px rgba(115, 243, 255, 0.1) !important;
+}
+
+/* Cybernetic Corner Brackets decoration on the Command Dock */
+.command-console.active-view .command-dock__main::before,
+.command-console.active-view .command-dock__main::after {
+  content: "" !important;
+  position: absolute !important;
+  width: 14px !important;
+  height: 14px !important;
+  pointer-events: none !important;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+.command-console.active-view .command-dock__main::before {
+  top: -2px !important;
+  left: -2px !important;
+  border-top: 3.5px solid var(--cyan) !important;
+  border-left: 3.5px solid var(--cyan) !important;
+}
+.command-console.active-view .command-dock__main::after {
+  bottom: -2px !important;
+  right: -2px !important;
+  border-bottom: 3.5px solid var(--cyan) !important;
+  border-right: 3.5px solid var(--cyan) !important;
+}
+.command-console.active-view .command-dock__main:hover::before,
+.command-console.active-view .command-dock__main:focus-within::before {
+  transform: translate(-3px, -3px) !important;
+  filter: drop-shadow(0 0 4px var(--cyan)) !important;
+}
+.command-console.active-view .command-dock__main:hover::after,
+.command-console.active-view .command-dock__main:focus-within::after {
+  transform: translate(3px, 3px) !important;
+  filter: drop-shadow(0 0 4px var(--cyan)) !important;
+}
+
+/* 4. Prompt Textarea (#task-prompt) Redesign */
+.command-console.active-view #task-prompt {
+  font-family: var(--font-mono) !important;
+  font-size: 13px !important;
+  letter-spacing: 0.02em !important;
+  background: rgba(1, 6, 12, 0.88) !important;
+  border: 1px solid rgba(115, 243, 255, 0.15) !important;
+  color: var(--cyan-hot) !important;
+  text-shadow: 0 0 2px rgba(115, 243, 255, 0.25) !important;
+  border-radius: 6px !important;
+  padding: 10px 12px !important;
+  transition: all 0.25s ease !important;
+}
+
+.command-console.active-view #task-prompt:focus {
+  border-color: rgba(115, 243, 255, 0.5) !important;
+  box-shadow: inset 0 0 10px rgba(115, 243, 255, 0.15) !important;
+  background: rgba(0, 4, 8, 0.96) !important;
+  outline: none !important;
+}
+
+/* 5. Ignite / Run Button (.ignite-button) Ignition Style */
+.command-console.active-view .ignite-button {
+  font-family: var(--font-cyber) !important;
+  font-weight: 700 !important;
+  font-size: 11px !important;
+  letter-spacing: 0.08em !important;
+  border-radius: 6px !important;
+  background: linear-gradient(135deg, rgba(255, 200, 87, 0.16), rgba(224, 150, 32, 0.08)) !important;
+  border: 1.5px solid rgba(255, 200, 87, 0.55) !important;
+  color: var(--amber) !important;
+  text-shadow: 0 0 8px rgba(255, 200, 87, 0.4) !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.35), inset 0 0 8px rgba(255, 200, 87, 0.05) !important;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.command-console.active-view .ignite-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(255, 200, 87, 0.35), rgba(224, 150, 32, 0.18)) !important;
+  border-color: rgba(255, 226, 162, 0.95) !important;
+  color: var(--amber-hot) !important;
+  box-shadow: 
+    0 6px 24px rgba(255, 200, 87, 0.25), 
+    0 0 15px rgba(255, 200, 87, 0.15), 
+    inset 0 0 12px rgba(255, 200, 87, 0.1) !important;
+  transform: scale(1.03) translateY(-1px) !important;
+}
+
+.command-console.active-view .ignite-button:active:not(:disabled) {
+  transform: scale(0.98) translateY(1px) !important;
+}
+
+.command-console.active-view .ignite-button svg {
+  filter: drop-shadow(0 0 3px currentColor) !important;
+  transition: transform 0.25s ease !important;
+}
+
+.command-console.active-view .ignite-button:hover svg {
+  transform: translateY(-2px) scale(1.1) !important;
+}
+
+/* 6. Workspace Switcher & Input Overhauls */
+.command-console.active-view .workspace-field input,
+.command-console.active-view .workspace-switcher select {
+  font-family: var(--font-mono) !important;
+  font-size: 11.5px !important;
+  background: rgba(1, 8, 16, 0.72) !important;
+  border: 1px solid rgba(115, 243, 255, 0.18) !important;
+  color: var(--cyan) !important;
+  padding: 6px 10px !important;
+  border-radius: 6px !important;
+  transition: all 0.25s ease !important;
+}
+
+.command-console.active-view .workspace-field input:focus,
+.command-console.active-view .workspace-switcher select:focus {
+  border-color: var(--cyan) !important;
+  box-shadow: 0 0 10px rgba(115, 243, 255, 0.2), inset 0 0 6px rgba(115, 243, 255, 0.05) !important;
+  background: rgba(1, 10, 20, 0.88) !important;
+  outline: none !important;
+}
+
+/* 7. Chats Sidebar Toggle and HUD Buttons */
+.chat-sidebar-toggle {
+  font-family: var(--font-hud) !important;
+  font-weight: 700 !important;
+  font-size: 11px !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  background: rgba(2, 9, 16, 0.85) !important;
+  border: 1px solid rgba(115, 243, 255, 0.24) !important;
+  color: var(--cyan) !important;
+  border-radius: 6px !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.chat-sidebar-toggle:hover {
+  border-color: var(--cyan) !important;
+  background: rgba(115, 243, 255, 0.1) !important;
+  box-shadow: 0 0 14px rgba(115, 243, 255, 0.25) !important;
+  transform: translateY(-1px) !important;
+}
+
+.hud-button,
+.chat-session-rail .hud-button,
+.workspace-switcher .hud-button {
+  font-family: var(--font-hud) !important;
+  font-weight: 700 !important;
+  font-size: 10px !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  background: rgba(2, 12, 20, 0.82) !important;
+  border: 1px solid rgba(115, 243, 255, 0.2) !important;
+  color: var(--muted) !important;
+  transition: all 0.2s ease !important;
+}
+
+.hud-button:hover,
+.chat-session-rail .hud-button:hover,
+.workspace-switcher .hud-button:hover {
+  border-color: var(--cyan) !important;
+  color: var(--cyan-hot) !important;
+  background: rgba(115, 243, 255, 0.08) !important;
+  box-shadow: 0 0 10px rgba(115, 243, 255, 0.15) !important;
+}
+
+.hud-button--primary {
+  border-color: rgba(115, 243, 255, 0.45) !important;
+  color: var(--cyan-hot) !important;
+  background: rgba(115, 243, 255, 0.1) !important;
+}
+
+/* 8. Mission Timeline Nodes & Conversation Feed styling */
+.command-console.active-view .mission-event--response {
+  border: 1px solid rgba(115, 243, 255, 0.16) !important;
+  border-radius: 10px !important;
+  background: linear-gradient(165deg, rgba(3, 16, 27, 0.84), rgba(0, 5, 11, 0.65)) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+.command-console.active-view .conversation-message {
+  border: 1px solid rgba(115, 243, 255, 0.1) !important;
+  border-left: 3px solid var(--cyan) !important;
+  background: rgba(1, 10, 18, 0.42) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2) !important;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.command-console.active-view .conversation-message--user {
+  border-left-color: var(--amber) !important;
+  border-right: 1px solid rgba(255, 200, 87, 0.08) !important;
+  background: rgba(28, 20, 8, 0.2) !important;
+}
+
+.command-console.active-view .conversation-message:hover {
+  border-color: rgba(115, 243, 255, 0.28) !important;
+  box-shadow: 0 6px 20px rgba(115, 243, 255, 0.12), inset 0 0 8px rgba(115, 243, 255, 0.02) !important;
+}
+
+.command-console.active-view .conversation-message--user:hover {
+  border-color: rgba(255, 200, 87, 0.28) !important;
+  box-shadow: 0 6px 20px rgba(255, 200, 87, 0.12), inset 0 0 8px rgba(255, 200, 87, 0.02) !important;
+}
+
+/* Timeline Stepper styling */
+.command-console.active-view .mission-stepper span {
+  font-family: var(--font-hud) !important;
+  font-size: 8px !important;
+  letter-spacing: 0.08em !important;
+  font-weight: 700 !important;
+}
+
+.command-console.active-view .mission-stepper span i {
+  background-color: rgba(115, 243, 255, 0.15) !important;
+  border: 1px solid rgba(115, 243, 255, 0.22) !important;
+  box-shadow: none !important;
+}
+
+.command-console.active-view .mission-stepper span.active {
+  color: var(--cyan) !important;
+  text-shadow: 0 0 6px rgba(115, 243, 255, 0.4) !important;
+}
+
+.command-console.active-view .mission-stepper span.active i {
+  background-color: var(--cyan) !important;
+  box-shadow: 0 0 8px var(--cyan) !important;
+  border-color: var(--cyan-hot) !important;
+}
+
+.command-console.active-view .mission-stepper span.complete {
+  color: var(--ok) !important;
+  text-shadow: 0 0 6px rgba(136, 255, 202, 0.4) !important;
+}
+
+.command-console.active-view .mission-stepper span.complete i {
+  background-color: var(--ok) !important;
+  box-shadow: 0 0 8px var(--ok) !important;
+  border-color: var(--ok) !important;
+}
+
+/* 9. Recovery Cards (.run-recovery-card) Override */
+.run-recovery-card {
+  border: 1.5px solid rgba(255, 97, 116, 0.38) !important;
+  border-left: 8px solid transparent !important;
+  position: relative !important;
+  background: linear-gradient(135deg, rgba(32, 10, 14, 0.82), rgba(0, 4, 8, 0.76)) !important;
+  box-shadow: 0 12px 36px rgba(255, 97, 116, 0.16) !important;
+  border-radius: 9px !important;
+  overflow: hidden !important;
+  transition: all 0.25s ease !important;
+}
+
+.run-recovery-card::before {
+  content: "" !important;
+  position: absolute !important;
+  left: -8px !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  width: 8px !important;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 97, 116, 0.8),
+    rgba(255, 97, 116, 0.8) 6px,
+    #000 6px,
+    #000 12px
+  ) !important;
+}
+
+.run-recovery-card span {
+  font-family: var(--font-cyber) !important;
+  font-weight: 900 !important;
+  font-size: 8.5px !important;
+  letter-spacing: 0.08em !important;
+  color: var(--danger) !important;
+  text-shadow: var(--glow-red) !important;
+}
+
+.run-recovery-card strong {
+  font-family: var(--font-hud) !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.02em !important;
+  color: var(--text) !important;
+}
+
+.run-recovery-actions button {
+  font-family: var(--font-hud) !important;
+  font-weight: 700 !important;
+  font-size: 9px !important;
+  letter-spacing: 0.05em !important;
+  background: rgba(255, 97, 116, 0.12) !important;
+  border: 1px solid rgba(255, 97, 116, 0.35) !important;
+  color: #ff9da7 !important;
+  border-radius: 6px !important;
+  transition: all 0.2s ease !important;
+}
+
+.run-recovery-actions button:hover {
+  background: rgba(255, 97, 116, 0.28) !important;
+  border-color: rgba(255, 97, 116, 0.8) !important;
+  color: #ffc9cf !important;
+  box-shadow: 0 0 12px rgba(255, 97, 116, 0.25) !important;
+}
+
+/* 10. SplitIDE / Terminal and Bubbles layouts responsive tweaks */
+.mission-control[data-chat-layout="terminal"] .command-dock__main {
+  margin-top: 6px !important;
+}
+
+.mission-control[data-chat-layout="bubbles"] .conversation-message--assistant {
+  border-color: rgba(115, 243, 255, 0.24) !important;
+  border-left-width: 3.5px !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 0 15px rgba(115, 243, 255, 0.08) !important;
+}
+
+.mission-control[data-chat-layout="bubbles"] .conversation-message--user {
+  border-color: rgba(255, 200, 87, 0.28) !important;
+  border-right-width: 3.5px !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 0 15px rgba(255, 200, 87, 0.08) !important;
+}
+
+.mission-control[data-chat-layout="bubbles"] .conversation-message__meta span {
+  font-size: 9.5px !important;
+  color: var(--cyan-hot) !important;
+}
+
+.mission-control[data-chat-layout="bubbles"] .conversation-message--user .conversation-message__meta span {
+  color: var(--amber-hot) !important;
+}
+

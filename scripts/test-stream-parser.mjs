@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { parseChatCompletionStreamLine, runChatCompletion } from '../server/codexTaskRunner.mjs';
+import { finalizeCodexTaskOutput, parseChatCompletionStreamLine, runChatCompletion } from '../server/codexTaskRunner.mjs';
 
 assert.equal(
   parseChatCompletionStreamLine('data: {"choices":[{"delta":{"content":"hel"}}]}'),
@@ -28,6 +28,17 @@ assert.equal(
 assert.equal(parseChatCompletionStreamLine('data: [DONE]'), '', 'done marker should not render');
 
 console.log('stream parser tests passed');
+
+const fallbackFailure = finalizeCodexTaskOutput({
+  finalMessage: 'Error:',
+  streamedOutput: 'OpenCode Zen is not reachable.\nSwitching to Codex CLI automatically.',
+  logs: 'Error:',
+  status: 'failed',
+  fallbackNotice: 'OpenCode Zen is not reachable.\nSwitching to Codex CLI automatically.'
+});
+assert.match(fallbackFailure, /Switching to Codex CLI automatically/);
+assert.match(fallbackFailure, /did not return a detailed error/);
+assert.doesNotMatch(fallbackFailure.trim(), /^Error:?$/i);
 
 let requestedUrl = '';
 globalThis.fetch = async (url) => {

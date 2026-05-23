@@ -302,7 +302,7 @@ export class CodexTaskRunner {
               provider: 'opencode',
               model: this.config.localModel?.model,
               detail: health.detail
-            })}\nRetrying automatically with Codex CLI.`
+            })}\nSwitching to Codex CLI automatically.`
           });
         }
         return this.#failQueuedProviderTask(queued, {
@@ -433,11 +433,13 @@ export class CodexTaskRunner {
       task.finishedAt = new Date().toISOString();
       task.timing = markTiming(task.timing, 'finishedAt');
       const finalMessage = this.#readFinalMessage(task);
-      if (finalMessage) {
-        task.output = finalMessage;
-      } else {
-        task.output = summarizeCodexOutput(task.output, task.status);
-      }
+      task.output = finalizeCodexTaskOutput({
+        finalMessage,
+        streamedOutput: task.output,
+        logs: task.logs,
+        status: task.status,
+        fallbackNotice: options.fallbackNotice
+      });
       const artifacts = inferTaskArtifacts(task.output, task.logs);
       task.filesChanged = artifacts.filesChanged;
       task.commandsRun = artifacts.commandsRun;
@@ -616,7 +618,7 @@ export class CodexTaskRunner {
       });
       if (!task.output.trim() && await this.#canFallbackToCodex()) {
         this.tasks.delete(task.id);
-        task.output = `${failureMessage}\nRetrying automatically with Codex CLI.`;
+        task.output = `${failureMessage}\nSwitching to Codex CLI automatically.`;
         task.failureKind = null;
         task.failureAction = null;
         const fallbackQueued = {
@@ -628,7 +630,7 @@ export class CodexTaskRunner {
         this.#persistTask(fallbackQueued);
         this.eventBus.emit('task.output', {
           id: task.id,
-          chunk: `\n${failureMessage}\nRetrying automatically with Codex CLI.\n`,
+          chunk: `\n${failureMessage}\nSwitching to Codex CLI automatically.\n`,
           output: task.output,
           phase: 'planning'
         });
@@ -636,7 +638,7 @@ export class CodexTaskRunner {
           providerOverride: 'codex',
           providerUsed: 'codex',
           rememberIntent: false,
-          fallbackNotice: `${failureMessage}\nRetrying automatically with Codex CLI.`
+          fallbackNotice: `${failureMessage}\nSwitching to Codex CLI automatically.`
         });
       }
       task.status = 'failed';
@@ -1262,6 +1264,34 @@ function summarizeCodexOutput(output, status) {
   }
 
   return text.trim();
+}
+
+export function finalizeCodexTaskOutput({ finalMessage = '', streamedOutput = '', logs = '', status = 'completed', fallbackNotice = '' } = {}) {
+  const notice = String(fallbackNotice ?? '').trim();
+  let body = String(finalMessage ?? '').trim()
+    || summarizeCodexOutput(streamedOutput, status);
+
+  if (status === 'failed' && isUnhelpfulCodexOutput(body)) {
+    const diagnostic = summarizeCodexOutput(logs, 'failed');
+    body = isUnhelpfulCodexOutput(diagnostic)
+      ? 'Codex CLI could not complete the fallback run and did not return a detailed error. Open Diagnostics to inspect the backend log, then retry after checking the Codex CLI setup.'
+      : `Codex CLI could not complete the fallback run.\n\n${diagnostic}`;
+  }
+
+  if (!notice) {
+    return body;
+  }
+  if (!body || body.includes(notice)) {
+    return body || notice;
+  }
+  return `${notice}\n\n${body}`;
+}
+
+function isUnhelpfulCodexOutput(value) {
+  const text = String(value ?? '').replace(/\s+/g, ' ').trim();
+  return !text
+    || /^error:?\s*$/i.test(text)
+    || /^codex task failed without output\.?$/i.test(text);
 }
 
 function inferPhaseFromStatus(status) {

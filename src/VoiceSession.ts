@@ -50,6 +50,7 @@ declare global {
 export class VoiceSession {
   private recognition: SpeechRecognitionLike | null = null;
   private mediaStream: MediaStream | null = null;
+  private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private animationFrame = 0;
   private active = false;
@@ -109,25 +110,30 @@ export class VoiceSession {
       }
     };
     this.recognition.onerror = (event) => {
-      this.callbacks.onStatus(`Dictation error: ${event.error ?? 'unknown'}`);
-      this.callbacks.onMode('idle');
+      void this.stop(`Dictation error: ${event.error ?? 'unknown'}`);
     };
     this.recognition.onresult = (event) => this.handleResult(event);
     this.recognition.start();
   }
 
-  async stop() {
+  async stop(status = 'Codex app connected locally') {
     this.active = false;
     cancelAnimationFrame(this.animationFrame);
-    this.recognition?.stop();
+    try {
+      this.recognition?.stop();
+    } catch {
+      // Speech recognition can already be stopped after an error event.
+    }
     for (const track of this.mediaStream?.getTracks() ?? []) {
       track.stop();
     }
+    await this.audioContext?.close().catch(() => undefined);
     this.recognition = null;
     this.mediaStream = null;
+    this.audioContext = null;
     this.analyser = null;
     this.callbacks.onAudioLevel(0);
-    this.callbacks.onStatus('Codex app connected locally');
+    this.callbacks.onStatus(status);
     this.callbacks.onMode('idle');
   }
 
@@ -194,6 +200,7 @@ export class VoiceSession {
 
   private attachAudioMeter(stream: MediaStream) {
     const context = new AudioContext();
+    this.audioContext = context;
     const source = context.createMediaStreamSource(stream);
     this.analyser = context.createAnalyser();
     this.analyser.fftSize = 256;

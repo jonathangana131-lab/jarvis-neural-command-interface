@@ -970,7 +970,7 @@ export async function runChatCompletion({ endpoint, apiKey, model, prompt, signa
     Authorization: `Bearer ${apiKey}`,
     'Content-Type': 'application/json'
   };
-  const target = `${endpoint}/chat/completions`;
+  const target = `${normalizeChatEndpoint(endpoint)}/chat/completions`;
   let streamResponse;
   try {
     streamResponse = await fetch(target, {
@@ -1007,7 +1007,7 @@ export async function runChatCompletion({ endpoint, apiKey, model, prompt, signa
 }
 
 async function runJsonChatCompletion({ endpoint, headers, model, prompt, signal }) {
-  const target = `${endpoint}/chat/completions`;
+  const target = `${normalizeChatEndpoint(endpoint)}/chat/completions`;
   let response;
   try {
     response = await fetch(target, {
@@ -1027,6 +1027,10 @@ async function runJsonChatCompletion({ endpoint, headers, model, prompt, signal 
     throw await chatCompletionHttpError(response, 'OpenCode API');
   }
   return extractChatCompletionText(await response.json());
+}
+
+function normalizeChatEndpoint(endpoint) {
+  return String(endpoint ?? '').trim().replace(/\/+$/, '');
 }
 
 async function chatCompletionHttpError(response, label) {

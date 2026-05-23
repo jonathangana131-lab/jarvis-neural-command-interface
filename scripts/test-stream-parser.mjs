@@ -29,6 +29,27 @@ assert.equal(parseChatCompletionStreamLine('data: [DONE]'), '', 'done marker sho
 
 console.log('stream parser tests passed');
 
+let requestedUrl = '';
+globalThis.fetch = async (url) => {
+  requestedUrl = String(url);
+  return new Response(JSON.stringify({ choices: [{ message: { content: 'fallback response' } }] }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' }
+  });
+};
+const fallbackResponse = await runChatCompletion({
+  endpoint: 'https://mock.local/v1/',
+  apiKey: 'test-key',
+  model: 'mock-model',
+  prompt: 'hello'
+});
+assert.equal(fallbackResponse, 'fallback response', 'non-streaming compatible responses should parse');
+assert.equal(
+  requestedUrl,
+  'https://mock.local/v1/chat/completions',
+  'chat endpoint should tolerate a trailing slash in user settings'
+);
+
 globalThis.fetch = async () => new Response(JSON.stringify({ error: 'too many requests' }), {
   status: 429,
   statusText: 'Too Many Requests',

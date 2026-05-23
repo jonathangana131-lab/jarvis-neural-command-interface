@@ -3661,7 +3661,7 @@ function renderMissionConversation(
       }
       const cleanOutput = stripUiArtifactBlocks(activeOutput).trim();
       const assistantBody = cleanOutput
-        ? cleanOutput.slice(entryStatus === 'running' ? -3600 : -1400)
+        ? cleanOutput
         : entryStatus === 'queued'
           ? 'Queued for the local agent.'
           : entryStatus === 'running'

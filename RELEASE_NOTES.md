@@ -1,3 +1,30 @@
+# v0.8.4
+
+Fix layout jitter, text shifts, and response truncation in the assistant chat streams.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.8.4.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.8.4.exe.blockmap`
+- `latest.yml`
+
+## Fixed
+
+- **Assistant Streaming Stability**: Resolved severe layout shifts, text jumping, and scrolling jitter by removing slicing on active and completed task outputs in the timeline conversation stream renderer. The UI now fully retains and renders complete assistant outputs of any length, preventing text from abruptly resizing or truncating once task streaming completes.
+
+## Verified
+
+- `npm run build`
+- `npm run test:installed-ui-smoke`
+- `npm run test:packaged-smoke`
+- `npm run test:live-smoke`
+- `npm run install:local:fast`
+- `npm run installer:win`
+
+SHA256: `C93A01986F7B60D948E5E7B799148DB4F48551928E8F8CBF829BA501d99d8F31`
+
 # v0.8.3
 
 Fix command typing area positioning across all layouts and resolve the Codex CLI execution unexpected argument error.

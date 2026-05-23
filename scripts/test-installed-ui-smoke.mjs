@@ -98,7 +98,7 @@ try {
       rendererEvents.push(JSON.stringify(event.params).slice(0, 1200));
     }
   });
-  await waitForUi(client, '!document.querySelector("#setup-wizard")?.classList.contains("hidden")', 30000);
+  await waitForUi(client, 'Boolean(document.querySelector("#setup-provider")) && !document.querySelector("#setup-wizard")?.classList.contains("hidden")', 30000);
   await client.evaluate(`(() => {
     const provider = document.querySelector('#setup-provider');
     const endpoint = document.querySelector('#setup-endpoint');

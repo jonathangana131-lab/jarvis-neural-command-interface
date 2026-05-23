@@ -5,6 +5,10 @@
   "type": "module",
   "main": "electron/main.cjs",
   "description": "A local Windows desktop neural command interface for chat, memory, and Codex-powered tasks.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jonathangana131-lab/jarvis-neural-command-interface.git"
+  },
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:client": "vite --host 127.0.0.1",
@@ -42,6 +46,13 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "jonathangana131-lab",
+        "repo": "jarvis-neural-command-interface"
+      }
+    ],
     "afterPack": "scripts/after-pack.cjs",
     "files": [
       "dist/**/*",

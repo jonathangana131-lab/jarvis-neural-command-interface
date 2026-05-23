@@ -106,8 +106,8 @@ export class MemoryStore {
       kind: memory.kind ?? 'fact',
       title: memory.title?.slice(0, 120) || 'Untitled memory',
       content: memory.content?.slice(0, 2000) || '',
-      importance: Math.max(1, Math.min(5, Number(memory.importance ?? 1))),
-      confidence: Math.max(0, Math.min(1, Number(memory.confidence ?? 1))),
+      importance: clampNumber(memory.importance, 1, 5, 1),
+      confidence: clampNumber(memory.confidence, 0, 1, 1),
       normalizedContent: normalizeMemoryContent(memory.content ?? memory.title ?? ''),
       lookupKey: lookupKey(memory.kind ?? 'fact', memory.title ?? '', memory.content ?? ''),
       source: memory.source ?? 'assistant',
@@ -169,10 +169,10 @@ export class MemoryStore {
     const kind = cleanUpdateText(updates.kind, existing.kind, 40);
     const importance = updates.importance === undefined
       ? Number(existing.importance)
-      : Math.max(1, Math.min(5, Number(updates.importance)));
+      : clampNumber(updates.importance, 1, 5, Number(existing.importance) || 1);
     const confidence = updates.confidence === undefined
       ? Number(existing.confidence ?? 1)
-      : Math.max(0, Math.min(1, Number(updates.confidence)));
+      : clampNumber(updates.confidence, 0, 1, Number(existing.confidence) || 1);
     const pinned = updates.pinned === undefined ? Number(existing.pinned) : (updates.pinned ? 1 : 0);
     const archived = updates.archived === undefined ? Number(existing.archived) : (updates.archived ? 1 : 0);
     const scope = updates.scope === undefined ? existing.scope : normalizeScope(updates.scope);
@@ -639,6 +639,14 @@ function normalizeScope(value) {
 function cleanUpdateText(value, fallback, limit) {
   const text = value === undefined ? String(fallback ?? '') : String(value ?? '');
   return text.replace(/\s+/g, ' ').trim().slice(0, limit);
+}
+
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, number));
 }
 
 function lookupKey(kind, title, content) {

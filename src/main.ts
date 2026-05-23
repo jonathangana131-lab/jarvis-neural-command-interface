@@ -3528,7 +3528,7 @@ function renderCommandChat(immediate = false) {
     : latestTask?.output ?? '';
   const output = (latestTask ? taskOutput : lastCommandOutput).trim();
   const memoryLine = `${visibleMemories.length} ${visibleMemories.length === 1 ? 'memory' : 'memories'} indexed`;
-  const statusText = modeLabel.textContent?.trim() || 'Idle';
+  const statusText = latestTask ? missionHeaderStatus(latestTask) : modeLabel.textContent?.trim() || 'Idle';
   const promptPreview = prompt || draftPrompt || 'Standing by.';
   const provider = providerLabel(localProvider());
   const model = settingsLocalModel.value || providerDefaultModel(localProvider()) || config?.codexModel || 'default';
@@ -3667,7 +3667,7 @@ function renderMissionTimeline(
   return `
     <article class="mission-event mission-event--response mission-event--${escapeHtml(taskStatus)} ${live ? 'is-live' : ''}" ${task ? `data-task-id="${escapeHtml(task.id)}"` : ''}>
       <div class="conversation-header">
-        <span>${escapeHtml(statusText)} / ${escapeHtml(phase)}</span>
+        <span>${escapeHtml(statusText)} / ${escapeHtml(missionHeaderPhase(task, phase))}</span>
         <strong>${escapeHtml(task ? statusTitle(task.status) : 'Awaiting mission')}</strong>
       </div>
       ${renderTaskPhaseStepper(task, phase)}
@@ -3677,6 +3677,41 @@ function renderMissionTimeline(
       ${renderActiveTaskActions(task, output)}
     </article>
   `;
+}
+
+function missionHeaderStatus(task: TaskRecord) {
+  if (task.status === 'queued') {
+    return 'Queued';
+  }
+  if (task.status === 'running') {
+    return task.phase === 'streaming' ? 'Live' : 'Running';
+  }
+  if (task.status === 'failed') {
+    return 'Needs attention';
+  }
+  if (task.status === 'timed_out') {
+    return 'Timed out';
+  }
+  return titleCase(task.status);
+}
+
+function missionHeaderPhase(task: TaskRecord | null, phase: string) {
+  if (!task) {
+    return titleCase(phase);
+  }
+  if (task.status === 'queued') {
+    return 'Waiting';
+  }
+  if (task.status === 'failed') {
+    return 'Review';
+  }
+  if (task.status === 'timed_out') {
+    return 'Timeout';
+  }
+  if (phase === 'streaming') {
+    return 'Streaming';
+  }
+  return titleCase(phase);
 }
 
 function renderActiveTaskActions(task: TaskRecord | null, output: string) {
@@ -3737,19 +3772,15 @@ function renderMissionConversation(
       messages.push(renderConversationMessage('user', entry.prompt, active ? 'You' : 'You', formatTime(entry.createdAt), false));
       if (active && (entryStatus === 'queued' || entryStatus === 'running')) {
         messages.push(renderThinkingSignal(
-          activeOutput ? activeSignalLabel(entryPhase) : 'Thinking through the mission',
+          entryStatus === 'queued'
+            ? 'Queued and ready'
+            : activeOutput ? activeSignalLabel(entryPhase) : 'Starting the local agent',
           entryPhase,
           Boolean(activeOutput)
         ));
       }
       const cleanOutput = stripUiArtifactBlocks(activeOutput).trim();
-      const assistantBody = cleanOutput
-        ? cleanOutput
-        : entryStatus === 'queued'
-          ? 'Queued for the local agent.'
-          : entryStatus === 'running'
-            ? ''
-            : 'No response captured for this run.';
+      const assistantBody = missionAssistantBody(entry, entryStatus, cleanOutput);
       messages.push(renderConversationMessage('assistant', assistantBody, 'Jarvis', entryPhase, active && entryStatus === 'running'));
       if (entryStatus === 'failed' || entryStatus === 'timed_out') {
         messages.push(renderRunRecoveryCard(entry));
@@ -3770,6 +3801,34 @@ function renderMissionConversation(
   }
 
   return messages.join('');
+}
+
+function missionAssistantBody(task: TaskRecord, status: TaskRecord['status'], cleanOutput: string) {
+  if (cleanOutput && !isUnhelpfulAssistantOutput(cleanOutput)) {
+    return cleanOutput;
+  }
+  if ((status === 'failed' || status === 'timed_out') && isUnhelpfulAssistantOutput(cleanOutput)) {
+    const action = task.failureAction ?? providerFailureAction(task.failureKind);
+    return [
+      status === 'timed_out'
+        ? 'The run timed out before Jarvis received a useful response.'
+        : 'The run stopped before Jarvis received a useful error message.',
+      action,
+      'Open Diagnostics for the full backend log or retry with a different provider.'
+    ].join('\n\n');
+  }
+  if (status === 'queued') {
+    return 'Your mission is in the local queue. Jarvis will start it automatically as soon as the run lane is free.';
+  }
+  if (status === 'running') {
+    return '';
+  }
+  return 'No response captured for this run.';
+}
+
+function isUnhelpfulAssistantOutput(value: string) {
+  const text = value.replace(/\s+/g, ' ').trim();
+  return !text || /^error:?\s*$/i.test(text);
 }
 
 function renderRunRecoveryCard(task: TaskRecord) {
@@ -4123,7 +4182,7 @@ function activeSignalLabel(phase: string) {
 function phaseSignalDetail(phase: string) {
   switch (phase) {
     case 'queued':
-      return 'queued in local task bus';
+      return 'waiting for the run lane';
     case 'planning':
     case 'thinking':
       return 'cortex planning pulse';
@@ -4319,6 +4378,12 @@ function missionPhaseLabel(task: TaskRecord | null, phase: string) {
   if (!task) {
     return phase === 'ready' ? 'Ready' : titleCase(phase);
   }
+  if (task.status === 'queued') {
+    return 'Queued / Waiting';
+  }
+  if (task.status === 'failed') {
+    return 'Failed / Needs attention';
+  }
   return `${titleCase(task.status)} / ${titleCase(phase)}`;
 }
 
@@ -4443,7 +4508,7 @@ function groupBy<T>(values: T[], getKey: (value: T) => string) {
 
 function statusTitle(status: TaskRecord['status']) {
   const titles: Record<TaskRecord['status'], string> = {
-    queued: 'Queued for Codex',
+    queued: 'Queued',
     running: 'Live execution stream',
     completed: 'Mission complete',
     failed: 'Mission needs attention',

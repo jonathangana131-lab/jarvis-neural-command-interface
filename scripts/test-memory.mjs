@@ -69,6 +69,23 @@ assert.equal(updatedMemory.pinned, 1, 'memory pin state should update');
 assert.equal(updatedMemory.scope, 'global', 'memory scope should update');
 assert.ok(store.list({ query: 'preferred', scope: 'global' }).some((memory) => memory.id === inserted.id), 'memory search and scope filter should find updated memories');
 
+const invalidNumberMemory = store.create({
+  kind: 'fact',
+  title: 'Invalid numeric fields',
+  content: 'Memory creation should fall back when numeric fields are invalid.',
+  importance: 'not-a-number',
+  confidence: Number.NaN,
+  source: 'test'
+});
+assert.equal(invalidNumberMemory.importance, 1, 'invalid memory importance should fall back to the default');
+assert.equal(invalidNumberMemory.confidence, 1, 'invalid memory confidence should fall back to the default');
+const invalidNumberUpdate = store.update(invalidNumberMemory.id, {
+  importance: Number.POSITIVE_INFINITY,
+  confidence: 'bad'
+});
+assert.equal(invalidNumberUpdate.importance, 1, 'invalid updated importance should preserve a finite value');
+assert.equal(invalidNumberUpdate.confidence, 1, 'invalid updated confidence should preserve a finite value');
+
 const prompt = buildPromptWithMemories('Improve memory retrieval.', relevant);
 assert.match(prompt, /Relevant remembered context:/);
 assert.match(prompt, /Memory storage/);

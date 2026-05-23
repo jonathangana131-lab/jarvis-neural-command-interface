@@ -5727,6 +5727,30 @@ sl-tooltip::part(base__popup) {
   box-shadow: 0 0 28px rgba(136, 255, 202, 0.16), inset 0 0 18px rgba(136, 255, 202, 0.12);
 }
 
+.thinking-signal--queued {
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 1px solid rgba(115, 243, 255, 0.16);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(7, 28, 38, 0.62), rgba(2, 8, 15, 0.42));
+}
+
+.thinking-signal--queued .thinking-orbit {
+  width: 30px;
+  height: 30px;
+  border-color: rgba(136, 255, 202, 0.34);
+  background: radial-gradient(circle, rgba(136, 255, 202, 0.35) 0 10%, rgba(115, 243, 255, 0.12) 14% 30%, transparent 58%);
+}
+
+.thinking-signal--queued .thinking-orbit i {
+  animation-duration: 1.8s;
+  border-top-color: rgba(136, 255, 202, 0.9);
+}
+
+.thinking-signal--queued .thinking-copy b {
+  color: #e8fff6;
+}
+
 .thinking-signal--streaming .thinking-copy b {
   color: #fff;
 }

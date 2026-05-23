@@ -1,3 +1,30 @@
+# v0.8.6
+
+Add native smooth auto-updater integration. Users can check, download, and seamlessly install updates silently from inside the desktop app, automatically reloading into the new version.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.8.6.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.8.6.exe.blockmap`
+- `latest.yml`
+
+## Added
+
+- **Smooth In-App Updates**: Implemented native `electron-updater` IPC bridge methods in `electron/preload.cjs` and `electron/main.cjs`. When updates are ready, the app runs the installer silently and reopens the new version automatically.
+- **Pre-Update Backups**: The updater automatically triggers a local settings and memory database backup before initiating the silent install sequence.
+
+## Verified
+
+- `npm run build`
+- `npm run test:memory`
+- `npm run test:stream-parser`
+- `npm run test:reliability-controls`
+- `npm run test:installed-ui-smoke`
+
+SHA256: `1A86A066410B84E2E595750074F39008282AB1EC860826E200C78CE449EBC96D`
+
 # v0.8.5
 
 Fix workspace path resolution error (os error 123) on Windows, resolve vertical text clipping on memory chips, and correct chat auto-scroll desynchronization.

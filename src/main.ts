@@ -214,6 +214,7 @@ let pendingStreamUpdate: { id: string; output: string; phase: TaskRecord['phase'
 let streamUpdateFrame = 0;
 let updateActionBusy = false;
 let lastUpdateCheck: UpdateCheck | null = null;
+let nativeUpdateStatus: UpdateStatus | null = null;
 let lastStreamChromeRenderAt = 0;
 let lastStreamPulseAt = 0;
 let currentRunningTask: TaskRecord | null = null;
@@ -404,6 +405,10 @@ declare global {
     jarvisDesktop?: {
       platform: string;
       installUpdate(payload: { installerPath: string; sha256: string; expectedSha256?: string | null; version?: string | null }): Promise<{ scheduled: boolean; message: string }>;
+      checkForUpdates?(): Promise<{ updateAvailable: boolean; version: string }>;
+      downloadUpdate?(): Promise<{ started: boolean }>;
+      installUpdateNative?(): Promise<{ installed: boolean }>;
+      onUpdateStatus?(callback: (status: any) => void): () => void;
     };
   }
 }
@@ -819,6 +824,11 @@ resetMemory.addEventListener('click', async () => {
 });
 
 async function boot() {
+  if (window.jarvisDesktop?.onUpdateStatus) {
+    window.jarvisDesktop.onUpdateStatus((status: any) => {
+      handleNativeUpdateStatus(status);
+    });
+  }
   const [loadedConfig, loadedVoiceSettings, session] = await Promise.all([
     fetchJson<AppConfig>('/api/config'),
     fetchJson<VoiceSettings>('/api/voice-settings'),
@@ -1632,7 +1642,7 @@ function reportClientIssue(reason: unknown, fallback: string) {
 }
 
 async function loadDiagnostics() {
-  const [data, health, update, updateStatus, backups, logs, storage] = await Promise.all([
+  const [data, health, update, rawUpdateStatus, backups, logs, storage] = await Promise.all([
     fetchJson<{
       codex: { available: boolean; detail: string };
       localModel: { available: boolean; detail: string; provider: string; endpoint: string; models: string[] };
@@ -1653,6 +1663,13 @@ async function loadDiagnostics() {
     fetchJson<{ path: string; tail: string }>('/api/logs'),
     fetchJson<StorageReport>('/api/storage')
   ]);
+  let updateStatus = rawUpdateStatus;
+  if (window.jarvisDesktop?.checkForUpdates && nativeUpdateStatus) {
+    updateStatus = nativeUpdateStatus;
+    if (nativeUpdateStatus.status === 'ready') {
+      update.downloaded = { ready: true, path: null, sha256: null, size: 0 };
+    }
+  }
   lastUpdateCheck = update;
   renderUpdateBanner(update, updateStatus);
   const updateDetail = update.error
@@ -2004,18 +2021,80 @@ function renderUpdateBanner(update: UpdateCheck, status?: UpdateStatus) {
   updateBannerInstall.classList.toggle('hidden', status?.status !== 'ready' && !update.downloaded?.ready);
 }
 
+function handleNativeUpdateStatus(status: { status: string; percent?: number; version?: string; error?: string }) {
+  const mappedStatus: UpdateStatus = {
+    status: status.status === 'checking' ? 'idle' : 
+            status.status === 'available' ? 'idle' : 
+            status.status === 'current' ? 'idle' : 
+            status.status === 'downloading' ? 'downloading' : 
+            status.status === 'ready' ? 'ready' : 
+            status.status === 'failed' ? 'failed' : 'idle',
+    version: status.version || null,
+    fileName: null,
+    installerPath: null,
+    receivedBytes: status.percent ? Math.round(status.percent) : 0,
+    totalBytes: status.percent ? 100 : 0,
+    sha256: null,
+    expectedSha256: null,
+    backupPath: null,
+    backupFiles: [],
+    error: status.error || null,
+    updatedAt: new Date().toISOString()
+  };
+
+  nativeUpdateStatus = mappedStatus;
+
+  if (status.status === 'available' && status.version) {
+    if (!lastUpdateCheck) {
+      lastUpdateCheck = {
+        currentVersion: '',
+        latestVersion: status.version,
+        updateAvailable: true,
+        url: null,
+        downloadUrl: null,
+        assetName: null,
+        assetSize: null,
+        digest: null,
+        downloaded: null,
+        name: null,
+        publishedAt: null
+      };
+    } else {
+      lastUpdateCheck.updateAvailable = true;
+      lastUpdateCheck.latestVersion = status.version;
+    }
+  } else if (status.status === 'ready' && status.version) {
+    if (lastUpdateCheck) {
+      lastUpdateCheck.downloaded = {
+        ready: true,
+        path: null,
+        sha256: null,
+        size: 0
+      };
+    }
+  }
+
+  if (lastUpdateCheck) {
+    renderUpdateBanner(lastUpdateCheck, nativeUpdateStatus);
+  }
+}
+
 async function downloadUpdateWithProgress() {
   if (updateActionBusy) {
     return;
   }
   updateActionBusy = true;
   try {
-    await postJson<UpdateStatus>('/api/update/download', {});
-    const status = await pollUpdateDownload();
-    if (status.status !== 'ready') {
-      throw new Error(status.error ?? 'Update download did not finish.');
+    if (window.jarvisDesktop?.downloadUpdate) {
+      await window.jarvisDesktop.downloadUpdate();
+    } else {
+      await postJson<UpdateStatus>('/api/update/download', {});
+      const status = await pollUpdateDownload();
+      if (status.status !== 'ready') {
+        throw new Error(status.error ?? 'Update download did not finish.');
+      }
+      window.alert(`Update ${status.version} downloaded and verified.\n\nBackup: ${status.backupPath}\nSHA256: ${status.sha256}`);
     }
-    window.alert(`Update ${status.version} downloaded and verified.\n\nBackup: ${status.backupPath}\nSHA256: ${status.sha256}`);
   } catch (error) {
     window.alert(error instanceof Error ? error.message : 'Unable to download update.');
   } finally {
@@ -2049,18 +2128,22 @@ async function installDownloadedUpdate() {
   }
   updateActionBusy = true;
   try {
-    const prepared = await postJson<PreparedUpdateInstall>('/api/update/prepare-install', {});
-    if (!window.jarvisDesktop?.installUpdate) {
-      window.alert(`Update verified, but this window is not running inside the desktop app.\n\nInstaller:\n${prepared.installerPath}`);
-      return;
+    if (window.jarvisDesktop?.installUpdateNative) {
+      await window.jarvisDesktop.installUpdateNative();
+    } else {
+      const prepared = await postJson<PreparedUpdateInstall>('/api/update/prepare-install', {});
+      if (!window.jarvisDesktop?.installUpdate) {
+        window.alert(`Update verified, but this window is not running inside the desktop app.\n\nInstaller:\n${prepared.installerPath}`);
+        return;
+      }
+      const result = await window.jarvisDesktop.installUpdate({
+        installerPath: prepared.installerPath,
+        sha256: prepared.sha256,
+        expectedSha256: prepared.expectedSha256,
+        version: prepared.version
+      });
+      window.alert(result.message);
     }
-    const result = await window.jarvisDesktop.installUpdate({
-      installerPath: prepared.installerPath,
-      sha256: prepared.sha256,
-      expectedSha256: prepared.expectedSha256,
-      version: prepared.version
-    });
-    window.alert(result.message);
   } catch (error) {
     window.alert(error instanceof Error ? error.message : 'Unable to prepare update install.');
   } finally {

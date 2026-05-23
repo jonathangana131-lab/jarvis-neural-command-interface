@@ -123,6 +123,35 @@ app.on('window-all-closed', () => {
 ipcMain.handle('jarvis:update-install', async (_event, payload = {}) => {
   return scheduleVerifiedUpdateInstall(payload);
 });
+ipcMain.handle('jarvis:update-check', async () => {
+  if (!autoUpdater) throw new Error('Auto updater not available');
+  const result = await autoUpdater.checkForUpdates();
+  return {
+    updateAvailable: result.updateInfo.version !== app.getVersion(),
+    version: result.updateInfo.version
+  };
+});
+ipcMain.handle('jarvis:update-download', async () => {
+  if (!autoUpdater) throw new Error('Auto updater not available');
+  await autoUpdater.downloadUpdate();
+  return { started: true };
+});
+ipcMain.handle('jarvis:update-install-native', async () => {
+  if (!autoUpdater) throw new Error('Auto updater not available');
+  try {
+    const response = await fetch(`http://127.0.0.1:${backendPort}/api/backups/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (response.ok) {
+      console.log('[updater] Pre-update user backup created successfully.');
+    }
+  } catch (error) {
+    console.warn('[updater] Failed to create database backup before update installation:', error.message);
+  }
+  autoUpdater.quitAndInstall(true, true);
+  return { installed: true };
+});
 
 function setupAutoUpdates(window) {
   if (!autoUpdater || !app.isPackaged || process.env.JARVIS_DISABLE_AUTO_UPDATE === '1') {
@@ -139,18 +168,41 @@ function setupAutoUpdates(window) {
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = false;
 
+  const sendStatus = (status) => {
+    if (window && !window.isDestroyed()) {
+      window.webContents.send('jarvis:update-status', status);
+    }
+  };
+
   autoUpdater.on('checking-for-update', () => {
     console.log('[updater] Checking for update');
+    sendStatus({ status: 'checking' });
   });
   autoUpdater.on('update-available', (info) => {
     console.log(`[updater] Update ${info.version} is available through the in-app updater`);
+    sendStatus({ status: 'available', version: info.version });
   });
   autoUpdater.on('update-not-available', () => {
     console.log('[updater] App is up to date');
+    sendStatus({ status: 'current' });
   });
   autoUpdater.on('error', (error) => {
     console.warn(`[updater] ${error.message}`);
+    sendStatus({ status: 'failed', error: error.message });
   });
+  autoUpdater.on('download-progress', (progressObj) => {
+    sendStatus({
+      status: 'downloading',
+      percent: progressObj.percent,
+      transferred: progressObj.transferred,
+      total: progressObj.total
+    });
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log(`[updater] Update ${info.version} downloaded and ready`);
+    sendStatus({ status: 'ready', version: info.version });
+  });
+
   setTimeout(() => {
     autoUpdater.checkForUpdates().catch((error) => {
       console.warn(`[updater] Update check failed: ${error.message}`);

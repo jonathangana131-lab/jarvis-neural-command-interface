@@ -961,8 +961,7 @@ export function buildCodexExecArgs({ model, reasoningEffort, ephemeral, cwd, out
     '--cd',
     cwd,
     '--output-last-message',
-    outputMessagePath,
-    '-'
+    outputMessagePath
   ];
 }
 

@@ -8273,8 +8273,10 @@ sl-tooltip::part(base__popup) {
 }
 
 /* 3. The Command Dock (.command-dock__main) Cyber Deck */
+.command-dock__main {
+  position: relative;
+}
 .command-console.active-view .command-dock__main {
-  position: relative !important;
   background: rgba(4, 14, 24, 0.72) !important;
   border: 1px solid rgba(115, 243, 255, 0.22) !important;
   box-shadow: 0 16px 45px rgba(0, 0, 0, 0.6), inset 0 0 16px rgba(115, 243, 255, 0.06) !important;
@@ -8614,4 +8616,68 @@ sl-tooltip::part(base__popup) {
 .mission-control[data-chat-layout="bubbles"] .conversation-message--user .conversation-message__meta span {
   color: var(--amber-hot) !important;
 }
+
+/* 11. Layout-dependent positioning fixes for Cockpit, Split Pane, and Bubbles */
+@media (min-width: 901px) {
+  /* Cockpit / Default Layout and Bubbles Layout: Floating bottom panels */
+  .mission-control:not([data-chat-layout="terminal"]) .command-dock__main,
+  .mission-control[data-chat-layout="cockpit"] .command-dock__main,
+  .mission-control[data-chat-layout="bubbles"] .command-dock__main {
+    position: fixed !important;
+  }
+
+  .mission-control:not([data-chat-layout="terminal"]) .workspace-switcher,
+  .mission-control[data-chat-layout="cockpit"] .workspace-switcher,
+  .mission-control[data-chat-layout="bubbles"] .workspace-switcher {
+    position: fixed !important;
+  }
+
+  .mission-control:not([data-chat-layout="terminal"]) #command-chat-feed.mission-timeline,
+  .mission-control[data-chat-layout="cockpit"] #command-chat-feed.mission-timeline,
+  .mission-control[data-chat-layout="bubbles"] #command-chat-feed.mission-timeline {
+    position: fixed !important;
+  }
+
+  /* Split Pane (Terminal) Layout: Respect grid areas */
+  .mission-control[data-chat-layout="terminal"] .command-dock__main {
+    position: relative !important;
+    bottom: auto !important;
+    left: auto !important;
+    right: auto !important;
+    width: auto !important;
+  }
+
+  .mission-control[data-chat-layout="terminal"] .workspace-switcher {
+    position: relative !important;
+    bottom: auto !important;
+    left: auto !important;
+    right: auto !important;
+    width: auto !important;
+  }
+
+  .mission-control[data-chat-layout="terminal"] #command-chat-feed.mission-timeline {
+    position: relative !important;
+    bottom: auto !important;
+    left: auto !important;
+    right: auto !important;
+    width: auto !important;
+    top: auto !important;
+    max-height: none !important;
+  }
+}
+
+@media (max-width: 900px) {
+  /* Mobile Layout: Stack all panels naturally */
+  .mission-control .command-dock__main,
+  .mission-control .workspace-switcher,
+  .mission-control #command-chat-feed.mission-timeline {
+    position: relative !important;
+    bottom: auto !important;
+    left: auto !important;
+    right: auto !important;
+    width: auto !important;
+    top: auto !important;
+  }
+}
+
 

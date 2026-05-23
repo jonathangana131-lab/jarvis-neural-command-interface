@@ -1,3 +1,29 @@
+# v0.8.3
+
+Fix command typing area positioning across all layouts and resolve the Codex CLI execution unexpected argument error.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.8.3.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.8.3.exe.blockmap`
+- `latest.yml`
+
+## Fixed
+
+- **Layout-dependent Command Dock Positioning**: Solved command dock and workspace switcher layout issues. Cockpit and Bubbles layout modes on desktop now use fixed floating bottom panels, Split Pane/Terminal layout uses grid-template areas with relative positioning, and mobile screens use responsive stacked elements.
+- **Codex Task CLI Parsing**: Fixed `clap` parsing error (`unexpected argument '-'`) when invoking `codex exec` by removing the trailing `'-'` stdin marker, ensuring standard input is read by default without argument mismatch issues on Windows.
+
+## Verified
+
+- `npm run build`
+- `npm run test:installed-ui-smoke`
+- `npm run install:local:fast`
+- `npm run installer:win`
+
+SHA256: `EBC7E09E73F2947C826E98633BF22EF29184DB840FF4CB025283AF5A74A6C67E`
+
 # v0.8.2
 
 Fix layout and font readability issues in the cyber HUD interface.

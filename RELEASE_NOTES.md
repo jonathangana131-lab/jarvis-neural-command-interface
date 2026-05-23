@@ -1,3 +1,31 @@
+# v0.8.5
+
+Fix workspace path resolution error (os error 123) on Windows, resolve vertical text clipping on memory chips, and correct chat auto-scroll desynchronization.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.8.5.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.8.5.exe.blockmap`
+- `latest.yml`
+
+## Fixed
+
+- **Workspace Path Resolution**: Resolved the Windows-specific process execution crash (`os error 123`) by expanding user profile environment variables and tilde paths (`~` / `~/` / `~\`) on the backend before resolving directories and spawning shell subprocesses.
+- **Memory Chip Typography**: Solved vertical character clipping on memory context nodes by increasing text line-heights from compressed bounds (`1.1` - `1.24`) to a spacious `1.35` across all responsive HUD layouts.
+- **Chat Auto-scroll desynchronization**: Fixed a scrolling lock bug where live streams failed to follow text output by disabling smooth-scroll transitions on conversation streams. Instant scroll updates now accurately synchronize the container's height and scroll lock.
+
+## Verified
+
+- `npm run build`
+- `npm run test:memory`
+- `npm run test:stream-parser`
+- `npm run test:reliability-controls`
+- `npm run installer:win`
+
+SHA256: `3CF13D3DEF3C9E1C5ADD111F7D39C13FB016E17732A45659162E8D2DEDDEA28B`
+
 # v0.8.4
 
 Fix layout jitter, text shifts, and response truncation in the assistant chat streams.

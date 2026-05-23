@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { isPathAllowed } from './config.mjs';
+import { isPathAllowed, expandHomeAndEnvPath } from './config.mjs';
 import { classifyProviderFailure, providerFailureAction, providerFailureSummary } from './providerHealth.mjs';
 
 export class CodexTaskRunner {
@@ -91,7 +91,7 @@ export class CodexTaskRunner {
   }
 
   start({ prompt, workspace, chatId, providerOverride, quick }) {
-    const cwd = path.resolve(workspace || this.config.defaultWorkspace);
+    const cwd = path.resolve(expandHomeAndEnvPath(workspace || this.config.defaultWorkspace));
     const cleanPrompt = String(prompt ?? '').trim();
     if (!cleanPrompt) {
       const error = new Error('Task prompt is required.');

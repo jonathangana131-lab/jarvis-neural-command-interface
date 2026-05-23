@@ -13,7 +13,7 @@ const defaultHostedModel = {
 
 export function loadConfig() {
   const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-  const normalize = (value) => path.resolve(expandEnvironmentPath(value));
+  const normalize = (value) => path.resolve(expandHomeAndEnvPath(value));
   const localProvider = normalizeProvider(config.localModel?.provider);
   const defaultWorkspace = normalize(config.defaultWorkspace);
   const workspaceAllowlist = (config.workspaceAllowlist?.length ? config.workspaceAllowlist : [defaultWorkspace])
@@ -43,14 +43,23 @@ export function loadConfig() {
   };
 }
 
-function expandEnvironmentPath(value) {
-  return String(value ?? '').replace(/%([^%]+)%/g, (_, name) => process.env[name] ?? `%${name}%`);
+export function expandHomeAndEnvPath(value) {
+  let str = String(value ?? '').trim();
+  str = str.replace(/%([^%]+)%/g, (_, name) => process.env[name] ?? `%${name}%`);
+  if (str === '~') {
+    return process.env.USERPROFILE || process.env.HOME || '';
+  }
+  if (str.startsWith('~/') || str.startsWith('~\\')) {
+    const home = process.env.USERPROFILE || process.env.HOME || '';
+    return path.join(home, str.slice(2));
+  }
+  return str;
 }
 
 export function isPathAllowed(config, candidate) {
-  const resolved = path.resolve(candidate);
+  const resolved = path.resolve(expandHomeAndEnvPath(candidate));
   return config.workspaceAllowlist.some((allowed) => {
-    const root = path.resolve(allowed);
+    const root = path.resolve(expandHomeAndEnvPath(allowed));
     return resolved === root || resolved.startsWith(`${root}${path.sep}`);
   });
 }

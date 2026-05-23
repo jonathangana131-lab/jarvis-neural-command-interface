@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { Readable } from 'node:stream';
-import { isPathAllowed, loadConfig, publicConfig } from './config.mjs';
+import { isPathAllowed, loadConfig, publicConfig, expandHomeAndEnvPath } from './config.mjs';
 import { EventBus } from './eventBus.mjs';
 import { Embedder } from './embeddings.mjs';
 import { MemoryExtractor } from './memoryExtractor.mjs';
@@ -796,7 +796,7 @@ app.get('/api/memories', (req, res) => {
     memories: memoryStore.list({
       query: req.query.q,
       scope: req.query.scope,
-      workspace: req.query.workspace,
+      workspace: req.query.workspace ? path.resolve(expandHomeAndEnvPath(String(req.query.workspace))) : '',
       limit: req.query.limit ? Number(req.query.limit) : 80
     }),
     count: memoryStore.count()
@@ -852,7 +852,7 @@ app.get('/api/memory/search', async (req, res, next) => {
     const results = await memoryStore.semanticSearch({
       query: req.query.q,
       scope: req.query.scope,
-      workspace: req.query.workspace,
+      workspace: req.query.workspace ? path.resolve(expandHomeAndEnvPath(String(req.query.workspace))) : '',
       limit,
       ...(Number.isFinite(threshold) ? { threshold } : {})
     });
@@ -907,7 +907,7 @@ app.post('/api/chats', (req, res, next) => {
   try {
     const chat = taskStore.createChat({
       title: req.body?.title,
-      workspace: req.body?.workspace ?? config.defaultWorkspace
+      workspace: path.resolve(expandHomeAndEnvPath(String(req.body?.workspace ?? config.defaultWorkspace)))
     });
     res.status(201).json({ chat });
   } catch (error) {
@@ -1035,7 +1035,7 @@ app.post('/api/tasks/:id/retry', (req, res, next) => {
 
 app.post('/api/artifacts/open', (req, res, next) => {
   try {
-    const workspace = path.resolve(String(req.body?.workspace ?? config.defaultWorkspace));
+    const workspace = path.resolve(expandHomeAndEnvPath(String(req.body?.workspace ?? config.defaultWorkspace)));
     const relativePath = String(req.body?.path ?? '').trim();
     if (!relativePath) {
       const error = new Error('Artifact path is required.');

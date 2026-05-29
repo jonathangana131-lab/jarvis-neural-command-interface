@@ -1,6 +1,6 @@
 # Jarvis Neural Command Interface
 
-A local Windows desktop interface for neural chat, memory, and Codex-powered workspace tasks.
+A local desktop interface for neural chat, memory, and Codex-powered workspace tasks, for **Windows and macOS**.
 
 The centerpiece is a Three.js neural orb that grows a node for every memory the
 assistant has captured. As of v0.2.0 the lines between those nodes are no
@@ -10,9 +10,26 @@ context for a task.
 
 ## Download
 
-Use the Windows installer from the latest GitHub Release:
+Grab the latest build from the
+[GitHub Releases](https://github.com/jonathangana131-lab/jarvis-neural-command-interface/releases)
+page.
 
-- `Jarvis-Neural-Command-Interface-Setup-0.7.9.exe`
+**Windows** — run the installer:
+
+- `Jarvis-Neural-Command-Interface-Setup-<version>.exe`
+
+**macOS** — open the disk image and drag the app to Applications:
+
+- `Jarvis-Neural-Command-Interface-<version>-arm64.dmg` (Apple Silicon)
+- `Jarvis-Neural-Command-Interface-<version>-x64.dmg` (Intel)
+
+The macOS build is currently unsigned (no Apple Developer certificate), so the
+first launch is gated by Gatekeeper. Open it once with **right‑click → Open**
+and confirm, or clear the quarantine flag from Terminal:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Jarvis Neural Command Interface.app"
+```
 
 ## Current Highlights
 
@@ -27,9 +44,12 @@ Use the Windows installer from the latest GitHub Release:
 
 ## Requirements
 
-- Windows 10 or newer
-- Node.js is only required for development, not for the packaged installer
-- Codex CLI on `PATH` for Codex task execution
+- Windows 10 or newer, or macOS 12 (Monterey) or newer (Apple Silicon or Intel)
+- Node.js is only required for development, not for the packaged app
+- Codex CLI on `PATH` for Codex task execution. On macOS the app also searches
+  the usual install locations (Homebrew, npm global, Volta, `~/.codex/bin`, …),
+  so a normally‑installed Codex is found even when the app is launched from
+  Finder (which does not inherit your shell `PATH`)
 - Optional `OPENCODE_API_KEY` or saved in-app model key for hosted model chat
 
 ## Development
@@ -105,6 +125,37 @@ matter, this skips compression work:
 ```powershell
 npm run installer:win:quick
 ```
+
+## Build A macOS App
+
+On a Mac (Apple Silicon or Intel) with Node.js installed:
+
+```bash
+npm install
+npm run dist:mac
+```
+
+This generates the app icon (`build/icon.icns`), builds the renderer, and
+produces ad‑hoc‑signed `.dmg` and `.zip` artifacts in `release/` for both
+`arm64` and `x64`. For a quick unpacked `.app` while iterating, use
+`npm run package:mac`.
+
+The icon generator (`scripts/prepare-mac-icon.mjs`) uses native `sips` /
+`iconutil`, and renders the crisp vector source when `rsvg-convert` (librsvg)
+is installed — otherwise it upsizes `build/icon.png`.
+
+## Releases (CI)
+
+Because the macOS toolchain (`hdiutil`, `iconutil`, ad‑hoc signing) only runs on
+macOS, releases are built in GitHub Actions:
+
+- **CI** (`.github/workflows/ci.yml`) — builds the renderer and runs the Node
+  test suite on Windows, macOS, and Linux for every push and pull request.
+- **Release (macOS)** (`.github/workflows/release-macos.yml`) — runs on a macOS
+  runner and publishes a GitHub Release with the `.dmg`, `.zip`, and
+  `latest-mac.yml` (consumed by the in‑app auto‑updater). It runs automatically
+  when a `package.json` version bump lands on `main`, or on demand from the
+  Actions tab. It needs no extra secrets — the built‑in `GITHUB_TOKEN` is enough.
 
 ## Privacy Notes
 

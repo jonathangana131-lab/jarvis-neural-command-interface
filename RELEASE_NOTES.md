@@ -1,3 +1,40 @@
+# v0.9.0
+
+Add first-class macOS support. The app now builds, launches, and runs Codex tasks on macOS (Apple Silicon and Intel), and a GitHub Actions pipeline publishes macOS releases. Cross-platform path and command handling is hardened so a single config works on Windows and macOS alike.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.9.0.exe` (Windows installer)
+- `Jarvis-Neural-Command-Interface-0.9.0-arm64.dmg` (macOS, Apple Silicon)
+- `Jarvis-Neural-Command-Interface-0.9.0-x64.dmg` (macOS, Intel)
+- `Jarvis-Neural-Command-Interface-0.9.0-arm64-mac.zip` / `-x64-mac.zip` (auto-update payloads)
+- `latest.yml` / `latest-mac.yml`
+
+## Added
+
+- **macOS builds (dmg + zip, arm64 + x64)**: `package.json` gains a real macOS target plus `npm run dist:mac` and `npm run package:mac`. Builds are ad-hoc signed (no Apple Developer certificate required) and ship a hardened-runtime entitlements file (`build/entitlements.mac.plist`).
+- **macOS release pipeline**: `.github/workflows/release-macos.yml` runs on a macOS runner and publishes a GitHub Release (dmg, zip, `latest-mac.yml`) automatically on a `package.json` version bump, or on demand from the Actions tab. It uses the built-in `GITHUB_TOKEN`.
+- **Cross-platform CI**: `.github/workflows/ci.yml` builds the renderer and runs the Node test suite on Windows, macOS, and Linux for every push and pull request.
+- **macOS icon generation**: `scripts/prepare-mac-icon.mjs` builds `build/icon.icns` with native `sips`/`iconutil`, rendering the crisp SVG source via `rsvg-convert` when available.
+
+## Fixed
+
+- **Codex execution on macOS/Linux**: the bundled `codex.cmd` command name now resolves to `codex` on non-Windows platforms, and task/version subprocesses spawn the resolved binary (`server/config.mjs`, `server/codexTaskRunner.mjs`, `server/index.mjs`).
+- **CLI discovery when launched from Finder**: the backend augments `PATH` with common install locations (Homebrew, npm global, Volta, Bun, `~/.codex/bin`, …) and resolves the executable to an absolute path, so Codex is found even though Finder-launched apps do not inherit the shell `PATH`.
+- **Workspace paths on macOS/Linux**: `%USERPROFILE%`-style tokens and Windows backslashes in the workspace config now resolve via `$HOME` and the native path separator.
+- **Tray/window icon on macOS**: the tray and window use a PNG on macOS/Linux (the Tray API rejects `.ico` on macOS); Windows keeps the multi-resolution `.ico`.
+- **macOS packaging completeness**: the `darwin` ONNX runtime binary is no longer excluded from the macOS bundle, so on-device embeddings work in the packaged Mac app. Per-platform `files` filters keep each OS bundle lean.
+
+## Verified
+
+- `node --check` on every changed server and Electron module
+- `package.json` and `jarvis.config.json` parse; `build/entitlements.mac.plist` is a valid plist
+- electron-builder macOS config reviewed (dmg + zip, arm64 + x64, GitHub publish, entitlements)
+- Workflow YAML linted (no tabs, valid triggers/permissions)
+- Full `npm ci`, `npm run build`, and macOS packaging execute in CI on the macOS runner (the authoring sandbox has no npm-registry access, so the end-to-end build is intentionally delegated to Actions)
+
 # v0.8.6
 
 Add native smooth auto-updater integration. Users can check, download, and seamlessly install updates silently from inside the desktop app, automatically reloading into the new version.

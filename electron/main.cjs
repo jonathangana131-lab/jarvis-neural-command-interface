@@ -16,6 +16,19 @@ const bundledUrl = `http://127.0.0.1:${backendPort}`;
 const externalUrl = process.env.JARVIS_CODEX_URL;
 const appUserModelId = 'local.jarvis.neural-command-interface';
 const updateRepository = process.env.JARVIS_UPDATE_REPO || 'jonathangana131-lab/jarvis-neural-command-interface';
+// Windows uses the multi-resolution .ico; macOS/Linux need a PNG (the Tray API
+// rejects .ico on macOS, and Linux window icons expect PNG). The PNG is produced
+// at build time (scripts/prepare-mac-icon.mjs); fall back to the .ico if it is
+// missing (e.g. an un-prepared dev run) so startup never breaks.
+function resolveBrandIcon() {
+  const pngIcon = path.join(__dirname, '..', 'build', 'icon.png');
+  const icoIcon = path.join(__dirname, '..', 'build', 'icon.ico');
+  if (process.platform === 'win32') {
+    return icoIcon;
+  }
+  return fs.existsSync(pngIcon) ? pngIcon : icoIcon;
+}
+const brandIconPath = resolveBrandIcon();
 let backend = null;
 let backendLog = '';
 let mainWindow = null;
@@ -57,7 +70,7 @@ async function createWindow(appUrl) {
     minHeight: 700,
     backgroundColor: '#081018',
     title: 'Jarvis Neural Command Interface',
-    icon: path.join(__dirname, '..', 'build', 'icon.ico'),
+    icon: brandIconPath,
     show: false,
     webPreferences: {
       contextIsolation: true,
@@ -370,8 +383,12 @@ function setupTray(appUrl) {
   if (tray) {
     return;
   }
-  const iconPath = path.join(__dirname, '..', 'build', 'icon.ico');
-  tray = new Tray(iconPath);
+  try {
+    tray = new Tray(brandIconPath);
+  } catch (error) {
+    console.warn(`[tray] Unable to create tray icon (${error.message}); continuing without a tray.`);
+    return;
+  }
   tray.setToolTip('Jarvis Neural Command Interface');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Show Jarvis', click: () => showMainWindow(appUrl) },
@@ -416,7 +433,7 @@ async function createStartupErrorWindow(error) {
     minHeight: 480,
     backgroundColor: '#081018',
     title: 'Jarvis Neural Command Interface - Startup Issue',
-    icon: path.join(__dirname, '..', 'build', 'icon.ico'),
+    icon: brandIconPath,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

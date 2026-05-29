@@ -1,0 +1,52 @@
+name: CI
+
+# Builds the renderer and runs the deterministic Node test suite on every push
+# and pull request, across all three target platforms. This is what catches a
+# cross-platform regression (e.g. a Windows-only path assumption) before it
+# reaches a release.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build & test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check and build renderer
+        run: npm run build
+
+      - name: Run deterministic test suite
+        shell: bash
+        run: |
+          npm run test:stream-parser
+          npm run test:memory
+          npm run test:voice-settings
+          npm run test:artifacts
+          npm run test:provider-failures
+          npm run test:reliability-controls

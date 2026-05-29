@@ -1,0 +1,74 @@
+name: Release (macOS)
+
+# Builds the macOS desktop app on a real macOS runner (it cannot be compiled on
+# Linux/Windows) and publishes a GitHub Release with the .dmg, .zip, and the
+# electron-updater manifest (latest-mac.yml) attached.
+#
+# Triggers:
+#   - Manual run from the Actions tab (workflow_dispatch) — cut a release anytime.
+#   - A commit to main that changes package.json (i.e. a version bump), so a
+#     merged release PR cuts the macOS build automatically. The release is tagged
+#     v<version> from package.json by electron-builder.
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Why are you cutting this macOS release?
+        required: false
+        default: Manual macOS release
+  push:
+    branches:
+      - main
+    paths:
+      - 'package.json'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-macos-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-macos:
+    name: Build & publish macOS
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install crisp icon rasterizer (librsvg)
+        run: brew install librsvg || true
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare macOS icon and build renderer
+        run: |
+          npm run prepare:mac-icon
+          npm run build
+
+      - name: Package and publish (dmg + zip, arm64 + x64)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The build is intentionally unsigned/ad-hoc; do not search for a cert.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npx --no-install electron-builder --mac --publish always
+
+      - name: Upload build artifacts (backup copy)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-macos-${{ github.run_number }}
+          path: |
+            release/*.dmg
+            release/*.zip
+            release/latest-mac.yml
+          if-no-files-found: warn

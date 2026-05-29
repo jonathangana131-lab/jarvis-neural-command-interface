@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { Readable } from 'node:stream';
-import { isPathAllowed, loadConfig, publicConfig, expandHomeAndEnvPath } from './config.mjs';
+import { isPathAllowed, loadConfig, publicConfig, expandHomeAndEnvPath, resolveExecutable } from './config.mjs';
 import { EventBus } from './eventBus.mjs';
 import { Embedder } from './embeddings.mjs';
 import { MemoryExtractor } from './memoryExtractor.mjs';
@@ -1734,7 +1734,7 @@ function spawnVersionCommand(command) {
     });
   }
 
-  return spawn(command, ['--version'], {
+  return spawn(resolveExecutable(command), ['--version'], {
     shell: false,
     env: process.env
   });

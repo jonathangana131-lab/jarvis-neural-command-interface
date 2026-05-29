@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { isPathAllowed, expandHomeAndEnvPath } from './config.mjs';
+import { isPathAllowed, expandHomeAndEnvPath, resolveExecutable } from './config.mjs';
 import { classifyProviderFailure, providerFailureAction, providerFailureSummary } from './providerHealth.mjs';
 
 export class CodexTaskRunner {
@@ -738,7 +738,7 @@ export class CodexTaskRunner {
       });
     }
 
-    return spawn(this.config.codex.command, args, {
+    return spawn(resolveExecutable(this.config.codex.command), args, {
       cwd,
       shell: false,
       env: this.#childEnv()
@@ -776,7 +776,7 @@ export class CodexTaskRunner {
       });
     }
 
-    return spawn(this.config.codex.command, baseArgs, { cwd, shell: false, env: config });
+    return spawn(resolveExecutable(this.config.codex.command), baseArgs, { cwd, shell: false, env: config });
   }
 
   #childEnv() {

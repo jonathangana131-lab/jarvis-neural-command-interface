@@ -1,10 +1,14 @@
 {
   "name": "jarvis-neural-command-interface",
-  "version": "0.8.6",
+  "version": "0.9.0",
   "private": false,
   "type": "module",
   "main": "electron/main.cjs",
-  "description": "A local Windows desktop neural command interface for chat, memory, and Codex-powered tasks.",
+  "description": "A local desktop neural command interface (Windows + macOS) for chat, memory, and Codex-powered tasks.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jonathangana131-lab/jarvis-neural-command-interface.git"
+  },
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:client": "vite --host 127.0.0.1",
@@ -24,7 +28,9 @@
     "preview": "node --experimental-sqlite server/index.mjs",
     "package:win": "npm run build && electron-builder --win --dir",
     "package:win:dir": "npm run build && electron-builder --win --dir --publish never",
-    "package:mac": "npm run build && electron-builder --mac --dir",
+    "prepare:mac-icon": "node scripts/prepare-mac-icon.mjs",
+    "package:mac": "npm run prepare:mac-icon && npm run build && electron-builder --mac --dir --publish never",
+    "dist:mac": "npm run prepare:mac-icon && npm run build && electron-builder --mac --publish never",
     "installer:win": "npm run build && electron-builder --win nsis",
     "installer:win:from-dir": "electron-builder --win nsis --prepackaged release/win-unpacked --publish never",
     "installer:win:quick": "electron-builder --win nsis --prepackaged release/win-unpacked --publish never --config.compression=store",
@@ -50,25 +56,45 @@
       "build/**/*",
       "jarvis.config.json",
       "package.json",
-      "!node_modules/onnxruntime-web/**/*",
-      "!node_modules/onnxruntime-node/bin/napi-v6/darwin/**/*",
-      "!node_modules/onnxruntime-node/bin/napi-v6/linux/**/*",
-      "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**/*"
+      "!node_modules/onnxruntime-web/**/*"
     ],
+    "publish": null,
     "win": {
       "icon": "build/icon.ico",
       "signAndEditExecutable": false,
       "target": [
         "dir",
         "nsis"
+      ],
+      "files": [
+        "!node_modules/onnxruntime-node/bin/napi-v6/darwin/**/*",
+        "!node_modules/onnxruntime-node/bin/napi-v6/linux/**/*",
+        "!node_modules/onnxruntime-node/bin/napi-v6/win32/arm64/**/*"
       ]
     },
     "mac": {
-      "target": [
-        "dir"
-      ],
+      "icon": "build/icon.icns",
       "category": "public.app-category.developer-tools",
-      "identity": null
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "artifactName": "Jarvis-Neural-Command-Interface-${version}-${arch}.${ext}",
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ],
+      "files": [
+        "!node_modules/onnxruntime-node/bin/napi-v6/win32/**/*",
+        "!node_modules/onnxruntime-node/bin/napi-v6/linux/**/*"
+      ],
+      "publish": {
+        "provider": "github",
+        "owner": "jonathangana131-lab",
+        "repo": "jarvis-neural-command-interface",
+        "releaseType": "release"
+      }
     },
     "nsis": {
       "oneClick": true,
@@ -80,6 +106,9 @@
       "uninstallDisplayName": "Jarvis Neural Command Interface",
       "include": "build/installer.nsh",
       "artifactName": "Jarvis-Neural-Command-Interface-Setup-${version}.${ext}"
+    },
+    "dmg": {
+      "title": "Jarvis Neural Command Interface ${version}"
     }
   },
   "dependencies": {

@@ -76,6 +76,7 @@ export class MemoryStore {
   }
 
   list({ limit = 80, query = '', scope = '', workspace = '' } = {}) {
+    const cleanWorkspace = normalizeWorkspace(workspace);
     const conditions = [
       "archived = 0",
       "kind NOT IN ('demo', 'manual')",
@@ -91,9 +92,9 @@ export class MemoryStore {
       conditions.push('scope = ?');
       params.push(scope);
     }
-    if (workspace) {
+    if (cleanWorkspace) {
       conditions.push("(scope = 'global' OR workspace IS NULL OR workspace = '' OR LOWER(workspace) = LOWER(?))");
-      params.push(workspace);
+      params.push(cleanWorkspace);
     }
     params.push(Number(limit));
     return this.db
@@ -112,7 +113,7 @@ export class MemoryStore {
       lookupKey: lookupKey(memory.kind ?? 'fact', memory.title ?? '', memory.content ?? ''),
       source: memory.source ?? 'assistant',
       scope: normalizeScope(memory.scope),
-      workspace: memory.workspace ? path.resolve(memory.workspace) : '',
+      workspace: normalizeWorkspace(memory.workspace),
       pinned: memory.pinned ? 1 : 0,
       archived: memory.archived ? 1 : 0
     };
@@ -178,7 +179,7 @@ export class MemoryStore {
     const scope = updates.scope === undefined ? existing.scope : normalizeScope(updates.scope);
     const workspace = updates.workspace === undefined
       ? existing.workspace ?? ''
-      : (updates.workspace ? path.resolve(updates.workspace) : '');
+      : normalizeWorkspace(updates.workspace);
     const contentChanged = title !== existing.title || content !== existing.content || kind !== existing.kind;
     this.db
       .prepare(`
@@ -247,12 +248,13 @@ export class MemoryStore {
   }
 
   async relevantForAsync({ prompt, workspace, limit = 6, emit = true } = {}) {
+    const cleanWorkspace = normalizeWorkspace(workspace);
     const semantic = await this.relevantForSemantic({ prompt, workspace, limit, emit: false });
     if (semantic && semantic.length > 0) {
       if (emit) {
         this.eventBus.emit('memory.recalled', {
           prompt: String(prompt ?? '').slice(0, 240),
-          workspace: workspace ?? null,
+          workspace: cleanWorkspace || null,
           mode: 'semantic',
           ids: semantic.map((memory) => memory.id),
           memories: semantic.map(toRecalledShape)
@@ -264,15 +266,16 @@ export class MemoryStore {
   }
 
   relevantForKeyword({ prompt, workspace, limit = 6, emit = true }) {
-    const promptTokens = tokenize(`${prompt ?? ''} ${workspace ?? ''}`);
+    const cleanWorkspace = normalizeWorkspace(workspace);
+    const promptTokens = tokenize(`${prompt ?? ''} ${cleanWorkspace}`);
     if (promptTokens.size === 0) {
       return [];
     }
     const candidates = this.db
       .prepare(`${selectMemoryRows()} WHERE archived = 0 AND kind NOT IN ('demo', 'manual') AND source NOT IN ('ui-demo', 'manual') AND confidence >= 0.62 AND (scope = 'global' OR workspace IS NULL OR workspace = '' OR LOWER(workspace) = LOWER(?)) ORDER BY pinned DESC, importance DESC, updated_at DESC LIMIT 240`)
-      .all(workspace ?? '');
+      .all(cleanWorkspace);
     const scored = candidates
-      .map((memory) => ({ ...memory, relevanceScore: scoreMemory(memory, promptTokens, workspace) }))
+      .map((memory) => ({ ...memory, relevanceScore: scoreMemory(memory, promptTokens, cleanWorkspace) }))
       .filter((memory) => memory.relevanceScore > 0.9)
       .sort((a, b) => b.relevanceScore - a.relevanceScore)
       .slice(0, limit);
@@ -286,7 +289,7 @@ export class MemoryStore {
       if (emit) {
         this.eventBus.emit('memory.recalled', {
           prompt: String(prompt ?? '').slice(0, 240),
-          workspace: workspace ?? null,
+          workspace: cleanWorkspace || null,
           mode: 'keyword',
           ids: scored.map((memory) => memory.id),
           memories: scored.map(toRecalledShape)
@@ -302,6 +305,7 @@ export class MemoryStore {
    * "fall back to keyword".
    */
   async relevantForSemantic({ prompt, workspace, limit = 6, threshold = 0.42, emit = true } = {}) {
+    const cleanWorkspace = normalizeWorkspace(workspace);
     if (!this.embedder || this.embedder.disabled) return null;
     const cleanPrompt = String(prompt ?? '').replace(/\s+/g, ' ').trim();
     if (!cleanPrompt) return null;
@@ -316,7 +320,7 @@ export class MemoryStore {
 
     const candidates = this.db
       .prepare(`SELECT id, embedding FROM memories WHERE archived = 0 AND kind NOT IN ('demo', 'manual') AND source NOT IN ('ui-demo', 'manual') AND embedding IS NOT NULL AND (scope = 'global' OR workspace IS NULL OR workspace = '' OR LOWER(workspace) = LOWER(?))`)
-      .all(workspace ?? '');
+      .all(cleanWorkspace);
     if (candidates.length === 0) return null;
 
     const scored = [];
@@ -353,7 +357,7 @@ export class MemoryStore {
       if (emit) {
         this.eventBus.emit('memory.recalled', {
           prompt: cleanPrompt.slice(0, 240),
-          workspace: workspace ?? null,
+          workspace: cleanWorkspace || null,
           mode: 'semantic',
           ids: enriched.map((memory) => memory.id),
           memories: enriched.map(toRecalledShape)
@@ -368,6 +372,7 @@ export class MemoryStore {
    * returns top-K with similarity scores. Empty array if disabled.
    */
   async semanticSearch({ query, limit = 20, scope = '', workspace = '', threshold = 0.32 } = {}) {
+    const cleanWorkspace = normalizeWorkspace(workspace);
     if (!this.embedder || this.embedder.disabled) return [];
     const cleanQuery = String(query ?? '').replace(/\s+/g, ' ').trim();
     if (!cleanQuery) return [];
@@ -385,9 +390,9 @@ export class MemoryStore {
       conditions.push('scope = ?');
       params.push(scope);
     }
-    if (workspace) {
+    if (cleanWorkspace) {
       conditions.push("(scope = 'global' OR workspace IS NULL OR workspace = '' OR LOWER(workspace) = LOWER(?))");
-      params.push(workspace);
+      params.push(cleanWorkspace);
     }
     const rows = this.db
       .prepare(`SELECT id, embedding FROM memories WHERE ${conditions.join(' AND ')}`)
@@ -630,6 +635,16 @@ function selectMemoryRows() {
       last_seen_source AS lastSeenSource
     FROM memories
   `;
+}
+
+
+function normalizeWorkspace(value) {
+  const clean = String(value ?? '').trim();
+  if (!clean) return '';
+  if (/^[a-zA-Z]:[\\/]/.test(clean) || /^\\\\[^\\/]+[\\/][^\\/]+/.test(clean)) {
+    return path.win32.normalize(clean);
+  }
+  return path.resolve(clean);
 }
 
 function normalizeScope(value) {

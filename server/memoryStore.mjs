@@ -91,9 +91,10 @@ export class MemoryStore {
       conditions.push('scope = ?');
       params.push(scope);
     }
-    if (workspace) {
-      conditions.push("(scope = 'global' OR workspace IS NULL OR workspace = '' OR LOWER(workspace) = LOWER(?))");
-      params.push(workspace);
+    const workspaceFilter = workspaceVariants(workspace);
+    if (workspaceFilter.length > 0) {
+      conditions.push(`(scope = 'global' OR workspace IS NULL OR workspace = '' OR ${workspaceFilter.map(() => 'LOWER(workspace) = LOWER(?)').join(' OR ')})`);
+      params.push(...workspaceFilter);
     }
     params.push(Number(limit));
     return this.db
@@ -112,7 +113,7 @@ export class MemoryStore {
       lookupKey: lookupKey(memory.kind ?? 'fact', memory.title ?? '', memory.content ?? ''),
       source: memory.source ?? 'assistant',
       scope: normalizeScope(memory.scope),
-      workspace: memory.workspace ? path.resolve(memory.workspace) : '',
+      workspace: normalizeWorkspacePath(memory.workspace),
       pinned: memory.pinned ? 1 : 0,
       archived: memory.archived ? 1 : 0
     };
@@ -178,7 +179,7 @@ export class MemoryStore {
     const scope = updates.scope === undefined ? existing.scope : normalizeScope(updates.scope);
     const workspace = updates.workspace === undefined
       ? existing.workspace ?? ''
-      : (updates.workspace ? path.resolve(updates.workspace) : '');
+      : normalizeWorkspacePath(updates.workspace);
     const contentChanged = title !== existing.title || content !== existing.content || kind !== existing.kind;
     this.db
       .prepare(`
@@ -268,9 +269,10 @@ export class MemoryStore {
     if (promptTokens.size === 0) {
       return [];
     }
+    const workspaceFilter = workspaceVariants(workspace);
     const candidates = this.db
-      .prepare(`${selectMemoryRows()} WHERE archived = 0 AND kind NOT IN ('demo', 'manual') AND source NOT IN ('ui-demo', 'manual') AND confidence >= 0.62 AND (scope = 'global' OR workspace IS NULL OR workspace = '' OR LOWER(workspace) = LOWER(?)) ORDER BY pinned DESC, importance DESC, updated_at DESC LIMIT 240`)
-      .all(workspace ?? '');
+      .prepare(`${selectMemoryRows()} WHERE archived = 0 AND kind NOT IN ('demo', 'manual') AND source NOT IN ('ui-demo', 'manual') AND confidence >= 0.62 AND ${workspacePredicate(workspaceFilter)} ORDER BY pinned DESC, importance DESC, updated_at DESC LIMIT 240`)
+      .all(...workspaceFilter);
     const scored = candidates
       .map((memory) => ({ ...memory, relevanceScore: scoreMemory(memory, promptTokens, workspace) }))
       .filter((memory) => memory.relevanceScore > 0.9)
@@ -314,9 +316,10 @@ export class MemoryStore {
     }
     if (!queryVector) return null;
 
+    const workspaceFilter = workspaceVariants(workspace);
     const candidates = this.db
-      .prepare(`SELECT id, embedding FROM memories WHERE archived = 0 AND kind NOT IN ('demo', 'manual') AND source NOT IN ('ui-demo', 'manual') AND embedding IS NOT NULL AND (scope = 'global' OR workspace IS NULL OR workspace = '' OR LOWER(workspace) = LOWER(?))`)
-      .all(workspace ?? '');
+      .prepare(`SELECT id, embedding FROM memories WHERE archived = 0 AND kind NOT IN ('demo', 'manual') AND source NOT IN ('ui-demo', 'manual') AND embedding IS NOT NULL AND ${workspacePredicate(workspaceFilter)}`)
+      .all(...workspaceFilter);
     if (candidates.length === 0) return null;
 
     const scored = [];
@@ -385,9 +388,10 @@ export class MemoryStore {
       conditions.push('scope = ?');
       params.push(scope);
     }
-    if (workspace) {
-      conditions.push("(scope = 'global' OR workspace IS NULL OR workspace = '' OR LOWER(workspace) = LOWER(?))");
-      params.push(workspace);
+    const workspaceFilter = workspaceVariants(workspace);
+    if (workspaceFilter.length > 0) {
+      conditions.push(`(scope = 'global' OR workspace IS NULL OR workspace = '' OR ${workspaceFilter.map(() => 'LOWER(workspace) = LOWER(?)').join(' OR ')})`);
+      params.push(...workspaceFilter);
     }
     const rows = this.db
       .prepare(`SELECT id, embedding FROM memories WHERE ${conditions.join(' AND ')}`)
@@ -634,6 +638,27 @@ function selectMemoryRows() {
 
 function normalizeScope(value) {
   return value === 'global' ? 'global' : 'project';
+}
+
+function normalizeWorkspacePath(value) {
+  const clean = String(value ?? '').trim();
+  return clean ? path.resolve(clean) : '';
+}
+
+function workspaceVariants(value) {
+  const clean = String(value ?? '').trim();
+  if (!clean) {
+    return [];
+  }
+  return [...new Set([clean, normalizeWorkspacePath(clean)].filter(Boolean))];
+}
+
+function workspacePredicate(variants) {
+  if (variants.length === 0) {
+    return `(scope = 'global' OR workspace IS NULL OR workspace = '')`;
+  }
+  const checks = variants.map(() => 'LOWER(workspace) = LOWER(?)').join(' OR ');
+  return `(scope = 'global' OR workspace IS NULL OR workspace = '' OR ${checks})`;
 }
 
 function cleanUpdateText(value, fallback, limit) {

@@ -59,6 +59,10 @@ const relevant = store.relevantFor({
   limit: 3
 });
 assert.ok(relevant.some((memory) => memory.title === 'Memory storage'), 'relevant memories should be selected for matching tasks');
+assert.ok(
+  store.list({ workspace: 'C:\\jarvis-neural-command-interface' }).some((memory) => memory.title === 'Memory storage'),
+  'workspace memory filters should match the same path shape callers provide'
+);
 const updatedMemory = store.update(inserted.id, {
   title: 'Preferred model',
   content: 'Always use GPT-5.5 for Codex tasks in this app.',

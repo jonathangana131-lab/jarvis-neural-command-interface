@@ -112,6 +112,10 @@ export class JarvisScene {
     this.neuralSphere.pulseResponse(intensity);
   }
 
+  pulseSpeechWord(intensity = 1) {
+    this.neuralSphere.pulseSpeechWord(intensity);
+  }
+
   pulseMemoryGrowth(intensity = 1) {
     this.neuralSphere.pulseMemoryGrowth(intensity);
   }

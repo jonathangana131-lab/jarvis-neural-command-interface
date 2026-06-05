@@ -42,6 +42,15 @@ const defaultVoiceSettings = {
   voiceEnabled: true,
   spokenResponses: false,
   selectedVoiceName: '',
+  voiceProfile: 'jarvis',
+  voiceSampleName: '',
+  voiceSampleSize: 0,
+  voiceSampleUpdatedAt: '',
+  speechRate: 0.94,
+  speechPitch: 0.82,
+  speechVolume: 1,
+  orbSpeechReactive: true,
+  orbSpeechIntensity: 1,
   autoSendAfterFinalTranscript: true,
   summaryMaxLength: 180
 };
@@ -285,9 +294,8 @@ async function releaseStatus() {
   const releaseDir = path.resolve(config.rootDir, 'release');
   const version = packageInfo.version;
   const installerName = `Jarvis-Neural-Command-Interface-Setup-${version}.exe`;
-  const blockmapName = `${installerName}.blockmap`;
   const latestName = 'latest.yml';
-  const assets = [installerName, blockmapName, latestName].map((name) => {
+  const assets = [installerName, latestName].map((name) => {
     const assetPath = path.resolve(releaseDir, name);
     return {
       name,
@@ -1151,13 +1159,38 @@ function loadVoiceSettings(targetPath) {
 
 function normalizeVoiceSettings(value) {
   const summaryMaxLength = Math.max(80, Math.min(420, Number(value.summaryMaxLength ?? defaultVoiceSettings.summaryMaxLength)));
+  const voiceProfile = value.voiceProfile === 'system' ? 'system' : 'jarvis';
   return {
     voiceEnabled: value.voiceEnabled !== false,
     spokenResponses: value.spokenResponses === true,
     selectedVoiceName: String(value.selectedVoiceName ?? '').slice(0, 160),
+    voiceProfile,
+    voiceSampleName: String(value.voiceSampleName ?? '').slice(0, 180),
+    voiceSampleSize: Math.max(0, Math.min(50 * 1024 * 1024, Math.round(Number(value.voiceSampleSize ?? 0)) || 0)),
+    voiceSampleUpdatedAt: validIsoDate(value.voiceSampleUpdatedAt) ? value.voiceSampleUpdatedAt : '',
+    speechRate: clampNumber(value.speechRate, 0.72, 1.22, defaultVoiceSettings.speechRate),
+    speechPitch: clampNumber(value.speechPitch, 0.5, 1.35, defaultVoiceSettings.speechPitch),
+    speechVolume: clampNumber(value.speechVolume, 0.2, 1, defaultVoiceSettings.speechVolume),
+    orbSpeechReactive: value.orbSpeechReactive !== false,
+    orbSpeechIntensity: clampNumber(value.orbSpeechIntensity, 0.35, 1.8, defaultVoiceSettings.orbSpeechIntensity),
     autoSendAfterFinalTranscript: value.autoSendAfterFinalTranscript !== false,
     summaryMaxLength
   };
+}
+
+function validIsoDate(value) {
+  if (typeof value !== 'string' || value.length > 40) {
+    return false;
+  }
+  return Number.isFinite(Date.parse(value));
+}
+
+function clampNumber(value, min, max, fallback) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, numeric));
 }
 
 function initSessionState(targetPath, currentStartedAt) {

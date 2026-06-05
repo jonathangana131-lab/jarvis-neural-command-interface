@@ -54,6 +54,15 @@ export type VoiceSettings = {
   voiceEnabled: boolean;
   spokenResponses: boolean;
   selectedVoiceName: string;
+  voiceProfile: 'system' | 'jarvis';
+  voiceSampleName: string;
+  voiceSampleSize: number;
+  voiceSampleUpdatedAt: string;
+  speechRate: number;
+  speechPitch: number;
+  speechVolume: number;
+  orbSpeechReactive: boolean;
+  orbSpeechIntensity: number;
   autoSendAfterFinalTranscript: boolean;
   summaryMaxLength: number;
 };

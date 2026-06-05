@@ -280,6 +280,9 @@ export class NeuralSphere {
   private phasePulse = 0;
   private learningPulse = 0;
   private responsePulse = 0;
+  private speechWordPulse = 0;
+  private speechWordShake = 0;
+  private speechWordPhase = 0;
   private memoryGrowthPulse = 0;
   private activityLevel = 0.32;
   private audioLevel = 0;
@@ -486,6 +489,14 @@ export class NeuralSphere {
 
   pulseResponse(intensity = 1): void {
     this.responsePulse = Math.max(this.responsePulse, THREE.MathUtils.clamp(intensity, 0, 1.8));
+  }
+
+  pulseSpeechWord(intensity = 1): void {
+    const clamped = THREE.MathUtils.clamp(intensity, 0, 2.2);
+    this.speechWordPulse = Math.max(this.speechWordPulse, clamped);
+    this.speechWordShake = Math.max(this.speechWordShake, clamped * 0.7);
+    this.responsePulse = Math.max(this.responsePulse, 0.52 + clamped * 0.2);
+    this.speechWordPhase += 0.83 + clamped * 0.21;
   }
 
   pulseMemoryGrowth(intensity = 1): void {
@@ -772,6 +783,8 @@ export class NeuralSphere {
     this.phasePulse = Math.max(0, this.phasePulse - delta * 1.45);
     this.learningPulse = Math.max(0, this.learningPulse - delta * 0.82);
     this.responsePulse = Math.max(0, this.responsePulse - delta * 1.12);
+    this.speechWordPulse = Math.max(0, this.speechWordPulse - delta * 5.8);
+    this.speechWordShake = Math.max(0, this.speechWordShake - delta * 8.5);
     this.memoryGrowthPulse = Math.max(0, this.memoryGrowthPulse - delta * 0.58);
     // Recall emphasis fades over ~6s so the orb returns to baseline after a
     // task pulls context. It re-fires every time flashRecall is called.
@@ -794,10 +807,11 @@ export class NeuralSphere {
     this.activityLevel = smoothDamp(this.activityLevel, targetActivity, delta, 4.8);
 
     const density = THREE.MathUtils.clamp(this.neurons.length / 120, 0, 1);
-    const pulseScale = this.modePulse * 0.06 + this.learningPulse * 0.09 + this.responsePulse * 0.08 + this.audioLevel * 0.055;
+    const pulseScale = this.modePulse * 0.06 + this.learningPulse * 0.09 + this.responsePulse * 0.08 + this.audioLevel * 0.055 + this.speechWordPulse * 0.055;
     this.group.scale.setScalar(1 + density * 0.07 + pulseScale);
-    this.group.rotation.y += delta * (0.018 + this.activityLevel * 0.032 + phaseProfile.spin);
-    this.group.rotation.z = Math.sin(elapsed * 0.11) * (0.022 + this.activityLevel * 0.008 + this.phasePulse * 0.012);
+    this.group.rotation.y += delta * (0.018 + this.activityLevel * 0.032 + phaseProfile.spin + this.speechWordPulse * 0.18);
+    this.group.rotation.z = Math.sin(elapsed * 0.11) * (0.022 + this.activityLevel * 0.008 + this.phasePulse * 0.012)
+      + Math.sin(elapsed * 22 + this.speechWordPhase) * this.speechWordShake * 0.018;
 
     this.updateCore(delta, elapsed, density);
     this.updateRings(delta, elapsed);
@@ -989,7 +1003,7 @@ export class NeuralSphere {
 
   private updateCore(_delta: number, elapsed: number, density: number): void {
     const phaseProfile = this.phaseProfile();
-    const active = this.activityLevel + this.responsePulse * 0.5 + this.learningPulse * 0.7 + this.audioLevel * 0.5 + this.phasePulse * 0.22;
+    const active = this.activityLevel + this.responsePulse * 0.5 + this.learningPulse * 0.7 + this.audioLevel * 0.5 + this.phasePulse * 0.22 + this.speechWordPulse * 0.55;
     const breathe = 1 + Math.sin(elapsed * (1.4 + active * 0.4 + phaseProfile.beat)) * (0.035 + this.phasePulse * 0.018);
     this.coreInner.scale.setScalar((1.18 + active * 0.22) * breathe);
     this.coreShell.scale.setScalar(1.0 + active * 0.14 + density * 0.08);
@@ -1008,7 +1022,7 @@ export class NeuralSphere {
   }
 
   private updateRings(delta: number, elapsed: number): void {
-    const modeBoost = this.activityLevel + this.learningPulse * 0.7 + this.responsePulse * 0.5;
+    const modeBoost = this.activityLevel + this.learningPulse * 0.7 + this.responsePulse * 0.5 + this.speechWordPulse * 0.35;
     for (let i = 0; i < this.ringGroup.children.length; i += 1) {
       const ring = this.ringGroup.children[i];
       ring.rotation.z += delta * (i % 2 === 0 ? 0.22 : -0.16) * (0.8 + modeBoost);
@@ -1053,6 +1067,10 @@ export class NeuralSphere {
       target.x += Math.sin(elapsed * 0.7 + neuron.phase) * drift;
       target.y += Math.cos(elapsed * 0.62 + neuron.phase * 1.3) * drift * 0.7;
       target.z += Math.sin(elapsed * 0.53 + neuron.phase * 0.7) * drift;
+      if (this.speechWordShake > 0.01) {
+        const speechWobble = Math.sin(elapsed * 18 + neuron.phase + this.speechWordPhase) * this.speechWordShake * 0.022;
+        target.addScaledVector(radialDirectionFor(neuron.basePosition), speechWobble);
+      }
       neuron.position.lerp(target, 1 - Math.exp(-Math.max(delta, 0.016) * 8));
 
       const recallBoost = recalled ? this.recallEmphasis * 0.95 : 0;
@@ -1116,9 +1134,9 @@ export class NeuralSphere {
     const interval = hasGrowth || focusChanged ? 1 / 30 : 1 / 12;
 
     const material = this.pathMesh.material as THREE.MeshBasicMaterial;
-    material.opacity = 0.07 + this.activityLevel * 0.03 + this.learningPulse * 0.028 + this.responsePulse * 0.03;
+    material.opacity = 0.07 + this.activityLevel * 0.03 + this.learningPulse * 0.028 + this.responsePulse * 0.03 + this.speechWordPulse * 0.028;
     const lineMaterial = this.pathLineMesh.material as THREE.LineBasicMaterial;
-    lineMaterial.opacity = 0.14 + this.activityLevel * 0.045 + this.learningPulse * 0.035 + this.responsePulse * 0.035;
+    lineMaterial.opacity = 0.14 + this.activityLevel * 0.045 + this.learningPulse * 0.035 + this.responsePulse * 0.035 + this.speechWordPulse * 0.04;
     const recallTint = this.recallEmphasisMode === 'semantic'
       ? MODE_LEARN
       : this.recallEmphasisMode === 'keyword' ? MEMORY_AMBER : MODE_LISTEN;
@@ -1159,14 +1177,14 @@ export class NeuralSphere {
           continue;
         }
         const mid = a.clone().add(b).multiplyScalar(0.5);
-        const thickness = path.thickness * (1 + emphasis * 0.65 + this.learningPulse * 0.2) * path.strength;
+        const thickness = path.thickness * (1 + emphasis * 0.65 + this.learningPulse * 0.2 + this.speechWordPulse * 0.16) * path.strength;
         this.scratch.position.copy(mid);
         this.scratch.quaternion.setFromUnitVectors(this.yAxis, dir.normalize());
         this.scratch.scale.set(thickness, len, thickness);
         this.scratch.updateMatrix();
         this.pathMesh.setMatrixAt(segmentCount, this.scratch.matrix);
         this.pathColor.copy(path.color)
-          .lerp(CORE_COLOR, emphasis * 0.22 + this.responsePulse * 0.08)
+          .lerp(CORE_COLOR, emphasis * 0.22 + this.responsePulse * 0.08 + this.speechWordPulse * 0.16)
           .lerp(recallTint, recallEmphasisBoost * 0.18);
         this.pathMesh.setColorAt(segmentCount, this.pathColor);
         this.pathGlowColor.copy(this.pathColor).lerp(CORE_COLOR, 0.12 + this.learningPulse * 0.1 + emphasis * 0.1);
@@ -1199,7 +1217,7 @@ export class NeuralSphere {
     const phaseProfile = this.phaseProfile();
     const spawnRate = this.responseActive
       ? 24 + phaseProfile.pulse
-      : this.activityLevel * 6.2 + this.memoryGrowthPulse * 9.5 + this.responsePulse * 13 + this.audioLevel * 7.5 + phaseProfile.pulse;
+      : this.activityLevel * 6.2 + this.memoryGrowthPulse * 9.5 + this.responsePulse * 13 + this.audioLevel * 7.5 + this.speechWordPulse * 18 + phaseProfile.pulse;
 
     if (this.paths.length > 0 && Math.random() < delta * spawnRate) {
       const recallPaths = this.recalledMemoryIds.size > 0 && this.recallEmphasis > 0.05

@@ -66,12 +66,21 @@ server.stderr.on('data', (chunk) => {
 });
 
 try {
-  await waitFor(`http://127.0.0.1:${appPort}/api/config`, 15000);
+  await waitFor(`http://127.0.0.1:${appPort}/api/config`, 30000);
 
   const defaults = await getJson(appPort, '/api/voice-settings');
   assert.equal(defaults.voiceEnabled, true);
   assert.equal(defaults.spokenResponses, false);
   assert.equal(defaults.selectedVoiceName, '');
+  assert.equal(defaults.voiceProfile, 'jarvis');
+  assert.equal(defaults.voiceSampleName, '');
+  assert.equal(defaults.voiceSampleSize, 0);
+  assert.equal(defaults.voiceSampleUpdatedAt, '');
+  assert.equal(defaults.speechRate, 0.94);
+  assert.equal(defaults.speechPitch, 0.82);
+  assert.equal(defaults.speechVolume, 1);
+  assert.equal(defaults.orbSpeechReactive, true);
+  assert.equal(defaults.orbSpeechIntensity, 1);
   assert.equal(defaults.autoSendAfterFinalTranscript, true);
   assert.equal(defaults.summaryMaxLength, 180);
 
@@ -79,6 +88,15 @@ try {
     voiceEnabled: false,
     spokenResponses: false,
     selectedVoiceName: 'Windows Test Voice',
+    voiceProfile: 'system',
+    voiceSampleName: 'tony-reference.wav',
+    voiceSampleSize: 999999999,
+    voiceSampleUpdatedAt: 'not-a-date',
+    speechRate: 2,
+    speechPitch: 0.1,
+    speechVolume: 0,
+    orbSpeechReactive: false,
+    orbSpeechIntensity: 9,
     autoSendAfterFinalTranscript: false,
     summaryMaxLength: 999
   });
@@ -86,12 +104,25 @@ try {
     voiceEnabled: false,
     spokenResponses: false,
     selectedVoiceName: 'Windows Test Voice',
+    voiceProfile: 'system',
+    voiceSampleName: 'tony-reference.wav',
+    voiceSampleSize: 52428800,
+    voiceSampleUpdatedAt: '',
+    speechRate: 1.22,
+    speechPitch: 0.5,
+    speechVolume: 0.2,
+    orbSpeechReactive: false,
+    orbSpeechIntensity: 1.8,
     autoSendAfterFinalTranscript: false,
     summaryMaxLength: 420
   });
 
   const persisted = JSON.parse(fs.readFileSync(path.join(dataDir, 'voice-settings.json'), 'utf8'));
   assert.equal(persisted.selectedVoiceName, 'Windows Test Voice');
+  assert.equal(persisted.voiceProfile, 'system');
+  assert.equal(persisted.voiceSampleName, 'tony-reference.wav');
+  assert.equal(persisted.voiceSampleSize, 52428800);
+  assert.equal(persisted.orbSpeechReactive, false);
   assert.equal(persisted.summaryMaxLength, 420);
 
   const session = await getJson(appPort, '/api/session');
@@ -104,6 +135,7 @@ try {
 
   const diagnostics = await getJson(appPort, '/api/diagnostics');
   assert.equal(diagnostics.voice.settings.selectedVoiceName, 'Windows Test Voice');
+  assert.equal(diagnostics.voice.settings.voiceSampleName, 'tony-reference.wav');
   assert.equal(diagnostics.session.previousCrashAcknowledged, true);
 
   console.log('voice settings and recovery tests passed');

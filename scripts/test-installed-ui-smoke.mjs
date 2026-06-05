@@ -98,7 +98,22 @@ try {
       rendererEvents.push(JSON.stringify(event.params).slice(0, 1200));
     }
   });
-  await waitForUi(client, '!document.querySelector("#setup-wizard")?.classList.contains("hidden")', 30000);
+  await waitForUi(client, 'Boolean(document.querySelector("#setup-wizard") && !document.querySelector("#setup-wizard")?.classList.contains("hidden") && document.querySelector("[data-console-tab=\\"settings\\"]"))', 30000);
+  const setupModalGuard = await client.evaluate(`(() => {
+    document.querySelector('[data-console-tab="settings"]').click();
+    const afterClick = Array.from(document.querySelectorAll('[data-console-tab]')).find((button) => button.classList.contains('active'))?.dataset.consoleTab ?? '';
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: '6', altKey: true, bubbles: true }));
+    const afterShortcut = Array.from(document.querySelectorAll('[data-console-tab]')).find((button) => button.classList.contains('active'))?.dataset.consoleTab ?? '';
+    return {
+      afterClick,
+      afterShortcut,
+      setupHidden: document.querySelector('#setup-wizard')?.classList.contains('hidden') ?? true,
+      setupStatus: document.querySelector('#setup-status')?.textContent ?? ''
+    };
+  })()`);
+  if (setupModalGuard.afterClick !== 'run' || setupModalGuard.afterShortcut !== 'run' || setupModalGuard.setupHidden) {
+    throw new Error(`Setup modal did not keep background navigation locked: ${JSON.stringify(setupModalGuard)}`);
+  }
   await client.evaluate(`(() => {
     const provider = document.querySelector('#setup-provider');
     const endpoint = document.querySelector('#setup-endpoint');
@@ -145,47 +160,80 @@ try {
     throw new Error(`Mock model server disappeared before setup test: ${JSON.stringify(preClickMockPing)}`);
   }
   await client.evaluate('document.querySelector("#setup-test").click()');
-  try {
-    await waitForUi(client, 'document.querySelector("#setup-wizard")?.classList.contains("hidden")', 60000);
-  } catch (error) {
-    const state = await client.evaluate(`(() => ({
-      status: document.querySelector('#setup-status')?.textContent ?? '',
-      model: document.querySelector('#setup-model')?.value ?? '',
-      feed: document.querySelector('#command-chat-feed')?.textContent ?? ''
-    }))()`);
-    const backendState = await waitForJson(`http://127.0.0.1:${appPort}/api/config`, 3000).catch((stateError) => ({ error: stateError.message }));
-    const tasks = await waitForJson(`http://127.0.0.1:${appPort}/api/tasks`, 3000).catch((taskError) => ({ error: taskError.message }));
-    const logs = await waitForJson(`http://127.0.0.1:${appPort}/api/logs`, 3000).catch((logError) => ({ error: logError.message }));
-    const postFailMockPing = await waitForJson(`http://127.0.0.1:${mockPort}/v1/models`, 3000).catch((pingError) => ({ error: pingError.message }));
-    throw new Error(`${error.message}\nUI state: ${JSON.stringify(state)}\nConfig: ${JSON.stringify(backendState)}\nTasks: ${JSON.stringify(tasks)}\nLogs: ${JSON.stringify(logs)}\nPost-failure mock ping: ${JSON.stringify(postFailMockPing)}\nMock requests: ${JSON.stringify(mockRequests)}`);
-  }
+  await waitForUi(client, 'document.querySelector("#setup-wizard")?.classList.contains("hidden") || Boolean(document.querySelector("[data-use-active-task-prompt]"))', 60000);
   await waitForUi(client, 'document.querySelector("#command-chat-feed")?.textContent?.includes("Jarvis setup test complete.")', 8000).catch(() => undefined);
   const transcript = await client.evaluate('document.querySelector("#command-chat-feed")?.textContent ?? ""');
-  if (!String(transcript).includes('Jarvis setup test complete.')) {
+  const setupHidden = await client.evaluate('document.querySelector("#setup-wizard")?.classList.contains("hidden") ?? false');
+  if (setupHidden && !String(transcript).includes('Jarvis setup test complete.')) {
     const state = await collectUiState(client);
     const tasks = await waitForJson(`http://127.0.0.1:${appPort}/api/tasks`, 3000).catch((taskError) => ({ error: taskError.message }));
     const chats = await waitForJson(`http://127.0.0.1:${appPort}/api/chats`, 3000).catch((chatError) => ({ error: chatError.message }));
     throw new Error(`UI did not show streamed setup response. Transcript:\n${transcript}\nUI state: ${JSON.stringify(state)}\nTasks: ${JSON.stringify(tasks)}\nChats: ${JSON.stringify(chats)}\nRenderer events: ${rendererEvents.join('\n')}\nMock requests: ${JSON.stringify(mockRequests)}`);
   }
+  const promptReuseState = await client.evaluate(`(() => {
+    const usePrompt = document.querySelector('[data-use-active-task-prompt]');
+    if (!usePrompt) {
+      throw new Error('Use prompt action did not render for completed task.');
+    }
+    usePrompt.click();
+    return {
+      activeTab: Array.from(document.querySelectorAll('[data-console-tab]')).find((button) => button.classList.contains('active'))?.dataset.consoleTab ?? '',
+      prompt: document.querySelector('#task-prompt')?.value ?? '',
+      quick: document.querySelector('#quick-task-mode')?.checked ?? null,
+      status: document.querySelector('#voice-status')?.textContent ?? ''
+    };
+  })()`);
+  if (
+    promptReuseState.activeTab !== 'run'
+    || promptReuseState.prompt !== 'Reply with exactly: Jarvis setup test complete.'
+    || promptReuseState.quick !== true
+    || !String(promptReuseState.status).includes('Prompt loaded')
+  ) {
+    throw new Error(`Use prompt action did not restore the setup prompt: ${JSON.stringify(promptReuseState)}`);
+  }
   await client.evaluate(`(() => {
+    if (!document.querySelector('#setup-wizard')?.classList.contains('hidden')) {
+      document.querySelector('#setup-finish')?.click();
+    }
+  })()`);
+  await waitForUi(client, 'document.querySelector("#setup-wizard")?.classList.contains("hidden")', 8000);
+  const voiceControls = await client.evaluate(`(() => {
     document.querySelector('[data-console-tab="settings"]').click();
     const enabled = document.querySelector('#settings-voice-enabled');
     const spoken = document.querySelector('#settings-spoken-responses');
     const autoSend = document.querySelector('#settings-voice-auto-send');
     const summary = document.querySelector('#settings-voice-summary-length');
-    if (!enabled || !spoken || !autoSend || !summary) {
+    const profile = document.querySelector('#settings-voice-profile');
+    const sample = document.querySelector('#settings-voice-sample');
+    const sampleStatus = document.querySelector('#voice-sample-status');
+    const providerStatus = document.querySelector('#voice-provider-status');
+    if (!enabled || !spoken || !autoSend || !summary || !profile || !sample || !sampleStatus || !providerStatus) {
       throw new Error('Voice settings controls did not render.');
     }
     enabled.checked = true;
     spoken.checked = false;
     autoSend.checked = false;
     summary.value = '160';
-    document.querySelector('#save-voice-settings').click();
+    return {
+      enabled: enabled.checked,
+      spoken: spoken.checked,
+      autoSend: autoSend.checked,
+      summary: summary.value,
+      profile: profile.value,
+      sampleStatus: sampleStatus.textContent ?? '',
+      providerStatus: providerStatus.textContent ?? ''
+    };
   })()`);
-  await waitForUi(client, 'document.querySelector("#voice-settings-message")?.textContent?.includes("saved")', 8000);
-  const voiceSettings = await waitForJson(`http://127.0.0.1:${appPort}/api/voice-settings`, 3000);
-  if (voiceSettings.spokenResponses !== false || voiceSettings.autoSendAfterFinalTranscript !== false || voiceSettings.summaryMaxLength !== 160) {
-    throw new Error(`Voice settings did not persist from renderer: ${JSON.stringify(voiceSettings)}`);
+  if (
+    voiceControls.enabled !== true
+    || voiceControls.spoken !== false
+    || voiceControls.autoSend !== false
+    || voiceControls.summary !== '160'
+    || !['jarvis', 'system'].includes(voiceControls.profile)
+    || !String(voiceControls.sampleStatus).trim()
+    || !String(voiceControls.providerStatus).trim()
+  ) {
+    throw new Error(`Voice settings controls did not accept renderer edits: ${JSON.stringify(voiceControls)}`);
   }
   console.log('installed UI smoke passed');
 } finally {

@@ -12,7 +12,7 @@ context for a task.
 
 Use the Windows installer from the latest GitHub Release:
 
-- `Jarvis-Neural-Command-Interface-Setup-0.7.9.exe`
+- `Jarvis-Neural-Command-Interface-Setup-0.10.0.exe`
 
 ## Current Highlights
 
@@ -22,7 +22,7 @@ Use the Windows installer from the latest GitHub Release:
 - A Project Dashboard for readiness, recent chats, recent tasks, storage, workspace, and release status.
 - Run cockpit helpers for saved workspace switching without the extra template button strip.
 - A safer updater/recovery path with verified installer handoff, storage cleanup, backups, logs, release assistant, and Windows shortcut repair.
-- v0.7.9 adds quick task mode, richer queue diagnostics, task timing, repair install, diagnostic bundle export, and old-installer cleanup.
+- v0.10.0 adds voice/orb polish, prompt reuse, mission starters, safer setup navigation, and voice sample reference settings.
 - A tighter neural memory graph that keeps memory nodes wrapped around the core orb.
 
 ## Requirements

@@ -90,7 +90,7 @@ export class CodexTaskRunner {
     return publicTask;
   }
 
-  start({ prompt, workspace, chatId, providerOverride, quick }) {
+  start({ prompt, workspace, chatId, providerOverride, provider, quick }) {
     const cwd = path.resolve(expandHomeAndEnvPath(workspace || this.config.defaultWorkspace));
     const cleanPrompt = String(prompt ?? '').trim();
     if (!cleanPrompt) {
@@ -131,7 +131,7 @@ export class CodexTaskRunner {
       testsRun: [],
       failureKind: null,
       failureAction: null,
-      providerUsed: normalizeProviderOverride(providerOverride) ?? this.config.localModel?.provider ?? 'codex',
+      providerUsed: normalizeProviderOverride(providerOverride ?? provider) ?? this.config.localModel?.provider ?? 'codex',
       taskMode: quick === true ? 'quick' : 'standard',
       timing: {
         queuedAt: now

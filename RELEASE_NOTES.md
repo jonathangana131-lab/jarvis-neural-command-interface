@@ -1,3 +1,38 @@
+# v0.10.0
+
+Voice and workflow polish release. Adds richer local voice controls, speech-reactive orb animation, prompt reuse actions, mission starters, and safer setup navigation while preserving the verified local installer/update handoff.
+
+## Download
+
+Release assets:
+
+- `Jarvis-Neural-Command-Interface-Setup-0.10.0.exe`
+- `latest.yml`
+
+## Added
+
+- **Voice Profile Controls**: Added system/Jarvis profile selection, speech rate, pitch, volume, test preview, and voice sample reference metadata in Settings.
+- **Speech-Reactive Orb**: The neural orb now pulses and brightens word-by-word while spoken responses play.
+- **Prompt Reuse**: Completed, active, failed, and history tasks can reload their prompt into the Run composer for quick editing.
+- **Run Starters**: Added focused starter prompts for common workspace and reliability tasks.
+
+## Fixed
+
+- Setup navigation and keyboard shortcuts now stay locked while first-run setup is open.
+- Recovery controls keep stable sizing and text wrapping in narrower layouts.
+- Provider override persistence now accepts the `provider` alias used by setup and reliability flows.
+
+## Verified
+
+- `npm run build`
+- `npm run test:memory`
+- `npm run test:stream-parser`
+- `npm run test:artifacts`
+- `npm run test:provider-failures`
+- `npm run test:reliability-controls`
+- `npm run test:voice-settings`
+- Installed UI smoke against `C:\Users\joeyg\AppData\Local\Programs\Jarvis Neural Command Interface\Jarvis Neural Command Interface.exe`
+
 # v0.8.6
 
 Add native smooth auto-updater integration. Users can check, download, and seamlessly install updates silently from inside the desktop app, automatically reloading into the new version.

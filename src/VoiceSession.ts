@@ -4,6 +4,7 @@ type VoiceCallbacks = {
   onMode: (mode: AssistantMode) => void;
   onStatus: (status: string) => void;
   onAudioLevel: (level: number) => void;
+  onSpeechWord: (word: string, intensity: number) => void;
   onTranscript: (text: string) => void;
 };
 
@@ -52,11 +53,21 @@ export class VoiceSession {
   private mediaStream: MediaStream | null = null;
   private analyser: AnalyserNode | null = null;
   private animationFrame = 0;
+  private speechFallbackTimers: number[] = [];
   private active = false;
   private settings: VoiceSettings = {
     voiceEnabled: true,
     spokenResponses: false,
     selectedVoiceName: '',
+    voiceProfile: 'jarvis',
+    voiceSampleName: '',
+    voiceSampleSize: 0,
+    voiceSampleUpdatedAt: '',
+    speechRate: 0.94,
+    speechPitch: 0.82,
+    speechVolume: 1,
+    orbSpeechReactive: true,
+    orbSpeechIntensity: 1,
     autoSendAfterFinalTranscript: true,
     summaryMaxLength: 180
   };
@@ -131,8 +142,8 @@ export class VoiceSession {
     this.callbacks.onMode('idle');
   }
 
-  speakSummary(text: string) {
-    if (!this.settings.voiceEnabled || !this.settings.spokenResponses || !('speechSynthesis' in window)) {
+  speakSummary(text: string, options: { preview?: boolean } = {}) {
+    if (!this.settings.voiceEnabled || (!this.settings.spokenResponses && !options.preview) || !('speechSynthesis' in window)) {
       return;
     }
     const summary = summarizeForSpeech(text, this.settings.summaryMaxLength);
@@ -140,21 +151,75 @@ export class VoiceSession {
       return;
     }
     window.speechSynthesis.cancel();
+    this.clearSpeechFallbackTimers();
     const utterance = new SpeechSynthesisUtterance(summary);
-    utterance.rate = 1;
-    utterance.pitch = 0.92;
+    utterance.rate = this.settings.voiceProfile === 'jarvis'
+      ? clampNumber(this.settings.speechRate, 0.72, 1.22, 0.94)
+      : clampNumber(this.settings.speechRate, 0.72, 1.22, 1);
+    utterance.pitch = this.settings.voiceProfile === 'jarvis'
+      ? clampNumber(this.settings.speechPitch, 0.5, 1.35, 0.82)
+      : clampNumber(this.settings.speechPitch, 0.5, 1.35, 1);
+    utterance.volume = clampNumber(this.settings.speechVolume, 0.2, 1, 1);
+    const words = wordsForSpeech(summary);
+    let boundarySeen = false;
     const voices = this.availableVoices();
-    const selected = voices.find((voice) => voice.name === this.settings.selectedVoiceName)
-      ?? voices.find((voice) => /natural|online|guy|david|mark|zira/i.test(`${voice.name} ${voice.voiceURI}`))
-      ?? voices.find((voice) => /^en/i.test(voice.lang))
-      ?? voices[0];
+    const selected = selectVoice(voices, this.settings);
     if (selected) {
       utterance.voice = selected;
     }
     this.callbacks.onMode('speaking');
-    utterance.onend = () => this.callbacks.onMode(this.active ? 'listening' : 'idle');
-    utterance.onerror = () => this.callbacks.onMode(this.active ? 'listening' : 'idle');
+    this.callbacks.onStatus(`Speaking with ${this.settings.voiceProfile === 'jarvis' ? 'Jarvis tuned' : 'system'} voice`);
+    utterance.onboundary = (event) => {
+      if (event.name && event.name !== 'word') {
+        return;
+      }
+      boundarySeen = true;
+      const word = wordAtChar(summary, event.charIndex) || words[Math.min(words.length - 1, Math.max(0, event.charIndex))] || '';
+      this.callbacks.onSpeechWord(word, speechIntensityForWord(word));
+    };
+    utterance.onstart = () => {
+      this.callbacks.onSpeechWord(words[0] ?? '', 1);
+      this.scheduleSpeechFallback(words, () => boundarySeen);
+    };
+    utterance.onend = () => {
+      this.clearSpeechFallbackTimers();
+      this.callbacks.onAudioLevel(0);
+      this.callbacks.onMode(this.active ? 'listening' : 'idle');
+      this.callbacks.onStatus(this.active ? 'Dictation listening' : 'Codex app connected locally');
+    };
+    utterance.onerror = () => {
+      this.clearSpeechFallbackTimers();
+      this.callbacks.onAudioLevel(0);
+      this.callbacks.onMode(this.active ? 'listening' : 'idle');
+      this.callbacks.onStatus(this.active ? 'Dictation listening' : 'Codex app connected locally');
+    };
     window.speechSynthesis.speak(utterance);
+  }
+
+  private scheduleSpeechFallback(words: string[], hasBoundary: () => boolean) {
+    if (words.length === 0) {
+      return;
+    }
+    const rate = clampNumber(this.settings.speechRate, 0.72, 1.22, 1);
+    const interval = Math.max(115, Math.round(185 / rate));
+    const maxWords = words.slice(1, 90);
+    this.clearSpeechFallbackTimers();
+    for (let index = 0; index < maxWords.length; index += 1) {
+      const timer = window.setTimeout(() => {
+        if (!hasBoundary()) {
+          const word = maxWords[index];
+          this.callbacks.onSpeechWord(word, speechIntensityForWord(word));
+        }
+      }, 180 + index * interval);
+      this.speechFallbackTimers.push(timer);
+    }
+  }
+
+  private clearSpeechFallbackTimers() {
+    for (const timer of this.speechFallbackTimers) {
+      window.clearTimeout(timer);
+    }
+    this.speechFallbackTimers = [];
   }
 
   private handleResult(event: SpeechRecognitionEvent) {
@@ -227,6 +292,45 @@ function summarizeForSpeech(value: string, maxLength: number) {
     return 'I finished generating code. Check the response for details.';
   }
   return summary;
+}
+
+function selectVoice(voices: SpeechSynthesisVoice[], settings: VoiceSettings) {
+  const selected = voices.find((voice) => voice.name === settings.selectedVoiceName);
+  if (selected) {
+    return selected;
+  }
+  if (settings.voiceProfile === 'jarvis') {
+    return voices.find((voice) => /natural|online|guy|david|mark|george|male/i.test(`${voice.name} ${voice.voiceURI}`))
+      ?? voices.find((voice) => /^en/i.test(voice.lang) && !/zira|female/i.test(`${voice.name} ${voice.voiceURI}`))
+      ?? voices.find((voice) => /^en/i.test(voice.lang))
+      ?? voices[0];
+  }
+  return voices.find((voice) => /^en/i.test(voice.lang)) ?? voices[0];
+}
+
+function wordsForSpeech(value: string) {
+  return value.match(/[A-Za-z0-9']+/g) ?? [];
+}
+
+function wordAtChar(value: string, charIndex: number) {
+  const safeIndex = Math.max(0, Math.min(value.length, Number(charIndex) || 0));
+  const suffix = value.slice(safeIndex);
+  return suffix.match(/[A-Za-z0-9']+/)?.[0] ?? '';
+}
+
+function speechIntensityForWord(word: string) {
+  const clean = word.replace(/[^A-Za-z0-9]/g, '');
+  if (!clean) {
+    return 0.62;
+  }
+  return Math.max(0.68, Math.min(1.45, 0.72 + clean.length * 0.055));
+}
+
+function clampNumber(value: number, min: number, max: number, fallback: number) {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, value));
 }
 
 function requestMicrophoneStream(timeoutMs: number) {

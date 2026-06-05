@@ -45,8 +45,8 @@
       </section>
 
       <nav class="radial-nav" aria-label="Console views">
-        <button type="button" data-console-tab="dashboard" data-icon="activity"><span>Dashboard</span></button>
         <button type="button" data-console-tab="run" class="active" data-icon="terminal-square"><span>Run</span></button>
+        <button type="button" data-console-tab="dashboard" data-icon="activity"><span>Dashboard</span></button>
         <button type="button" data-console-tab="history" data-icon="history"><span>History</span></button>
         <button type="button" data-console-tab="artifacts" data-icon="save"><span>Artifacts</span></button>
         <button type="button" data-console-tab="memory" data-icon="network"><span>Memory</span></button>
@@ -186,6 +186,8 @@
             </div>
 
             <div id="command-chat-feed" class="mission-timeline" aria-live="polite"></div>
+
+            <div id="mission-starters" class="mission-starters" aria-label="Mission starters"></div>
 
             <div class="command-dock__main">
               <textarea id="task-prompt" placeholder="Ask Jarvis to build, fix, test, or explain..."></textarea>
@@ -343,6 +345,12 @@
           <div class="settings-section">
             <span class="section-label">Voice Mode</span>
             <div class="settings-section-grid">
+              <label>Voice profile
+                <select id="settings-voice-profile">
+                  <option value="jarvis">Jarvis tuned</option>
+                  <option value="system">System default</option>
+                </select>
+              </label>
               <label>System voice
                 <select id="settings-voice-name">
                   <option value="">Best available voice</option>
@@ -351,6 +359,24 @@
               <label>Summary length
                 <input id="settings-voice-summary-length" type="number" min="80" max="420" step="10" />
               </label>
+              <label>Rate
+                <input id="settings-voice-rate" type="range" min="0.72" max="1.22" step="0.02" />
+              </label>
+              <label>Pitch
+                <input id="settings-voice-pitch" type="range" min="0.5" max="1.35" step="0.01" />
+              </label>
+              <label>Volume
+                <input id="settings-voice-volume" type="range" min="0.2" max="1" step="0.05" />
+              </label>
+              <label>Orb word pulse
+                <input id="settings-orb-speech-intensity" type="range" min="0.35" max="1.8" step="0.05" />
+              </label>
+            </div>
+            <div class="settings-row voice-sample-row">
+              <label class="voice-sample-picker">Voice sample reference
+                <input id="settings-voice-sample" type="file" accept="audio/*" />
+              </label>
+              <button id="clear-voice-sample" class="hud-button" type="button" data-icon="x"><span>Clear Sample</span></button>
             </div>
             <div class="settings-row settings-row--toggles">
               <label class="settings-toggle">
@@ -365,10 +391,22 @@
                 <input id="settings-voice-auto-send" type="checkbox" />
                 <span>Auto-send after speech</span>
               </label>
+              <label class="settings-toggle">
+                <input id="settings-orb-speech-reactive" type="checkbox" />
+                <span>Orb reacts to words</span>
+              </label>
             </div>
             <div class="settings-row">
               <button id="save-voice-settings" class="hud-button hud-button--primary" type="button" data-icon="save"><span>Save Voice</span></button>
               <button id="test-voice-summary" class="hud-button" type="button" data-icon="volume-2"><span>Test Voice</span></button>
+            </div>
+            <div class="voice-preview" aria-label="Voice preview">
+              <span class="micro-label">Speech Link</span>
+              <strong id="voice-preview-profile">Jarvis tuned</strong>
+              <em id="voice-preview-word">Ready</em>
+              <span class="micro-label">Sample</span>
+              <strong id="voice-sample-status">No sample linked</strong>
+              <em id="voice-provider-status">Local TTS</em>
             </div>
             <p id="voice-settings-message" aria-live="polite">Voice uses Windows/browser speech APIs. Spoken summaries stay off unless enabled here.</p>
           </div>

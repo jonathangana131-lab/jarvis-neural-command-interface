@@ -89,6 +89,7 @@ const chatSessionList = required<HTMLElement>('#chat-session-list');
 const refreshDashboard = required<HTMLButtonElement>('#refresh-dashboard');
 const dashboardGrid = required<HTMLElement>('#dashboard-grid');
 const commandChatFeed = required<HTMLElement>('#command-chat-feed');
+const missionStarters = required<HTMLElement>('#mission-starters');
 const missionObjective = required<HTMLElement>('#mission-objective');
 const missionVitals = required<HTMLElement>('#mission-vitals');
 const missionPhase = required<HTMLElement>('#mission-phase');
@@ -158,13 +159,25 @@ const saveModelKey = required<HTMLButtonElement>('#save-model-key');
 const clearModelKey = required<HTMLButtonElement>('#clear-model-key');
 const modelKeyMessage = required<HTMLElement>('#model-key-message');
 const settingsVoiceName = required<HTMLSelectElement>('#settings-voice-name');
+const settingsVoiceProfile = required<HTMLSelectElement>('#settings-voice-profile');
 const settingsVoiceSummaryLength = required<HTMLInputElement>('#settings-voice-summary-length');
+const settingsVoiceRate = required<HTMLInputElement>('#settings-voice-rate');
+const settingsVoicePitch = required<HTMLInputElement>('#settings-voice-pitch');
+const settingsVoiceVolume = required<HTMLInputElement>('#settings-voice-volume');
+const settingsOrbSpeechIntensity = required<HTMLInputElement>('#settings-orb-speech-intensity');
+const settingsVoiceSample = required<HTMLInputElement>('#settings-voice-sample');
 const settingsVoiceEnabled = required<HTMLInputElement>('#settings-voice-enabled');
 const settingsSpokenResponses = required<HTMLInputElement>('#settings-spoken-responses');
 const settingsVoiceAutoSend = required<HTMLInputElement>('#settings-voice-auto-send');
+const settingsOrbSpeechReactive = required<HTMLInputElement>('#settings-orb-speech-reactive');
 const saveVoiceSettings = required<HTMLButtonElement>('#save-voice-settings');
 const testVoiceSummary = required<HTMLButtonElement>('#test-voice-summary');
+const clearVoiceSample = required<HTMLButtonElement>('#clear-voice-sample');
 const voiceSettingsMessage = required<HTMLElement>('#voice-settings-message');
+const voicePreviewProfile = required<HTMLElement>('#voice-preview-profile');
+const voicePreviewWord = required<HTMLElement>('#voice-preview-word');
+const voiceSampleStatus = required<HTMLElement>('#voice-sample-status');
+const voiceProviderStatus = required<HTMLElement>('#voice-provider-status');
 const applyModel = required<HTMLButtonElement>('#apply-model');
 const refreshDiagnostics = required<HTMLButtonElement>('#refresh-diagnostics');
 const diagnosticsList = required<HTMLElement>('#diagnostics-list');
@@ -184,6 +197,12 @@ const voiceSession = new VoiceSession({
     voiceStatus.textContent = status;
   },
   onAudioLevel: (level) => scene.setAudioLevel(level),
+  onSpeechWord: (word, intensity) => {
+    updateVoicePreviewWord(word, intensity);
+    if (voiceSettings.orbSpeechReactive) {
+      scene.pulseSpeechWord(intensity * voiceSettings.orbSpeechIntensity);
+    }
+  },
   onTranscript: (text) => {
     appendPromptText(text);
     scheduleVoiceAutoSend(text);
@@ -228,10 +247,20 @@ let voiceSettings: VoiceSettings = {
   voiceEnabled: true,
   spokenResponses: false,
   selectedVoiceName: '',
+  voiceProfile: 'jarvis',
+  voiceSampleName: '',
+  voiceSampleSize: 0,
+  voiceSampleUpdatedAt: '',
+  speechRate: 0.94,
+  speechPitch: 0.82,
+  speechVolume: 1,
+  orbSpeechReactive: true,
+  orbSpeechIntensity: 1,
   autoSendAfterFinalTranscript: true,
   summaryMaxLength: 180
 };
 let voiceSubmitTimer = 0;
+let draftSaveTimer = 0;
 let eventsReconnectTimer = 0;
 let eventsReconnectAttempts = 0;
 let eventsConnected = false;
@@ -253,6 +282,66 @@ type ArtifactCatalogItem = {
   name: string;
   files: string[];
 };
+
+type MissionStarter = {
+  id: string;
+  label: string;
+  detail: string;
+  icon: string;
+  quick: boolean;
+  prompt: string;
+};
+
+const missionStarterItems: MissionStarter[] = [
+  {
+    id: 'health-check',
+    label: 'Health Check',
+    detail: 'build, tests, risks',
+    icon: 'activity',
+    quick: true,
+    prompt: 'Run a focused health check for this app: inspect the current git diff, run the relevant build/tests, identify the highest-risk bugs or UI regressions, and fix any small issues you can verify safely.'
+  },
+  {
+    id: 'ui-polish',
+    label: 'Polish UI',
+    detail: 'layout, spacing, feel',
+    icon: 'sparkles',
+    quick: false,
+    prompt: 'Improve the most important visible UI rough edges in this app. Prioritize smoother layout, fewer overlaps, clearer controls, and a more stable polished feel. Verify with a rendered browser check.'
+  },
+  {
+    id: 'find-bug',
+    label: 'Find Bug',
+    detail: 'inspect and fix',
+    icon: 'bug',
+    quick: false,
+    prompt: 'Find one important bug or stability problem in this app, explain why it matters, implement a focused fix, and run the smallest meaningful verification.'
+  },
+  {
+    id: 'add-feature',
+    label: 'Useful Feature',
+    detail: 'ship one workflow',
+    icon: 'plus-circle',
+    quick: false,
+    prompt: 'Add one practical feature a real user would use in this app. Keep it consistent with the existing design, wire it end to end, and verify it works.'
+  },
+  {
+    id: 'explain-project',
+    label: 'Explain App',
+    detail: 'map the codebase',
+    icon: 'map',
+    quick: true,
+    prompt: 'Explain how this app is structured, where the main UI, server, memory, voice, and Electron pieces live, and what files I should edit for common changes.'
+  },
+  {
+    id: 'release-prep',
+    label: 'Release Prep',
+    detail: 'installer readiness',
+    icon: 'rocket',
+    quick: false,
+    prompt: 'Prepare this app for a local release pass: check version/release docs, run build and focused smoke tests, inspect installer readiness, and list anything that should block release.'
+  }
+];
 
 type LocalModelScanResult = {
   provider: ModelProvider;
@@ -433,12 +522,16 @@ renderIcons();
 animateBoot();
 void boot().catch((error) => renderBootFailure(error));
 
-voiceToggle.addEventListener('click', async () => {
+voiceToggle.addEventListener('click', () => {
+  void toggleVoiceDictation();
+});
+
+async function toggleVoiceDictation() {
   try {
     voiceToggle.disabled = true;
     if (voiceSession.connected) {
       await voiceSession.stop();
-      voiceToggle.textContent = 'Start Dictation';
+      voiceToggle.querySelector('span')!.textContent = 'Start Dictation';
       return;
     }
     if (!voiceSettings.voiceEnabled) {
@@ -446,17 +539,17 @@ voiceToggle.addEventListener('click', async () => {
       setTab('settings');
       return;
     }
-    voiceToggle.textContent = 'Starting...';
+    voiceToggle.querySelector('span')!.textContent = 'Starting...';
     await voiceSession.start();
-    voiceToggle.textContent = 'Stop Dictation';
+    voiceToggle.querySelector('span')!.textContent = 'Stop Dictation';
   } catch (error) {
     voiceStatus.textContent = error instanceof Error ? error.message : 'Voice failed';
-    voiceToggle.textContent = 'Start Dictation';
+    voiceToggle.querySelector('span')!.textContent = 'Start Dictation';
     setMode('idle');
   } finally {
     voiceToggle.disabled = false;
   }
-});
+}
 
 thinkDemo.addEventListener('click', () => {
   setMode('thinking');
@@ -466,12 +559,31 @@ thinkDemo.addEventListener('click', () => {
 
 document.querySelectorAll<HTMLButtonElement>('[data-console-tab]').forEach((button) => {
   button.addEventListener('click', () => {
-    setTab(button.dataset.consoleTab ?? 'run');
+    requestTab(button.dataset.consoleTab ?? 'run');
   });
 });
 
 runTask.addEventListener('click', () => {
   void dispatchTask();
+});
+
+missionStarters.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-mission-starter]');
+  if (!button) {
+    return;
+  }
+  const starter = missionStarterItems.find((item) => item.id === button.dataset.missionStarter);
+  if (!starter) {
+    return;
+  }
+  taskPrompt.value = starter.prompt;
+  quickTaskMode.checked = starter.quick;
+  syncTaskPromptHeight();
+  saveDraftNow();
+  renderCommandChat(true);
+  scene.pulseResponse(starter.quick ? 0.55 : 0.75);
+  voiceStatus.textContent = `${starter.label} mission drafted.`;
+  taskPrompt.focus();
 });
 
 chatSidebarToggle.addEventListener('click', () => {
@@ -501,6 +613,39 @@ refreshDashboard.addEventListener('click', () => {
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && app.dataset.chatSidebar === 'open') {
     setChatSidebarOpen(false);
+    return;
+  }
+  if (event.defaultPrevented || event.isComposing) {
+    return;
+  }
+  if (isSetupWizardOpen()) {
+    return;
+  }
+  const target = event.target as HTMLElement | null;
+  const typing = target instanceof HTMLInputElement
+    || target instanceof HTMLTextAreaElement
+    || target instanceof HTMLSelectElement
+    || target?.isContentEditable;
+  const modifier = event.ctrlKey || event.metaKey;
+  if (modifier && event.key.toLowerCase() === 'k') {
+    event.preventDefault();
+    setTab('run');
+    taskPrompt.focus();
+    syncTaskPromptHeight();
+    voiceStatus.textContent = 'Command composer ready.';
+    return;
+  }
+  if (modifier && event.key.toLowerCase() === 'm') {
+    event.preventDefault();
+    void toggleVoiceDictation();
+    return;
+  }
+  if (!typing && event.altKey && !event.ctrlKey && !event.metaKey) {
+    const tab = tabForShortcutKey(event.key);
+    if (tab) {
+      event.preventDefault();
+      setTab(tab);
+    }
   }
 });
 
@@ -577,6 +722,7 @@ async function dispatchTask() {
     }
     taskPrompt.value = '';
     syncTaskPromptHeight();
+    clearSavedDraft();
     taskPrompt.focus();
     taskHud.upsert(data.task);
     upsertVisibleTask(data.task, true);
@@ -638,6 +784,7 @@ memorySortFilter.addEventListener('change', () => {
 
 taskPrompt.addEventListener('input', () => {
   syncTaskPromptHeight();
+  scheduleDraftSave();
   // Update prompt preview without full re-render to prevent shaking
   const draftPrompt = taskPrompt.value.trim();
   if (draftPrompt && lastCommandPhase === 'ready') {
@@ -746,6 +893,7 @@ settingsModelProvider.addEventListener('change', () => {
 settingsModelEndpoint.addEventListener('change', () => {
   renderModelProfile();
   renderModelInstructions();
+  renderMissionStarters();
   void scanLocalModels(false);
 });
 
@@ -773,15 +921,23 @@ saveVoiceSettings.addEventListener('click', () => {
 });
 
 testVoiceSummary.addEventListener('click', () => {
-  if (!voiceSettings.spokenResponses) {
-    voiceSettingsMessage.textContent = 'Turn on Spoken summaries, then test voice.';
-    return;
-  }
-  voiceSession.speakSummary('Voice summaries are enabled. I will keep spoken updates short while long code and logs stay on screen.');
+  voiceSession.speakSummary('Voice preview online. Watch the orb pulse with each word while long code and logs stay on screen.', { preview: true });
 });
 
 settingsVoiceName.addEventListener('change', () => {
   void persistVoiceSettingsFromForm();
+});
+
+settingsVoiceSample.addEventListener('change', () => {
+  void linkVoiceSampleReference();
+});
+
+clearVoiceSample.addEventListener('click', () => {
+  void clearVoiceSampleReference();
+});
+
+settingsVoiceProfile.addEventListener('change', () => {
+  applyVoiceProfileDefaults(settingsVoiceProfile.value);
 });
 
 applyModel.addEventListener('click', () => {
@@ -848,6 +1004,8 @@ async function boot() {
   renderModelPresets();
   renderModelProfile();
   renderModelInstructions();
+  renderMissionStarters();
+  restoreSavedDraft();
   void scanLocalModels(false);
   void refreshCodexStatus();
   void refreshUpdateBanner();
@@ -899,6 +1057,15 @@ function applyVoiceSettings(settings: VoiceSettings) {
     voiceEnabled: settings.voiceEnabled !== false,
     spokenResponses: settings.spokenResponses === true,
     selectedVoiceName: settings.selectedVoiceName ?? '',
+    voiceProfile: settings.voiceProfile === 'system' ? 'system' : 'jarvis',
+    voiceSampleName: String(settings.voiceSampleName ?? ''),
+    voiceSampleSize: Math.max(0, Number(settings.voiceSampleSize ?? 0)),
+    voiceSampleUpdatedAt: String(settings.voiceSampleUpdatedAt ?? ''),
+    speechRate: clampNumber(Number(settings.speechRate ?? 0.94), 0.72, 1.22, 0.94),
+    speechPitch: clampNumber(Number(settings.speechPitch ?? 0.82), 0.5, 1.35, 0.82),
+    speechVolume: clampNumber(Number(settings.speechVolume ?? 1), 0.2, 1, 1),
+    orbSpeechReactive: settings.orbSpeechReactive !== false,
+    orbSpeechIntensity: clampNumber(Number(settings.orbSpeechIntensity ?? 1), 0.35, 1.8, 1),
     autoSendAfterFinalTranscript: settings.autoSendAfterFinalTranscript !== false,
     summaryMaxLength: Math.max(80, Math.min(420, Number(settings.summaryMaxLength ?? 180)))
   };
@@ -912,9 +1079,19 @@ function hydrateVoiceSettingsForm() {
   settingsVoiceEnabled.checked = voiceSettings.voiceEnabled;
   settingsSpokenResponses.checked = voiceSettings.spokenResponses;
   settingsVoiceAutoSend.checked = voiceSettings.autoSendAfterFinalTranscript;
+  settingsOrbSpeechReactive.checked = voiceSettings.orbSpeechReactive;
+  settingsVoiceProfile.value = voiceSettings.voiceProfile;
   settingsVoiceSummaryLength.value = String(voiceSettings.summaryMaxLength);
+  settingsVoiceRate.value = String(voiceSettings.speechRate);
+  settingsVoicePitch.value = String(voiceSettings.speechPitch);
+  settingsVoiceVolume.value = String(voiceSettings.speechVolume);
+  settingsOrbSpeechIntensity.value = String(voiceSettings.orbSpeechIntensity);
   settingsVoiceName.value = voiceSettings.selectedVoiceName;
-  voiceSettingsMessage.textContent = voiceCapabilityLabel();
+  settingsVoiceSample.value = '';
+  updateVoicePreviewProfile();
+  voicePreviewWord.textContent = 'Ready';
+  updateVoiceSampleStatus();
+  voiceSettingsMessage.textContent = voiceSettingsStatusText(voiceSettings);
 }
 
 function refreshVoiceList() {
@@ -936,6 +1113,15 @@ async function persistVoiceSettingsFromForm() {
     voiceEnabled: settingsVoiceEnabled.checked,
     spokenResponses: settingsSpokenResponses.checked,
     selectedVoiceName: settingsVoiceName.value,
+    voiceProfile: settingsVoiceProfile.value === 'system' ? 'system' : 'jarvis',
+    voiceSampleName: voiceSettings.voiceSampleName,
+    voiceSampleSize: voiceSettings.voiceSampleSize,
+    voiceSampleUpdatedAt: voiceSettings.voiceSampleUpdatedAt,
+    speechRate: clampNumber(Number(settingsVoiceRate.value || 0.94), 0.72, 1.22, 0.94),
+    speechPitch: clampNumber(Number(settingsVoicePitch.value || 0.82), 0.5, 1.35, 0.82),
+    speechVolume: clampNumber(Number(settingsVoiceVolume.value || 1), 0.2, 1, 1),
+    orbSpeechReactive: settingsOrbSpeechReactive.checked,
+    orbSpeechIntensity: clampNumber(Number(settingsOrbSpeechIntensity.value || 1), 0.35, 1.8, 1),
     autoSendAfterFinalTranscript: settingsVoiceAutoSend.checked,
     summaryMaxLength: Math.max(80, Math.min(420, Number(settingsVoiceSummaryLength.value || 180)))
   };
@@ -943,7 +1129,121 @@ async function persistVoiceSettingsFromForm() {
   const saved = await postJson<VoiceSettings>('/api/voice-settings', next);
   applyVoiceSettings(saved);
   hydrateVoiceSettingsForm();
-  voiceSettingsMessage.textContent = 'Voice settings saved locally.';
+  voiceSettingsMessage.textContent = `Voice settings saved locally. ${voiceSettingsStatusText(saved)}`;
+}
+
+function updateVoicePreviewProfile() {
+  voicePreviewProfile.textContent = voiceSettings.voiceProfile === 'system'
+    ? 'System default'
+    : `Jarvis tuned / ${voiceSettings.orbSpeechReactive ? 'orb linked' : 'orb muted'}`;
+  voiceProviderStatus.textContent = voiceSettings.voiceSampleName ? 'Sample reference' : 'Local TTS';
+}
+
+function updateVoicePreviewWord(word: string, intensity: number) {
+  const clean = word.replace(/\s+/g, ' ').trim();
+  voicePreviewWord.textContent = clean
+    ? `${clean} / ${Math.round(intensity * voiceSettings.orbSpeechIntensity * 100)}%`
+    : 'Speaking';
+}
+
+function applyVoiceProfileDefaults(profile: string) {
+  if (profile === 'system') {
+    settingsVoiceRate.value = '1';
+    settingsVoicePitch.value = '1';
+    settingsVoiceVolume.value = '1';
+    settingsOrbSpeechIntensity.value = '0.75';
+    voiceSettingsMessage.textContent = 'System voice profile selected. Save Voice to keep it.';
+    return;
+  }
+  settingsVoiceRate.value = '0.94';
+  settingsVoicePitch.value = '0.82';
+  settingsVoiceVolume.value = '1';
+  settingsOrbSpeechIntensity.value = '1.15';
+  settingsOrbSpeechReactive.checked = true;
+  voiceSettingsMessage.textContent = 'Jarvis tuned profile selected. Save Voice to keep it.';
+}
+
+async function linkVoiceSampleReference() {
+  const sample = settingsVoiceSample.files?.[0];
+  if (!sample) {
+    return;
+  }
+  if (!sample.type.startsWith('audio/')) {
+    settingsVoiceSample.value = '';
+    voiceSettingsMessage.textContent = 'Choose an audio file for the voice sample reference.';
+    return;
+  }
+  if (sample.size > 50 * 1024 * 1024) {
+    settingsVoiceSample.value = '';
+    voiceSettingsMessage.textContent = 'Voice sample reference must be 50 MB or smaller.';
+    return;
+  }
+  voiceSettings = {
+    ...voiceSettings,
+    voiceSampleName: sample.name,
+    voiceSampleSize: sample.size,
+    voiceSampleUpdatedAt: new Date().toISOString()
+  };
+  updateVoiceSampleStatus();
+  await persistVoiceSettingsFromForm();
+}
+
+async function clearVoiceSampleReference() {
+  settingsVoiceSample.value = '';
+  voiceSettings = {
+    ...voiceSettings,
+    voiceSampleName: '',
+    voiceSampleSize: 0,
+    voiceSampleUpdatedAt: ''
+  };
+  updateVoiceSampleStatus();
+  await persistVoiceSettingsFromForm();
+}
+
+function updateVoiceSampleStatus() {
+  if (!voiceSettings.voiceSampleName) {
+    voiceSampleStatus.textContent = 'No sample linked';
+    voiceProviderStatus.textContent = 'Local TTS';
+    return;
+  }
+  const size = formatFileSize(voiceSettings.voiceSampleSize);
+  const updated = voiceSettings.voiceSampleUpdatedAt ? ` / ${formatDateTime(voiceSettings.voiceSampleUpdatedAt)}` : '';
+  voiceSampleStatus.textContent = `${voiceSettings.voiceSampleName} / ${size}${updated}`;
+  voiceProviderStatus.textContent = 'Sample reference';
+}
+
+function voiceSettingsStatusText(settings: VoiceSettings) {
+  const sample = settings.voiceSampleName
+    ? ' Sample reference saved for tuning notes; exact cloud voice cloning still needs your own provider key.'
+    : ' Add a voice sample as a reference; exact cloud voice cloning still needs your own provider key.';
+  return `${voiceCapabilityLabel()} ${voiceProfileLabel(settings)}.${sample}`;
+}
+
+function voiceProfileLabel(settings: Pick<VoiceSettings, 'voiceProfile' | 'speechRate' | 'speechPitch' | 'orbSpeechReactive'>) {
+  const profile = settings.voiceProfile === 'system' ? 'System default' : 'Jarvis tuned';
+  const orb = settings.orbSpeechReactive ? 'orb word pulses on' : 'orb word pulses off';
+  return `${profile}, rate ${Number(settings.speechRate).toFixed(2)}, pitch ${Number(settings.speechPitch).toFixed(2)}, ${orb}`;
+}
+
+function formatFileSize(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return '0 B';
+  }
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value >= 10 || unitIndex === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`;
+}
+
+function clampNumber(value: number, min: number, max: number, fallback: number) {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, value));
 }
 
 function renderSessionRecoveryNotice(session: SessionRecoveryState) {
@@ -1586,6 +1886,46 @@ function persistSelectedChat() {
   }
 }
 
+function restoreSavedDraft() {
+  const draft = safeStorageGet(draftStorageKey());
+  if (!draft || taskPrompt.value.trim()) {
+    return;
+  }
+  taskPrompt.value = draft;
+  syncTaskPromptHeight();
+  voiceStatus.textContent = 'Recovered unsent command draft.';
+}
+
+function scheduleDraftSave() {
+  window.clearTimeout(draftSaveTimer);
+  draftSaveTimer = window.setTimeout(saveDraftNow, 220);
+}
+
+function saveDraftNow() {
+  const draft = taskPrompt.value.trim();
+  if (!draft) {
+    clearSavedDraft();
+    return;
+  }
+  safeStorageSet(draftStorageKey(), draft);
+}
+
+function clearSavedDraft() {
+  window.clearTimeout(draftSaveTimer);
+  safeStorageRemove(draftStorageKey());
+}
+
+function draftStorageKey() {
+  const chatKey = selectedChatId || 'new';
+  return `jarvis.promptDraft.${chatKey}`;
+}
+
+function tabForShortcutKey(key: string) {
+  const index = Number(key);
+  const tabs = ['run', 'dashboard', 'history', 'artifacts', 'memory', 'settings', 'diagnostics'];
+  return Number.isInteger(index) && index >= 1 && index <= tabs.length ? tabs[index - 1] : null;
+}
+
 function safeStorageGet(key: string) {
   try {
     return window.localStorage.getItem(key);
@@ -1878,7 +2218,6 @@ function renderReleaseAssistant(status: ReleaseStatus) {
   const checks = [
     { label: 'Version set', ok: /^0\.7\./.test(status.version) || status.version !== '0.6.0', detail: `package.json ${status.version}` },
     { label: 'Installer asset', ok: assetReady(status, `.exe`), detail: assetLabel(status, `.exe`) },
-    { label: 'Blockmap asset', ok: assetReady(status, `.blockmap`), detail: assetLabel(status, `.blockmap`) },
     { label: 'latest.yml', ok: assetReady(status, `latest.yml`), detail: assetLabel(status, `latest.yml`) },
     { label: 'GitHub latest check', ok: !status.latest.error, detail: status.latest.error ?? `Latest ${status.latest.latestVersion}` }
   ];
@@ -2548,6 +2887,7 @@ async function runSetupTest() {
       prompt: 'Reply with exactly: Jarvis setup test complete.',
       workspace: taskWorkspace.value,
       chatId: chat.id,
+      providerOverride: provider,
       quick: true
     });
     if (!response.task?.id) {
@@ -3044,6 +3384,7 @@ function renderTaskDetail() {
     <p>${escapeHtml(task.output.trim() || 'No output captured yet.')}</p>
     <div class="task-actions">
       ${task.status === 'running' || task.status === 'queued' ? `<button type="button" data-icon="octagon-x" data-cancel-task-detail="${escapeHtml(task.id)}"><span>Cancel</span></button>` : ''}
+      <button type="button" data-icon="terminal-square" data-use-task-prompt="${escapeHtml(task.id)}"><span>Use Prompt</span></button>
       ${task.status !== 'running' && task.status !== 'queued' ? `<button type="button" data-icon="rotate-cw" data-retry-task="${escapeHtml(task.id)}"><span>Retry</span></button>` : ''}
     </div>
     <div class="task-memory-activity">
@@ -3068,6 +3409,11 @@ function renderTaskDetail() {
     const data = await postJson<{ task: TaskRecord }>(`/api/tasks/${task.id}/retry`, {});
     upsertVisibleTask(data.task, true);
     setTab('run');
+  });
+  taskHistoryDetail.querySelector<HTMLButtonElement>('[data-use-task-prompt]')?.addEventListener('click', (event) => {
+    const taskId = (event.currentTarget as HTMLButtonElement).dataset.useTaskPrompt;
+    const source = taskId ? visibleTasks.find((entry) => entry.id === taskId) ?? task : task;
+    useTaskPrompt(source);
   });
   wireArtifactOpenButtons(taskHistoryDetail);
   renderIcons();
@@ -3304,6 +3650,7 @@ function completeStreamOutput(taskId: string, output: string) {
 }
 
 async function startNewChat() {
+  saveDraftNow();
   const created = await postJson<{ chat: ChatSessionRecord }>('/api/chats', {
     title: 'New Chat',
     workspace: taskWorkspace.value
@@ -3325,6 +3672,8 @@ async function startNewChat() {
   streamElement = null;
   streamScrollContainer = null;
   lastMissionSignature = '';
+  taskPrompt.value = '';
+  restoreSavedDraft();
   renderTaskHistory();
   renderChatSessions();
   renderCommandChat(true);
@@ -3338,6 +3687,7 @@ function selectChat(chatId: string) {
   if (!chat) {
     return;
   }
+  saveDraftNow();
   selectedChatId = chat.id;
   persistSelectedChat();
   reviewingHistoricalTask = false;
@@ -3351,6 +3701,8 @@ function selectChat(chatId: string) {
   streamElement = null;
   streamScrollContainer = null;
   lastMissionSignature = '';
+  taskPrompt.value = '';
+  restoreSavedDraft();
   renderTaskHistory();
   renderChatSessions();
   renderCommandChat(true);
@@ -3652,6 +4004,16 @@ function renderCommandChat(immediate = false) {
   });
 }
 
+function renderMissionStarters() {
+  missionStarters.innerHTML = missionStarterItems.map((starter) => `
+    <button class="mission-starter" type="button" data-mission-starter="${escapeHtml(starter.id)}" data-icon="${escapeHtml(starter.icon)}">
+      <strong>${escapeHtml(starter.label)}</strong>
+      <span>${escapeHtml(starter.detail)}</span>
+    </button>
+  `).join('');
+  renderIcons();
+}
+
 function renderMissionTimeline(
   task: TaskRecord | null,
   conversationTasks: TaskRecord[],
@@ -3690,6 +4052,7 @@ function renderActiveTaskActions(task: TaskRecord | null, output: string) {
   return `
     <div class="task-actions task-actions--inline">
       ${live ? `<button type="button" data-icon="octagon-x" data-cancel-active-task="${escapeHtml(task.id)}"><span>Stop</span></button>` : ''}
+      <button type="button" data-icon="terminal-square" data-use-active-task-prompt="${escapeHtml(task.id)}"><span>Use prompt</span></button>
       ${!live ? `<button type="button" data-icon="rotate-cw" data-retry-active-task="${escapeHtml(task.id)}"><span>Retry</span></button>` : ''}
       ${output.trim() ? `<button type="button" data-icon="save" data-copy-task-summary="${escapeHtml(task.id)}"><span>Copy summary</span></button>` : ''}
       ${(task.commandsRun?.length ?? 0) > 0 ? `<button type="button" data-icon="terminal-square" data-copy-task-commands="${escapeHtml(task.id)}"><span>Copy commands</span></button>` : ''}
@@ -3785,6 +4148,7 @@ function renderRunRecoveryCard(task: TaskRecord) {
       </div>
       <div class="run-recovery-actions">
         <button type="button" data-icon="rotate-cw" data-retry-active-task="${escapeHtml(task.id)}"><span>Retry</span></button>
+        <button type="button" data-icon="terminal-square" data-use-active-task-prompt="${escapeHtml(task.id)}"><span>Edit Prompt</span></button>
         ${canRetryCodex ? `<button type="button" data-icon="terminal-square" data-retry-task-codex="${escapeHtml(task.id)}"><span>Retry with Codex</span></button>` : ''}
         <button type="button" data-icon="sliders-horizontal" data-open-settings-from-task="${escapeHtml(task.id)}"><span>Open Settings</span></button>
         <button type="button" data-icon="activity" data-open-diagnostics-from-task="${escapeHtml(task.id)}"><span>Open Diagnostics</span></button>
@@ -3845,6 +4209,13 @@ function wireActiveTaskActions() {
     upsertVisibleTask(data.task, true);
     setTab('run');
   }));
+  commandChatFeed.querySelectorAll<HTMLButtonElement>('[data-use-active-task-prompt]').forEach((button) => button.addEventListener('click', (event) => {
+    const taskId = (event.currentTarget as HTMLButtonElement).dataset.useActiveTaskPrompt;
+    const task = taskId ? visibleTasks.find((entry) => entry.id === taskId) ?? selectedTask() : selectedTask();
+    if (task) {
+      useTaskPrompt(task);
+    }
+  }));
   commandChatFeed.querySelectorAll<HTMLButtonElement>('[data-open-settings-from-task]').forEach((button) => button.addEventListener('click', () => {
     setTab('settings');
   }));
@@ -3880,6 +4251,25 @@ function wireActiveTaskActions() {
     await navigator.clipboard.writeText(commands.join('\n'));
     voiceStatus.textContent = 'Task commands copied.';
   });
+}
+
+function useTaskPrompt(task: TaskRecord) {
+  taskPrompt.value = task.prompt;
+  quickTaskMode.checked = task.taskMode === 'quick';
+  selectedTaskId = task.id;
+  selectedChatId = task.chatId ?? selectedChatId;
+  persistSelectedChat();
+  syncTaskPromptHeight();
+  saveDraftNow();
+  lastCommandPrompt = task.prompt;
+  lastCommandPhase = 'ready';
+  renderTaskHistory();
+  renderChatSessions();
+  renderCommandChat(true);
+  setTab('run');
+  taskPrompt.focus();
+  scene.pulseResponse(0.48);
+  voiceStatus.textContent = 'Prompt loaded for editing.';
 }
 
 function summarizeTaskForCopy(task: TaskRecord) {
@@ -4645,7 +5035,23 @@ function appendPromptText(text: string) {
   }
   const separator = taskPrompt.value.trim() ? '\n' : '';
   taskPrompt.value = `${taskPrompt.value.trimEnd()}${separator}${trimmed}`;
+  syncTaskPromptHeight();
+  saveDraftNow();
+  renderCommandChat(true);
   taskPrompt.focus();
+}
+
+function requestTab(tab: string) {
+  if (isSetupWizardOpen()) {
+    setupStatus.textContent = 'Finish setup before opening other views.';
+    setupProvider.focus();
+    return;
+  }
+  setTab(tab);
+}
+
+function isSetupWizardOpen() {
+  return !setupWizard.classList.contains('hidden');
 }
 
 function scheduleVoiceAutoSend(transcript: string) {

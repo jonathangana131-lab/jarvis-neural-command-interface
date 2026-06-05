@@ -3604,6 +3604,86 @@ textarea::placeholder {
   margin-top: 2px;
 }
 
+.mission-starters {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+
+.mission-starter {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  row-gap: 2px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 8px 9px;
+  border: 1px solid rgba(115, 243, 255, 0.18);
+  border-radius: 7px;
+  background:
+    linear-gradient(135deg, rgba(6, 25, 36, 0.76), rgba(0, 5, 11, 0.66)),
+    radial-gradient(circle at 12% 0%, rgba(115, 243, 255, 0.12), transparent 32%);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+
+.mission-starter svg {
+  grid-row: 1 / span 2;
+  width: 16px;
+  height: 16px;
+  align-self: center;
+  color: var(--cyan-hot);
+  filter: drop-shadow(0 0 8px rgba(115, 243, 255, 0.36));
+}
+
+.mission-starter strong,
+.mission-starter span {
+  grid-column: 2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mission-starter strong {
+  color: #f1fdff;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.mission-starter span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.mission-starter:hover {
+  transform: translateY(-1px);
+  border-color: rgba(229, 253, 255, 0.42);
+  background:
+    linear-gradient(135deg, rgba(10, 38, 52, 0.84), rgba(0, 8, 15, 0.72)),
+    radial-gradient(circle at 18% 0%, rgba(115, 243, 255, 0.18), transparent 36%);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22), 0 0 24px rgba(115, 243, 255, 0.12);
+}
+
+@media (max-width: 1180px) {
+  .mission-starters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .mission-starters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .command-dock .workspace-field {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -4011,19 +4091,38 @@ textarea::placeholder {
 
 .settings-section-grid label {
   display: block;
+  min-width: 0;
   color: #839aa2;
   font-size: 10px;
   font-weight: 850;
   text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
 
 .settings-section-grid input,
 .settings-section-grid select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
   min-height: 34px;
   margin-top: 6px;
   padding: 0 11px;
   font-size: 12px;
   text-transform: none;
+}
+
+.settings-section-grid input[type="range"] {
+  width: calc(100% - 4px);
+  height: 34px;
+  padding: 0;
+  accent-color: var(--cyan-hot);
+}
+
+.settings-section-grid input[type="text"],
+.settings-section-grid input:not([type]),
+.settings-section-grid input[readonly] {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .settings-row {
@@ -4055,6 +4154,57 @@ textarea::placeholder {
   width: 15px;
   height: 15px;
   accent-color: var(--cyan-hot);
+}
+
+.voice-sample-row {
+  align-items: flex-end;
+}
+
+.voice-sample-picker {
+  flex: 1 1 260px;
+}
+
+.voice-sample-picker input {
+  cursor: pointer;
+}
+
+.voice-preview {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-auto-rows: minmax(28px, auto);
+  gap: 10px;
+  align-items: center;
+  min-height: 72px;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: 1px solid rgba(115, 243, 255, 0.18);
+  border-radius: 7px;
+  background:
+    linear-gradient(90deg, rgba(6, 25, 36, 0.72), rgba(0, 5, 11, 0.56)),
+    radial-gradient(circle at 0% 50%, rgba(115, 243, 255, 0.16), transparent 34%);
+}
+
+.voice-preview strong,
+.voice-preview em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voice-preview strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.voice-preview em {
+  color: var(--cyan-hot);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+  text-align: right;
+  text-shadow: 0 0 14px rgba(115, 243, 255, 0.32);
 }
 
 .task-actions--inline {
@@ -8539,6 +8689,8 @@ sl-tooltip::part(base__popup) {
   border-radius: 9px !important;
   overflow: hidden !important;
   transition: all 0.25s ease !important;
+  flex-shrink: 0 !important;
+  min-height: max-content !important;
 }
 
 .run-recovery-card::before {
@@ -8561,6 +8713,7 @@ sl-tooltip::part(base__popup) {
   font-family: var(--font-cyber) !important;
   font-weight: 900 !important;
   font-size: 8.5px !important;
+  line-height: 1.35 !important;
   letter-spacing: 0.08em !important;
   color: var(--danger) !important;
   text-shadow: var(--glow-red) !important;

@@ -88,9 +88,10 @@ server.stderr.on('data', (chunk) => {
 try {
   await waitFor(`http://127.0.0.1:${appPort}/api/config`, 15000);
   await postJson(appPort, '/api/queue/pause', {});
-  const first = await postJson(appPort, '/api/tasks', { prompt: 'first queued quick task', workspace, quick: true });
+  const first = await postJson(appPort, '/api/tasks', { prompt: 'first queued quick task', workspace, provider: 'opencode', quick: true });
   const second = await postJson(appPort, '/api/tasks', { prompt: 'second queued standard task', workspace });
   assert.equal(first.task.taskMode, 'quick', 'quick task mode should be persisted at dispatch');
+  assert.equal(first.task.providerUsed, 'opencode', 'provider alias should be persisted at dispatch');
   let queue = await getJson(appPort, '/api/queue');
   assert.equal(queue.queue.paused, true, 'queue should be paused');
   assert.equal(queue.queue.queuedCount, 2, 'queue should expose queued task count');

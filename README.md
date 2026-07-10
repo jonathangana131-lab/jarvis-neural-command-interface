@@ -14,15 +14,21 @@ Use the Windows installer from the latest GitHub Release:
 
 - `Jarvis-Neural-Command-Interface-Setup-0.10.0.exe`
 
+The `1.0.0` source is the next major desktop release. The stable installer remains `0.10.0` until the verified `1.0.0` installer is published.
+
 ## Current Highlights
 
+- A rebuilt application shell with a focused command workspace, compact systems rail, live telemetry mast, and a calmer cinematic neural-core stage.
+- A global command menu (`Ctrl/Cmd + K`) for navigation, new chats, voice control, and rapid command composition.
+- One coherent design system across Command, Project Intelligence, Mission Archive, Artifact Vault, Memory Matrix, Settings, setup, recovery, and Diagnostics.
+- A responsive command cockpit with Cockpit, Split Pane, and Conversation layouts that share the same visual language.
 - Persistent chat sessions with New Chat, search, pin, rename, clear, archive, and task-linked history.
 - A lighter Run chat console with a compact coding transcript and cleaner composer that keeps the neural orb visible.
 - A Memory Center with graph legend, review queue, recall reasons, sort/filter controls, ignore/archive controls, and duplicate cleanup.
 - A Project Dashboard for readiness, recent chats, recent tasks, storage, workspace, and release status.
 - Run cockpit helpers for saved workspace switching without the extra template button strip.
 - A safer updater/recovery path with verified installer handoff, storage cleanup, backups, logs, release assistant, and Windows shortcut repair.
-- v0.10.0 adds voice/orb polish, prompt reuse, mission starters, safer setup navigation, and voice sample reference settings.
+- v1.0.0 replaces the accumulated override-heavy UI with an intentional desktop design system and separates HTTP, formatting, Markdown rendering, shell telemetry, and command-menu behavior into focused modules.
 - A tighter neural memory graph that keeps memory nodes wrapped around the core orb.
 
 ## Requirements
@@ -38,6 +44,17 @@ Use the Windows installer from the latest GitHub Release:
 npm install
 npm run dev
 ```
+
+Useful verification commands:
+
+```powershell
+npm run build
+npm run test:ui-contract
+npm run test:memory
+npm run test:voice-settings
+```
+
+The GitHub macOS visual workflow captures the current `main` UI and the transformed branch at the same 1440×900 viewport, uploads the comparisons, runs the full reliability suite, and builds the unsigned macOS application bundle.
 
 First run downloads the local embedding model (~25 MB) into
 `<data-dir>/transformers-cache/`. Subsequent runs use the cache.

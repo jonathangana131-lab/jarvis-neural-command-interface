@@ -1,6 +1,6 @@
 {
   "name": "jarvis-neural-command-interface",
-  "version": "0.10.0",
+  "version": "1.0.0",
   "private": false,
   "type": "module",
   "main": "electron/main.cjs",
@@ -14,6 +14,7 @@
     "build": "tsc && vite build",
     "test:memory": "node --experimental-sqlite scripts/test-memory.mjs",
     "test:voice-settings": "node --experimental-sqlite scripts/test-voice-settings.mjs",
+    "test:ui-contract": "node scripts/test-ui-contract.mjs",
     "test:artifacts": "node --experimental-sqlite scripts/test-streaming-artifacts.mjs",
     "test:stream-parser": "node --experimental-sqlite scripts/test-stream-parser.mjs",
     "test:provider-failures": "node --experimental-sqlite scripts/test-provider-failures.mjs",

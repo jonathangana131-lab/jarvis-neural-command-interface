@@ -1,3 +1,29 @@
+# v1.0.0 — Neural Command Reborn
+
+Jarvis 1.0 is a full desktop interface and front-end architecture reset. The neural orb, memory engine, provider health, task streaming, voice, recovery, and artifact systems remain intact, but the operator experience has been rebuilt around one clear command hierarchy.
+
+## Interface transformation
+
+- Replaced the fragmented floating HUD with a stable application frame: systems rail, telemetry mast, neural command workspace, context rail, timeline, and composer.
+- Reworked every primary surface—Project Intelligence, Mission Archive, Artifact Vault, Memory Matrix, System Configuration, Diagnostics, setup, updater, chat drawer, and live operation HUD.
+- Added a global `Ctrl/Cmd + K` command menu with keyboard navigation and direct actions for command composition, chat creation, voice, core-state preview, and all seven system views.
+- Made the neural core the visual center of the Run experience while keeping memory context, artifacts, task phase, and streamed output readable at a glance.
+- Preserved Cockpit, Split Pane, and Conversation modes inside the same cohesive design system.
+- Added deliberate responsive behavior, keyboard focus treatment, local-only fonts, and reduced-motion support.
+
+## Internal rebuild
+
+- Reduced the stylesheet from roughly 155 KB / 8,800 lines to about 45 KB / 2,800 intentional lines, removing generations of conflicting “final override” blocks.
+- Extracted typed request handling, shared formatting, safe Markdown rendering, shell telemetry, and command-menu behavior from the main application controller.
+- Added a UI contract test that catches missing controls, duplicate IDs, remote-font regressions, accessibility omissions, and renewed CSS override growth.
+- Added a macOS GitHub verification lane that captures true before/after images, runs the reliability suite, and packages the native Electron app bundle.
+
+## Verification
+
+- TypeScript + Vite production build.
+- UI contract, memory, voice/recovery, streaming artifact, stream parser, provider failure, and reliability control suites.
+- Native macOS package build and 1440×900 before/after captures through GitHub Actions.
+
 # v0.10.0
 
 Voice and workflow polish release. Adds richer local voice controls, speech-reactive orb animation, prompt reuse actions, mission starters, and safer setup navigation while preserving the verified local installer/update handoff.

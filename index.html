@@ -7,15 +7,15 @@
     <title>Jarvis Neural Command Interface</title>
   </head>
   <body>
-    <div id="app" class="cockpit-shell" data-mode="idle">
+    <div id="app" class="cockpit-shell" data-mode="idle" data-view="run">
       <canvas id="core" aria-label="Interactive Jarvis neural orb"></canvas>
 
       <header class="command-mast" aria-label="Assistant telemetry">
         <div class="brand-lockup">
-          <span class="brand-mark">J</span>
+          <span class="brand-mark" aria-hidden="true"><i></i><b>J</b></span>
           <div>
-            <span class="micro-label">Jarvis Neural Command Interface</span>
-            <strong>Neural Command Interface</strong>
+            <span class="micro-label">J.A.R.V.I.S. // Local Intelligence</span>
+            <strong>Neural Command</strong>
           </div>
         </div>
         <div class="telemetry-strip">
@@ -32,6 +32,14 @@
             <strong id="workspace">Loading</strong>
           </article>
         </div>
+        <div class="mast-actions">
+          <time id="system-clock" class="system-clock">--:--</time>
+          <button id="command-menu-toggle" class="command-menu-toggle" type="button" aria-expanded="false" aria-controls="command-menu">
+            <span data-icon="terminal-square"></span>
+            <strong>Command menu</strong>
+            <kbd>Ctrl K</kbd>
+          </button>
+        </div>
       </header>
 
       <section class="voice-dock" aria-label="Voice controls">
@@ -41,17 +49,20 @@
         <button id="think-demo" class="hud-button" type="button" data-icon="brain">
           <span>Think</span>
         </button>
-        <span id="voice-status">Codex app connected locally</span>
+        <span id="voice-status"><i aria-hidden="true"></i> Codex app connected locally</span>
       </section>
 
       <nav class="radial-nav" aria-label="Console views">
-        <button type="button" data-console-tab="run" class="active" data-icon="terminal-square"><span>Run</span></button>
-        <button type="button" data-console-tab="dashboard" data-icon="activity"><span>Dashboard</span></button>
-        <button type="button" data-console-tab="history" data-icon="history"><span>History</span></button>
-        <button type="button" data-console-tab="artifacts" data-icon="save"><span>Artifacts</span></button>
-        <button type="button" data-console-tab="memory" data-icon="network"><span>Memory</span></button>
-        <button type="button" data-console-tab="settings" data-icon="sliders-horizontal"><span>Settings</span></button>
-        <button type="button" data-console-tab="diagnostics" data-icon="activity"><span>Diagnostics</span></button>
+        <span class="nav-rail__label">Systems</span>
+        <button type="button" data-console-tab="run" class="active" data-icon="terminal-square" title="Neural Command"><span>Command</span><small>01</small></button>
+        <button type="button" data-console-tab="dashboard" data-icon="activity" title="Project Intelligence"><span>Intel</span><small>02</small></button>
+        <button type="button" data-console-tab="history" data-icon="history" title="Mission Archive"><span>Archive</span><small>03</small></button>
+        <button type="button" data-console-tab="artifacts" data-icon="save" title="Artifact Vault"><span>Artifacts</span><small>04</small></button>
+        <button type="button" data-console-tab="memory" data-icon="network" title="Memory Matrix"><span>Memory</span><small>05</small></button>
+        <span class="nav-rail__divider"></span>
+        <button type="button" data-console-tab="settings" data-icon="sliders-horizontal" title="System Configuration"><span>Settings</span><small>06</small></button>
+        <button type="button" data-console-tab="diagnostics" data-icon="scan-line" title="System Diagnostics"><span>Health</span><small>07</small></button>
+        <div class="nav-rail__status"><i></i><span>Local core</span></div>
       </nav>
 
       <section id="task-hud" class="operation-channel" aria-label="Codex task status"></section>
@@ -120,6 +131,11 @@
 
         <section class="command-console console-view" data-view="run" aria-label="Codex mission control">
           <div class="mission-control">
+            <div class="neural-core-readout" aria-hidden="true">
+              <span>Neural core</span>
+              <strong>Drag to inspect memory topology</strong>
+              <i></i>
+            </div>
             <button id="chat-sidebar-toggle" class="chat-sidebar-toggle" type="button" data-icon="history" aria-expanded="false" aria-controls="chat-session-rail">
               <span>Chats</span>
             </button>
@@ -450,6 +466,18 @@
           <div id="release-assistant" class="release-assistant"></div>
         </section>
       </main>
+
+      <section id="command-menu" class="command-menu hidden" role="dialog" aria-modal="true" aria-label="Jarvis command menu" hidden>
+        <div id="command-menu-panel" class="command-menu__panel">
+          <header class="command-menu__header">
+            <span data-icon="terminal-square" aria-hidden="true"></span>
+            <input id="command-menu-search" type="search" autocomplete="off" placeholder="Search commands, views, and actions..." aria-label="Search Jarvis commands" />
+            <kbd>Esc</kbd>
+          </header>
+          <div id="command-menu-list" class="command-menu__list" role="listbox"></div>
+          <footer><span><i></i> Neural command index</span><span>↑↓ Navigate&nbsp;&nbsp;↵ Run</span></footer>
+        </div>
+      </section>
 
     </div>
     <script type="module" src="/src/main.ts"></script>

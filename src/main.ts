@@ -35,6 +35,11 @@ import { JarvisScene } from './JarvisScene';
 import { MemoryAnimator } from './MemoryAnimator';
 import { TaskHud } from './TaskHud';
 import { VoiceSession } from './VoiceSession';
+import { fetchJson, postJson, putJson, readError } from './core/http';
+import { compactPath, escapeHtml, formatBytes, formatDateTime, formatMemoryCount, formatTime, shortId } from './core/format';
+import { CommandPalette } from './ui/CommandPalette';
+import { ShellController } from './ui/ShellController';
+import { renderMarkdown } from './ui/markdown';
 import type { AppConfig, AssistantMode, ChatSessionRecord, MemoryRecord, ModelKeyStatus, ProviderFailureKind, ProviderHealth, SessionRecoveryState, TaskRecord, VoiceSettings } from './types';
 
 const jarvisIcons = {
@@ -107,6 +112,12 @@ const layoutCockpitBtn = required<HTMLButtonElement>('#layout-cockpit');
 const layoutTerminalBtn = required<HTMLButtonElement>('#layout-terminal');
 const layoutBubblesBtn = required<HTMLButtonElement>('#layout-bubbles');
 const missionControl = required<HTMLElement>('.mission-control');
+const systemClock = required<HTMLElement>('#system-clock');
+const commandMenu = required<HTMLElement>('#command-menu');
+const commandMenuPanel = required<HTMLElement>('#command-menu-panel');
+const commandMenuSearch = required<HTMLInputElement>('#command-menu-search');
+const commandMenuList = required<HTMLElement>('#command-menu-list');
+const commandMenuToggle = required<HTMLButtonElement>('#command-menu-toggle');
 const updateBanner = required<HTMLElement>('#update-banner');
 const updateBannerTitle = required<HTMLElement>('#update-banner-title');
 const updateBannerDetail = required<HTMLElement>('#update-banner-detail');
@@ -185,6 +196,7 @@ const releaseAssistant = required<HTMLElement>('#release-assistant');
 const workspaceSwitcher = required<HTMLSelectElement>('#workspace-switcher');
 const saveWorkspace = required<HTMLButtonElement>('#save-workspace');
 const taskHud = new TaskHud(required<HTMLElement>('#task-hud'), cancelTask, renderIcons);
+const shell = new ShellController({ root: app, clock: systemClock });
 const scene = new JarvisScene(canvas, {
   onRendererStatus: (status) => {
     voiceStatus.textContent = status;
@@ -208,6 +220,26 @@ const voiceSession = new VoiceSession({
     scheduleVoiceAutoSend(text);
     void rememberText(text, 'voice');
   }
+});
+
+new CommandPalette({
+  overlay: commandMenu,
+  panel: commandMenuPanel,
+  input: commandMenuSearch,
+  list: commandMenuList,
+  toggle: commandMenuToggle,
+  onNavigate: requestTab,
+  onNewChat: () => void startNewChat(),
+  onFocusPrompt: () => {
+    requestTab('run');
+    taskPrompt.focus();
+    syncTaskPromptHeight();
+    voiceStatus.textContent = 'Command composer ready.';
+  },
+  onVoice: () => void toggleVoiceDictation(),
+  onThink: () => thinkDemo.click(),
+  renderIcons,
+  canOpen: () => !isSetupWizardOpen()
 });
 
 let config: AppConfig | null = null;
@@ -4282,187 +4314,6 @@ function summarizeTaskForCopy(task: TaskRecord) {
   ].join('\n');
 }
 
-function renderMarkdown(markdown: string): string {
-  if (!markdown) return '';
-
-  const escapeHTMLText = (str: string) => {
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  };
-
-  const lines = markdown.split('\n');
-  let html = '';
-  let inCodeBlock = false;
-  let codeLanguage = '';
-  let codeContent: string[] = [];
-  let inList = false;
-  let listType: 'ul' | 'ol' | null = null;
-  let inBlockquote = false;
-
-  const closeListIfActive = () => {
-    if (inList && listType) {
-      html += `</${listType}>\n`;
-      inList = false;
-      listType = null;
-    }
-  };
-
-  const closeBlockquoteIfActive = () => {
-    if (inBlockquote) {
-      html += `</blockquote>\n`;
-      inBlockquote = false;
-    }
-  };
-
-  const parseInlineMarkdown = (text: string): string => {
-    let escaped = escapeHTMLText(text);
-    
-    // Inline code: `code`
-    escaped = escaped.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
-    
-    // Bold: **text**
-    escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    
-    // Italic: *text*
-    escaped = escaped.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-    
-    return escaped;
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    // Check code blocks
-    if (line.trim().startsWith('```')) {
-      if (inCodeBlock) {
-        // Close code block
-        const joinedContent = codeContent.join('\n');
-        const escapedCode = escapeHTMLText(joinedContent);
-        html += `
-          <div class="code-block-wrapper">
-            <div class="code-block-header">
-              <span class="code-block-lang">${escapeHTMLText(codeLanguage || 'code')}</span>
-              <button class="code-block-copy" type="button">
-                <span>Copy</span>
-              </button>
-            </div>
-            <pre><code class="language-${escapeHTMLText(codeLanguage || 'plaintext')}">${escapedCode}</code></pre>
-          </div>
-        `;
-        inCodeBlock = false;
-        codeContent = [];
-        codeLanguage = '';
-      } else {
-        // Open code block
-        closeListIfActive();
-        closeBlockquoteIfActive();
-        inCodeBlock = true;
-        codeLanguage = line.trim().slice(3).trim();
-      }
-      continue;
-    }
-
-    if (inCodeBlock) {
-      codeContent.push(line);
-      continue;
-    }
-
-    // Blockquotes
-    if (line.trim().startsWith('&gt;') || line.trim().startsWith('>')) {
-      closeListIfActive();
-      if (!inBlockquote) {
-        html += `<blockquote>\n`;
-        inBlockquote = true;
-      }
-      const blockquoteText = line.trim().replace(/^(&gt;|>)\s?/, '');
-      html += `<p>${parseInlineMarkdown(blockquoteText)}</p>\n`;
-      continue;
-    } else {
-      closeBlockquoteIfActive();
-    }
-
-    // Headings
-    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
-    if (headingMatch) {
-      closeListIfActive();
-      const level = headingMatch[1].length;
-      const headingText = headingMatch[2].trim();
-      html += `<h${level}>${parseInlineMarkdown(headingText)}</h${level}>\n`;
-      continue;
-    }
-
-    // Horizontal Rules
-    if (line.trim() === '---' || line.trim() === '***' || line.trim() === '___') {
-      closeListIfActive();
-      html += `<hr />\n`;
-      continue;
-    }
-
-    // Unordered Lists
-    const ulMatch = line.match(/^(\*|-|\+)\s+(.*)$/);
-    if (ulMatch) {
-      if (!inList || listType !== 'ul') {
-        closeListIfActive();
-        html += `<ul>\n`;
-        inList = true;
-        listType = 'ul';
-      }
-      const itemText = ulMatch[2].trim();
-      html += `<li>${parseInlineMarkdown(itemText)}</li>\n`;
-      continue;
-    }
-
-    // Ordered Lists
-    const olMatch = line.match(/^(\d+)\.\s+(.*)$/);
-    if (olMatch) {
-      if (!inList || listType !== 'ol') {
-        closeListIfActive();
-        html += `<ol>\n`;
-        inList = true;
-        listType = 'ol';
-      }
-      const itemText = olMatch[2].trim();
-      html += `<li>${parseInlineMarkdown(itemText)}</li>\n`;
-      continue;
-    }
-
-    // Paragraph or Empty Line
-    if (line.trim() === '') {
-      closeListIfActive();
-      continue;
-    }
-
-    // Regular line
-    closeListIfActive();
-    html += `<p>${parseInlineMarkdown(line)}</p>\n`;
-  }
-
-  // Handle open block cleanups (useful for streaming output)
-  if (inCodeBlock) {
-    const joinedContent = codeContent.join('\n');
-    const escapedCode = escapeHTMLText(joinedContent);
-    html += `
-      <div class="code-block-wrapper">
-        <div class="code-block-header">
-          <span class="code-block-lang">${escapeHTMLText(codeLanguage || 'code')} (streaming)</span>
-          <button class="code-block-copy" type="button">
-            <span>Copy</span>
-          </button>
-        </div>
-        <pre><code class="language-${escapeHTMLText(codeLanguage || 'plaintext')}">${escapedCode}</code></pre>
-      </div>
-    `;
-  }
-  closeListIfActive();
-  closeBlockquoteIfActive();
-
-  return html;
-}
-
 function renderConversationMessage(
   role: 'user' | 'assistant',
   body: string,
@@ -4845,6 +4696,7 @@ function statusTitle(status: TaskRecord['status']) {
 
 function setTab(tab: string) {
   currentTab = tab;
+  shell.setView(tab);
   document.querySelectorAll<HTMLButtonElement>('[data-console-tab]').forEach((button) => {
     button.classList.toggle('active', button.dataset.consoleTab === currentTab);
   });
@@ -5073,47 +4925,6 @@ function scheduleVoiceAutoSend(transcript: string) {
   }, 1000);
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(await readError(response, `${url} returned ${response.status}`));
-  }
-  return response.json() as Promise<T>;
-}
-
-async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  if (!response.ok) {
-    throw new Error(await readError(response, `${url} returned ${response.status}`));
-  }
-  return response.json() as Promise<T>;
-}
-
-async function putJson<T>(url: string, body: unknown): Promise<T> {
-  const response = await fetch(url, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  if (!response.ok) {
-    throw new Error(await readError(response, `${url} returned ${response.status}`));
-  }
-  return response.json() as Promise<T>;
-}
-
-async function readError(response: Response, fallback: string) {
-  try {
-    const data = await response.json() as { error?: string };
-    return data.error ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -5124,59 +4935,4 @@ function required<T extends Element>(selector: string): T {
     throw new Error(`Missing element: ${selector}`);
   }
   return element;
-}
-
-function compactPath(value: string) {
-  return value.replace(/^C:\\Users\\[^\\]+\\/, '~\\');
-}
-
-function formatMemoryCount(count: number) {
-  return `${count} ${count === 1 ? 'memory' : 'memories'}`;
-}
-
-function formatTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function formatDateTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
-}
-
-function formatBytes(value: number) {
-  if (!Number.isFinite(value) || value <= 0) {
-    return '0 B';
-  }
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let size = value;
-  let unit = 0;
-  while (size >= 1024 && unit < units.length - 1) {
-    size /= 1024;
-    unit += 1;
-  }
-  return `${size.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
-}
-
-function shortId(id: string) {
-  return id.split('-')[0] ?? id;
-}
-
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (match) => {
-    const entities: Record<string, string> = {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;'
-    };
-    return entities[match];
-  });
 }

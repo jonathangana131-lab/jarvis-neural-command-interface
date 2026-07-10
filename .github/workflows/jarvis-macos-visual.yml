@@ -1,0 +1,108 @@
+name: Jarvis macOS visual verification
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'agent/**'
+      - 'codex/**'
+
+permissions:
+  contents: read
+
+jobs:
+  visual-and-package:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - name: Check out transformed app
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install transformed app
+        run: npm ci
+
+      - name: Check out the before revision
+        run: git worktree add "$RUNNER_TEMP/jarvis-before" origin/main
+
+      - name: Install before revision
+        working-directory: ${{ runner.temp }}/jarvis-before
+        run: npm ci
+
+      - name: Capture before and after
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/visual-evidence"
+
+          capture_revision() {
+            local source_dir="$1"
+            local prefix="$2"
+            local data_dir="$RUNNER_TEMP/jarvis-data-$prefix"
+            local log_dir="$RUNNER_TEMP/jarvis-logs-$prefix"
+            mkdir -p "$data_dir" "$log_dir"
+
+            pushd "$source_dir"
+            JARVIS_DATA_DIR="$data_dir" OPENCODE_API_KEY="visual-check-key" PORT=8787 npm run dev:server >"$log_dir/server.log" 2>&1 &
+            local server_pid=$!
+            npm run dev:client >"$log_dir/client.log" 2>&1 &
+            local client_pid=$!
+
+            cleanup() {
+              kill "$server_pid" "$client_pid" 2>/dev/null || true
+              wait "$server_pid" "$client_pid" 2>/dev/null || true
+            }
+            trap cleanup RETURN
+
+            for attempt in {1..80}; do
+              if curl --fail --silent http://127.0.0.1:8787/api/config >/dev/null && curl --fail --silent http://127.0.0.1:5173/ >/dev/null; then
+                break
+              fi
+              sleep 0.25
+            done
+
+            curl --fail --silent -X POST http://127.0.0.1:8787/api/memories -H 'content-type: application/json' -d '{"kind":"project","title":"Neural interface revamp","content":"Rebuild the Jarvis command experience around a focused neural core.","importance":5,"confidence":0.98,"scope":"project","source":"visual-fixture"}' >/dev/null
+            curl --fail --silent -X POST http://127.0.0.1:8787/api/memories -H 'content-type: application/json' -d '{"kind":"preference","title":"Calm cinematic HUD","content":"Prefer restrained glass surfaces, readable typography, and meaningful telemetry.","importance":4,"confidence":0.96,"scope":"global","source":"visual-fixture"}' >/dev/null
+            curl --fail --silent -X POST http://127.0.0.1:8787/api/memories -H 'content-type: application/json' -d '{"kind":"constraint","title":"Local-first privacy","content":"Keep model keys, memory, voice settings, and workspace data on device.","importance":5,"confidence":0.99,"scope":"global","source":"visual-fixture"}' >/dev/null
+            curl --fail --silent -X POST http://127.0.0.1:8787/api/chats -H 'content-type: application/json' -d '{"title":"Jarvis interface transformation","workspace":"/tmp/jarvis-workspace"}' >/dev/null
+
+            JARVIS_CAPTURE_DIR="$GITHUB_WORKSPACE/visual-evidence" \
+            JARVIS_CAPTURE_PREFIX="$prefix" \
+            JARVIS_CAPTURE_URL="http://127.0.0.1:5173" \
+            "$GITHUB_WORKSPACE/node_modules/.bin/electron" "$GITHUB_WORKSPACE/scripts/capture-ui.cjs"
+            cleanup
+            trap - RETURN
+            popd
+          }
+
+          capture_revision "$RUNNER_TEMP/jarvis-before" before
+          capture_revision "$GITHUB_WORKSPACE" after
+
+      - name: Validate architecture and behavior
+        run: |
+          npm run build
+          npm run test:ui-contract
+          npm run test:memory
+          npm run test:voice-settings
+          npm run test:artifacts
+          npm run test:stream-parser
+          npm run test:provider-failures
+          npm run test:reliability-controls
+
+      - name: Build native macOS app bundle
+        run: npm run package:mac
+
+      - name: Upload visual evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-before-after
+          path: visual-evidence/*.png
+          if-no-files-found: error
+          retention-days: 30

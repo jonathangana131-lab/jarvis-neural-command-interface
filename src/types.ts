@@ -1,4 +1,5 @@
 export type AssistantMode = 'idle' | 'listening' | 'thinking' | 'speaking' | 'executing' | 'learning';
+export type TaskMode = 'quick' | 'standard' | 'deep';
 
 export type AppConfig = {
   assistantName: string;
@@ -132,7 +133,7 @@ export type TaskRecord = {
   failureKind?: ProviderFailureKind | null;
   failureAction?: string | null;
   providerUsed?: LocalModelConfig['provider'] | string | null;
-  taskMode?: 'standard' | 'quick' | string | null;
+  taskMode?: TaskMode | string | null;
   timing?: TaskTiming;
 };
 
@@ -149,4 +150,59 @@ export type MemorySkippedRecord = {
   reason: string;
   content: string;
   confidence: number;
+};
+
+export type WorkspaceIntelligence = {
+  status: 'ready' | 'missing';
+  generatedAt: string;
+  workspace: string;
+  identity: { name: string; kind: string; description: string };
+  score: number;
+  metrics: {
+    files: number;
+    directories: number;
+    totalBytes: number;
+    sourceFiles: number;
+    testFiles: number;
+    todoCount: number;
+    dirtyFiles: number;
+  };
+  languages: Array<{ name: string; files: number; percent: number; color: string }>;
+  stack: Array<{ name: string; kind: string; confidence: string; source: string }>;
+  scripts: Array<{ name: string; command: string; source: string }>;
+  git: {
+    available: boolean;
+    branch: string | null;
+    dirty: boolean;
+    changed: number;
+    staged: number;
+    untracked: number;
+    ahead: number;
+    behind: number;
+    lastCommit: { hash: string; subject: string; committedAt: string | null } | null;
+  };
+  recentFiles: Array<{ path: string; size: number; updatedAt: string; language: string | null }>;
+  signals: Array<{ level: 'good' | 'watch' | 'risk'; title: string; detail: string }>;
+  scan: {
+    truncated: boolean;
+    durationMs: number;
+    filesInspected: number;
+    contentFilesRead: number;
+    excludedDirectories: string[];
+  };
+};
+
+export type MissionBrief = {
+  generatedAt: string;
+  objective: string;
+  intent: { kind: string; label: string; confidence: number };
+  selectedMode: TaskMode;
+  recommendedMode: TaskMode;
+  modeProfile: { label: string; detail: string; phaseLimit: number };
+  complexity: { score: number; level: 'low' | 'medium' | 'high'; reasons: string[] };
+  phases: Array<{ id: string; title: string; detail: string; icon: string; index: number }>;
+  guardrails: string[];
+  workspaceSignals: Array<{ label: string; value: string; tone: 'info' | 'good' | 'watch' }>;
+  estimatedScope: { scale: string; verification: string; projectFiles: number };
+  readiness: number | null;
 };

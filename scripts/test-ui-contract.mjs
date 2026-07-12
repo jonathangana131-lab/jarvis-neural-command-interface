@@ -19,6 +19,12 @@ assert(missingIds.length === 0, `Required UI ids missing from index.html: ${miss
 assert(html.includes('id="command-menu"'), 'Global command menu is missing.');
 assert(html.includes('id="system-clock"'), 'System clock telemetry is missing.');
 assert(html.includes('class="neural-core-readout"'), 'Neural core readout is missing.');
+assert(html.includes('id="mission-brief"'), 'Neural mission preflight is missing.');
+assert(html.includes('id="task-mode-control"'), 'Three-depth execution control is missing.');
+assert(html.includes('data-task-mode="quick"') && html.includes('data-task-mode="standard"') && html.includes('data-task-mode="deep"'), 'Quick, Standard, and Deep execution modes are required.');
+assert(html.includes('id="mission-queue-drawer"'), 'Inspectable mission queue is missing.');
+assert(main.includes('WorkspaceIntelligenceView'), 'Workspace Intelligence must be rendered through its focused view module.');
+assert(main.includes('MissionPlannerController'), 'Mission planning must be owned by its focused controller module.');
 assert(css.length < 80_000, `CSS bundle regressed to ${css.length} characters; keep the cascade intentional.`);
 assert((css.match(/!important/g) ?? []).length <= 6, 'CSS returned to override-heavy !important rules.');
 assert(!css.includes('fonts.googleapis.com'), 'The local desktop UI must not depend on hosted fonts.');

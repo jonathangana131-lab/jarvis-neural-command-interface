@@ -3,8 +3,6 @@ name: Jarvis macOS visual verification
 on:
   workflow_dispatch:
   pull_request:
-    branches:
-      - main
   push:
     branches:
       - 'agent/**'
@@ -32,8 +30,8 @@ jobs:
       - name: Install transformed app
         run: npm ci
 
-      - name: Check out the before revision
-        run: git worktree add "$RUNNER_TEMP/jarvis-before" origin/main
+      - name: Check out the verified v1.0 baseline
+        run: git worktree add "$RUNNER_TEMP/jarvis-before" origin/agent/jarvis-neural-rebirth
 
       - name: Install before revision
         working-directory: ${{ runner.temp }}/jarvis-before
@@ -53,7 +51,7 @@ jobs:
             mkdir -p "$data_dir" "$log_dir"
 
             pushd "$source_dir"
-            JARVIS_DATA_DIR="$data_dir" OPENCODE_API_KEY="visual-check-key" PORT=8787 npm run dev:server >"$log_dir/server.log" 2>&1 &
+            JARVIS_CONFIG="$GITHUB_WORKSPACE/.github/visual-fixture.config.json" JARVIS_DATA_DIR="$data_dir" OPENCODE_API_KEY="visual-check-key" PORT=8787 npm run dev:server >"$log_dir/server.log" 2>&1 &
             local server_pid=$!
             npm run dev:client >"$log_dir/client.log" 2>&1 &
             local client_pid=$!
@@ -98,6 +96,8 @@ jobs:
           npm run test:stream-parser
           npm run test:provider-failures
           npm run test:reliability-controls
+          npm run test:workspace-intelligence
+          npm run test:mission-planner
 
       - name: Build native macOS app bundle
         run: npm run package:mac

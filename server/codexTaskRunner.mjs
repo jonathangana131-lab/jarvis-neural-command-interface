@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { isPathAllowed, expandHomeAndEnvPath } from './config.mjs';
 import { classifyProviderFailure, providerFailureAction, providerFailureSummary } from './providerHealth.mjs';
+import { normalizeTaskMode, taskModeInstructions } from './missionPlanner.mjs';
 
 export class CodexTaskRunner {
   constructor(config, eventBus, memoryStore, memoryExtractor, taskStore, options = {}) {
@@ -90,7 +91,7 @@ export class CodexTaskRunner {
     return publicTask;
   }
 
-  start({ prompt, workspace, chatId, providerOverride, provider, quick }) {
+  start({ prompt, workspace, chatId, providerOverride, provider, quick, mode, taskMode }) {
     const cwd = path.resolve(expandHomeAndEnvPath(workspace || this.config.defaultWorkspace));
     const cleanPrompt = String(prompt ?? '').trim();
     if (!cleanPrompt) {
@@ -132,7 +133,7 @@ export class CodexTaskRunner {
       failureKind: null,
       failureAction: null,
       providerUsed: normalizeProviderOverride(providerOverride ?? provider) ?? this.config.localModel?.provider ?? 'codex',
-      taskMode: quick === true ? 'quick' : 'standard',
+      taskMode: normalizeTaskMode(taskMode ?? mode ?? (quick === true ? 'quick' : 'standard')),
       timing: {
         queuedAt: now
       },
@@ -162,7 +163,7 @@ export class CodexTaskRunner {
       workspace: task.workspace,
       chatId: task.chatId,
       providerOverride: normalizeProviderOverride(options.provider),
-      quick: options.quick === true || task.taskMode === 'quick'
+      taskMode: normalizeTaskMode(options.taskMode ?? options.mode ?? (options.quick === true ? 'quick' : task.taskMode))
     });
   }
 
@@ -325,7 +326,7 @@ export class CodexTaskRunner {
 
   async #runCodexCliTask(queued, options = {}) {
     const relevantMemories = await this.#relevantMemoriesForTask(queued);
-    const executionPrompt = buildPromptWithMemories(queued.prompt, relevantMemories);
+    const executionPrompt = buildPromptWithMemories(queued.prompt, relevantMemories, { executionMode: queued.taskMode });
     const outputMessagePath = this.#outputMessagePath(queued.id);
     const task = {
       ...queued,
@@ -357,7 +358,7 @@ export class CodexTaskRunner {
     this.eventBus.emit('queue.changed', this.queueStatus());
     const args = buildCodexExecArgs({
       model: this.config.codex.model,
-      reasoningEffort: this.config.codex.reasoningEffort,
+      reasoningEffort: taskModeReasoningEffort(task.taskMode, this.config.codex.reasoningEffort),
       ephemeral: this.config.codex.ephemeral,
       cwd: task.workspace,
       outputMessagePath
@@ -489,7 +490,10 @@ export class CodexTaskRunner {
 
   async #runOpenCodeApiTask(queued) {
     const relevantMemories = await this.#relevantMemoriesForTask(queued);
-    const executionPrompt = buildPromptWithMemories(queued.prompt, relevantMemories, { materializeArtifacts: true });
+    const executionPrompt = buildPromptWithMemories(queued.prompt, relevantMemories, {
+      materializeArtifacts: true,
+      executionMode: queued.taskMode
+    });
     const task = {
       ...queued,
       status: 'running',
@@ -940,8 +944,19 @@ export function buildPromptWithMemories(prompt, memories = [], options = {}) {
     parts.push(buildArtifactAuthoringInstructions(), '');
   }
 
+  if (options.executionMode) {
+    parts.push(taskModeInstructions(options.executionMode), '');
+  }
+
   parts.push('Current request:', prompt);
   return parts.join('\n');
+}
+
+export function taskModeReasoningEffort(mode, configuredEffort) {
+  const normalized = normalizeTaskMode(mode);
+  if (normalized === 'quick') return 'low';
+  if (normalized === 'deep') return 'high';
+  return configuredEffort;
 }
 
 export function buildCodexExecArgs({ model, reasoningEffort, ephemeral, cwd, outputMessagePath }) {

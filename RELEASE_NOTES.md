@@ -1,3 +1,33 @@
+# v1.2.0 — Neural Operating System
+
+Jarvis 1.2 turns the 1.0 command interface into a workspace-aware operating layer. Missions are now planned against real local project signals, execution depth is explicit and persistent, and the Intel view has become a genuine engineering command center.
+
+## Workspace intelligence
+
+- Added a bounded, read-only, local workspace scanner with strict allowlist enforcement and exclusions for dependencies, generated output, caches, and version-control internals.
+- Detects project identity, languages, frameworks, runtimes, build tools, project scripts, test files, TODO/FIXME markers, recent files, Git branch/status/divergence, and readiness risks.
+- Added a 12-column Workspace Intelligence surface with readiness orbit, project telemetry, language spectrum, stack map, runnable commands, Git pulse, recent files, and mission history.
+
+## Neural mission planning
+
+- Added deterministic mission preflight that classifies intent, scores complexity, recommends Quick/Standard/Deep depth, maps execution phases, identifies workspace signals, and defines guardrails before launch.
+- Replaced the old Quick checkbox with persistent Quick, Standard, and Deep execution profiles.
+- Execution depth now changes task persistence, queue/history telemetry, model instructions, verification expectations, and Codex reasoning effort (`low`, configured, or `high`).
+- Added a live Mission Brief beside the neural core and an inspectable Mission Queue drawer with queued-task cancellation.
+
+## Internal architecture
+
+- Added focused `WorkspaceIntelligenceView` and `MissionPlannerController` renderer modules.
+- Added reusable backend `workspaceIntelligence` and `missionPlanner` modules with cache-aware APIs.
+- Added contract, unit, and full lifecycle coverage for workspace scanning, mission planning, deep-mode persistence, provider instructions, and queue behavior.
+- Updated the GitHub macOS lane to compare 1.2 against the verified 1.0 baseline, render a populated Deep mission preflight, run the expanded suite, and package the native app bundle.
+
+## Verification
+
+- TypeScript + Vite production build.
+- UI contract, workspace intelligence, mission planner, memory, voice/recovery, streaming artifact, stream parser, provider failure, and reliability suites.
+- Native macOS application packaging and 1440×900 before/after captures through GitHub Actions.
+
 # v1.0.0 — Neural Command Reborn
 
 Jarvis 1.0 is a full desktop interface and front-end architecture reset. The neural orb, memory engine, provider health, task streaming, voice, recovery, and artifact systems remain intact, but the operator experience has been rebuilt around one clear command hierarchy.

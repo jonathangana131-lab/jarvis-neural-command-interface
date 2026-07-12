@@ -40,6 +40,19 @@ app.whenReady().then(async () => {
   await waitForReady(window);
   await delay(2400);
 
+  await window.webContents.executeJavaScript(`
+    (() => {
+      const prompt = document.querySelector('#task-prompt');
+      if (!prompt) return;
+      prompt.value = 'Transform Jarvis into a workspace-aware neural operating system. Rebuild the command flow, verify every subsystem, and prepare the production release.';
+      prompt.dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('[data-task-mode="deep"]')?.click();
+    })()
+  `);
+  if (prefix.includes('after')) {
+    await waitForCondition(window, "document.querySelector('#mission-brief')?.dataset.state === 'ready'", 15000);
+  }
+
   for (const view of views) {
     await window.webContents.executeJavaScript(`
       (() => {
@@ -83,6 +96,16 @@ async function waitForReady(window) {
     await delay(250);
   }
   throw new Error(`Timed out waiting for Jarvis UI at ${targetUrl}`);
+}
+
+async function waitForCondition(window, expression, timeoutMs) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const ready = await window.webContents.executeJavaScript(`Boolean(${expression})`).catch(() => false);
+    if (ready) return;
+    await delay(200);
+  }
+  throw new Error(`Timed out waiting for capture condition: ${expression}`);
 }
 
 function escapeJs(value) {

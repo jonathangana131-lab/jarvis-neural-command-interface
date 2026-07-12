@@ -12,6 +12,18 @@ const dataDir = path.join(tempRoot, 'data');
 const configPath = path.join(tempRoot, 'jarvis.config.json');
 fs.mkdirSync(workspace, { recursive: true });
 fs.mkdirSync(dataDir, { recursive: true });
+fs.mkdirSync(path.join(workspace, 'src'), { recursive: true });
+fs.mkdirSync(path.join(workspace, 'tests'), { recursive: true });
+fs.writeFileSync(path.join(workspace, 'README.md'), '# Reliability fixture\n');
+fs.writeFileSync(path.join(workspace, 'package.json'), JSON.stringify({
+  name: 'reliability-fixture',
+  scripts: { build: 'node --check src/main.js', test: 'node --test' },
+  dependencies: { express: '^5.0.0' }
+}, null, 2));
+fs.writeFileSync(path.join(workspace, 'src', 'main.js'), 'export const healthy = true;\n');
+fs.writeFileSync(path.join(workspace, 'tests', 'main.test.js'), 'export const verified = true;\n');
+
+const receivedPrompts = [];
 
 const mockServer = http.createServer(async (req, res) => {
   if (req.url === '/v1/models') {
@@ -20,7 +32,8 @@ const mockServer = http.createServer(async (req, res) => {
     return;
   }
   if (req.url === '/v1/chat/completions' && req.method === 'POST') {
-    await readBody(req);
+    const payload = JSON.parse(await readBody(req));
+    receivedPrompts.push(payload.messages?.[0]?.content ?? '');
     res.writeHead(200, {
       'content-type': 'text/event-stream',
       'cache-control': 'no-cache'
@@ -87,21 +100,34 @@ server.stderr.on('data', (chunk) => {
 
 try {
   await waitFor(`http://127.0.0.1:${appPort}/api/config`, 15000);
+  const workspaceReport = await getJson(appPort, `/api/workspace/intelligence?workspace=${encodeURIComponent(workspace)}&force=1`);
+  assert.equal(workspaceReport.intelligence.status, 'ready', 'workspace intelligence should scan an allowed project');
+  assert.ok(workspaceReport.intelligence.stack.some((entry) => entry.name === 'Express'), 'workspace intelligence should detect the project stack');
+  const briefReport = await postJson(appPort, '/api/mission/brief', {
+    prompt: 'Fully rewrite the entire command architecture, build the new system, test every subsystem, and publish the giant production release.',
+    workspace,
+    mode: 'deep'
+  });
+  assert.equal(briefReport.brief.selectedMode, 'deep', 'mission brief should preserve selected execution depth');
+  assert.equal(briefReport.brief.recommendedMode, 'deep', 'large transformations should recommend deep mode');
+
   await postJson(appPort, '/api/queue/pause', {});
   const first = await postJson(appPort, '/api/tasks', { prompt: 'first queued quick task', workspace, provider: 'opencode', quick: true });
   const second = await postJson(appPort, '/api/tasks', { prompt: 'second queued standard task', workspace });
+  const third = await postJson(appPort, '/api/tasks', { prompt: 'third queued deep task', workspace, mode: 'deep' });
   assert.equal(first.task.taskMode, 'quick', 'quick task mode should be persisted at dispatch');
+  assert.equal(third.task.taskMode, 'deep', 'deep task mode should be persisted at dispatch');
   assert.equal(first.task.providerUsed, 'opencode', 'provider alias should be persisted at dispatch');
   let queue = await getJson(appPort, '/api/queue');
   assert.equal(queue.queue.paused, true, 'queue should be paused');
-  assert.equal(queue.queue.queuedCount, 2, 'queue should expose queued task count');
+  assert.equal(queue.queue.queuedCount, 3, 'queue should expose queued task count');
   assert.equal(queue.queue.nextTaskId, first.task.id, 'queue should expose next task');
   assert.match(queue.queue.reason, /paused/i, 'queue should explain why tasks are waiting');
 
   const cancelled = await postJson(appPort, `/api/tasks/${first.task.id}/cancel`, {});
   assert.equal(cancelled.task.status, 'cancelled', 'queued task cancel should work');
   queue = await getJson(appPort, '/api/queue');
-  assert.equal(queue.queue.queuedCount, 1, 'queue count should update after cancel');
+  assert.equal(queue.queue.queuedCount, 2, 'queue count should update after cancel');
 
   await postJson(appPort, '/api/queue/resume', {});
   const finished = await waitForTask(appPort, second.task.id);
@@ -113,6 +139,10 @@ try {
   assert.ok(finished.timing?.startedAt, 'task should include started timing');
   assert.ok(finished.timing?.firstOutputAt, 'task should include first output timing');
   assert.ok(finished.timing?.finishedAt, 'task should include finished timing');
+  const deepFinished = await waitForTask(appPort, third.task.id);
+  assert.equal(deepFinished.status, 'completed', 'deep queued task should complete');
+  assert.equal(deepFinished.taskMode, 'deep', 'deep mode should survive the full task lifecycle');
+  assert.ok(receivedPrompts.some((prompt) => /Execution profile: DEEP/i.test(prompt)), 'deep execution instructions should reach the model provider');
 
   const packageInfo = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../package.json'), 'utf8'));
   const expectedVersion = packageInfo.version;

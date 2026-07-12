@@ -14,10 +14,15 @@ Use the Windows installer from the latest GitHub Release:
 
 - `Jarvis-Neural-Command-Interface-Setup-0.10.0.exe`
 
-The `1.0.0` source is the next major desktop release. The stable installer remains `0.10.0` until the verified `1.0.0` installer is published.
+The `1.2.0` source is the next major desktop release. The stable installer remains `0.10.0` until the verified 1.x installer is published.
 
 ## Current Highlights
 
+- **Workspace Intelligence:** a bounded, local-only project scanner maps language distribution, framework/runtime signals, runnable scripts, test surface, Git state, recent files, code markers, and a concrete mission-readiness score.
+- **Neural Mission Preflight:** Jarvis turns a draft into an intent, complexity score, recommended execution depth, phased plan, workspace signals, and safety rails before anything runs.
+- **Quick / Standard / Deep execution:** three persistent operating profiles now affect the model prompt, Codex reasoning effort, verification expectations, task history, and queue telemetry—not just presentation.
+- **Mission Queue drawer:** inspect running and queued work, see each mission's depth and position, and cancel queued work without leaving Command.
+- A rebuilt Workspace Intelligence command center with project identity, readiness orbit, language topology, detected stack, execution commands, Git pulse, recent files, and recent operations.
 - A rebuilt application shell with a focused command workspace, compact systems rail, live telemetry mast, and a calmer cinematic neural-core stage.
 - A global command menu (`Ctrl/Cmd + K`) for navigation, new chats, voice control, and rapid command composition.
 - One coherent design system across Command, Project Intelligence, Mission Archive, Artifact Vault, Memory Matrix, Settings, setup, recovery, and Diagnostics.
@@ -52,6 +57,8 @@ npm run build
 npm run test:ui-contract
 npm run test:memory
 npm run test:voice-settings
+npm run test:workspace-intelligence
+npm run test:mission-planner
 ```
 
 The GitHub macOS visual workflow captures the current `main` UI and the transformed branch at the same 1440×900 viewport, uploads the comparisons, runs the full reliability suite, and builds the unsigned macOS application bundle.

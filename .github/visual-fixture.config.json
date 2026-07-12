@@ -1,0 +1,24 @@
+{
+  "assistantName": "Jarvis Neural Command Interface",
+  "workspaceAllowlist": ["."],
+  "defaultWorkspace": ".",
+  "memory": {
+    "automatic": true,
+    "databasePath": "memory.sqlite",
+    "extractor": "local-rules",
+    "minConfidence": 0.68
+  },
+  "localModel": {
+    "provider": "opencode",
+    "endpoint": "https://opencode.ai/zen/v1",
+    "model": "minimax-m2.5-free"
+  },
+  "codex": {
+    "command": "codex",
+    "model": "gpt-5.5",
+    "reasoningEffort": "low",
+    "ephemeral": true,
+    "maxTaskRuntimeMs": 900000,
+    "blockedPhrases": []
+  }
+}

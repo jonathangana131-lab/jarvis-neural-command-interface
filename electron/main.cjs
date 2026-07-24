@@ -21,6 +21,11 @@ let backendLog = '';
 let mainWindow = null;
 let tray = null;
 
+function desktopIconPath() {
+  const filename = process.platform === 'darwin' ? 'icon.icns' : 'icon.ico';
+  return path.join(__dirname, '..', 'build', filename);
+}
+
 app.setAppUserModelId(appUserModelId);
 
 const userDataOverride = process.env.JARVIS_USER_DATA_DIR;
@@ -57,7 +62,7 @@ async function createWindow(appUrl) {
     minHeight: 700,
     backgroundColor: '#081018',
     title: 'Jarvis Neural Command Interface',
-    icon: path.join(__dirname, '..', 'build', 'icon.ico'),
+    icon: desktopIconPath(),
     show: false,
     webPreferences: {
       contextIsolation: true,
@@ -370,8 +375,17 @@ function setupTray(appUrl) {
   if (tray) {
     return;
   }
-  const iconPath = path.join(__dirname, '..', 'build', 'icon.ico');
-  tray = new Tray(iconPath);
+  const iconPath = desktopIconPath();
+  if (!fs.existsSync(iconPath)) {
+    console.warn(`Tray icon is unavailable: ${iconPath}`);
+    return;
+  }
+  try {
+    tray = new Tray(iconPath);
+  } catch (error) {
+    console.warn(`Tray setup failed: ${error.message}`);
+    return;
+  }
   tray.setToolTip('Jarvis Neural Command Interface');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Show Jarvis', click: () => showMainWindow(appUrl) },
@@ -416,7 +430,7 @@ async function createStartupErrorWindow(error) {
     minHeight: 480,
     backgroundColor: '#081018',
     title: 'Jarvis Neural Command Interface - Startup Issue',
-    icon: path.join(__dirname, '..', 'build', 'icon.ico'),
+    icon: desktopIconPath(),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,

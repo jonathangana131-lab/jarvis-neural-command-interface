@@ -12,6 +12,8 @@ import { MemoryStore } from './memoryStore.mjs';
 import { CodexTaskRunner } from './codexTaskRunner.mjs';
 import { TaskStore } from './taskStore.mjs';
 import { checkProviderHealth, classifyProviderFailure, providerFailureAction } from './providerHealth.mjs';
+import { analyzeWorkspace } from './workspaceIntelligence.mjs';
+import { createMissionBrief, normalizeTaskMode } from './missionPlanner.mjs';
 
 const app = express();
 const config = loadConfig();
@@ -78,6 +80,7 @@ const opencodeFreeModels = [
   'nemotron-3-super-free'
 ];
 let providerHealthCache = null;
+const workspaceIntelligenceCache = new Map();
 loadModelSecrets(modelSecretPath);
 loadLocalModelState(config, localModelStatePath);
 
@@ -288,6 +291,32 @@ function workspaceSummary() {
     current: config.defaultWorkspace,
     items
   };
+}
+
+function resolveAllowedWorkspace(candidate) {
+  const workspace = path.resolve(expandHomeAndEnvPath(String(candidate ?? config.defaultWorkspace)));
+  if (!isPathAllowed(config, workspace)) {
+    const error = new Error(`Workspace is outside the allowlist: ${workspace}`);
+    error.status = 403;
+    throw error;
+  }
+  return workspace;
+}
+
+function getWorkspaceIntelligence(candidate, { force = false } = {}) {
+  const workspace = path.resolve(expandHomeAndEnvPath(String(candidate ?? config.defaultWorkspace)));
+  const cached = workspaceIntelligenceCache.get(workspace);
+  if (!force && cached && Date.now() - cached.createdAt < 30_000) {
+    return cached.report;
+  }
+  const report = analyzeWorkspace(workspace);
+  workspaceIntelligenceCache.set(workspace, { report, createdAt: Date.now() });
+  if (workspaceIntelligenceCache.size > 12) {
+    const oldest = [...workspaceIntelligenceCache.entries()]
+      .sort((a, b) => a[1].createdAt - b[1].createdAt)[0]?.[0];
+    if (oldest) workspaceIntelligenceCache.delete(oldest);
+  }
+  return report;
 }
 
 async function releaseStatus() {
@@ -962,6 +991,7 @@ app.delete('/api/chats/:id', (req, res) => {
 app.get('/api/dashboard', async (_req, res) => {
   const update = await safeUpdateCheck();
   const storage = storageReport();
+  const intelligence = getWorkspaceIntelligence(config.defaultWorkspace);
   res.json({
     version: packageInfo.version,
     workspace: config.defaultWorkspace,
@@ -980,8 +1010,35 @@ app.get('/api/dashboard', async (_req, res) => {
       logsSize: storage.logs.size,
       dataDir: storage.dataDir
     },
-    workspaces: workspaceSummary()
+    workspaces: workspaceSummary(),
+    intelligence
   });
+});
+
+app.get('/api/workspace/intelligence', (req, res, next) => {
+  try {
+    const workspace = resolveAllowedWorkspace(req.query.workspace);
+    const force = String(req.query.force ?? '').toLowerCase() === 'true' || String(req.query.force ?? '') === '1';
+    res.json({ intelligence: getWorkspaceIntelligence(workspace, { force }) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/mission/brief', (req, res, next) => {
+  try {
+    const workspace = resolveAllowedWorkspace(req.body?.workspace);
+    const mode = normalizeTaskMode(req.body?.mode);
+    const intelligence = getWorkspaceIntelligence(workspace);
+    const brief = createMissionBrief({
+      prompt: req.body?.prompt,
+      workspaceIntelligence: intelligence,
+      mode
+    });
+    res.json({ brief });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get('/api/workspaces', (_req, res) => {

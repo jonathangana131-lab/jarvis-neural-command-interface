@@ -35,7 +35,15 @@ import { JarvisScene } from './JarvisScene';
 import { MemoryAnimator } from './MemoryAnimator';
 import { TaskHud } from './TaskHud';
 import { VoiceSession } from './VoiceSession';
-import type { AppConfig, AssistantMode, ChatSessionRecord, MemoryRecord, ModelKeyStatus, ProviderFailureKind, ProviderHealth, SessionRecoveryState, TaskRecord, VoiceSettings } from './types';
+import { fetchJson, postJson, putJson, readError } from './core/http';
+import { compactPath, escapeHtml, formatBytes, formatDateTime, formatMemoryCount, formatTime, shortId } from './core/format';
+import { CommandPalette } from './ui/CommandPalette';
+import { ShellController } from './ui/ShellController';
+import { MissionPlannerController } from './ui/MissionPlannerController';
+import { WorkspaceIntelligenceView } from './ui/WorkspaceIntelligenceView';
+import { renderMarkdown } from './ui/markdown';
+import type { WorkspaceIntelDashboardReport } from './ui/WorkspaceIntelligenceView';
+import type { AppConfig, AssistantMode, ChatSessionRecord, MemoryRecord, ModelKeyStatus, ProviderFailureKind, ProviderHealth, SessionRecoveryState, TaskMode, TaskRecord, VoiceSettings } from './types';
 
 const jarvisIcons = {
   Activity,
@@ -79,6 +87,8 @@ const voiceStatus = required<HTMLElement>('#voice-status');
 const taskPrompt = required<HTMLTextAreaElement>('#task-prompt');
 const taskWorkspace = required<HTMLInputElement>('#task-workspace');
 const quickTaskMode = required<HTMLInputElement>('#quick-task-mode');
+const taskModeControl = required<HTMLElement>('#task-mode-control');
+const missionBriefRoot = required<HTMLElement>('#mission-brief');
 const runTask = required<HTMLButtonElement>('#run-task');
 const chatSidebarToggle = required<HTMLButtonElement>('#chat-sidebar-toggle');
 const chatSidebarClose = required<HTMLButtonElement>('#chat-sidebar-close');
@@ -103,10 +113,21 @@ const apiKeyStatus = required<HTMLElement>('#api-key-status');
 const pauseQueue = required<HTMLButtonElement>('#pause-queue');
 const resumeQueue = required<HTMLButtonElement>('#resume-queue');
 const queueStatus = required<HTMLElement>('#queue-status');
+const queueDrawerToggle = required<HTMLButtonElement>('#queue-drawer-toggle');
+const queueDrawerCount = required<HTMLElement>('#queue-drawer-count');
+const queueDrawerClose = required<HTMLButtonElement>('#queue-drawer-close');
+const missionQueueDrawer = required<HTMLElement>('#mission-queue-drawer');
+const missionQueueList = required<HTMLElement>('#mission-queue-list');
 const layoutCockpitBtn = required<HTMLButtonElement>('#layout-cockpit');
 const layoutTerminalBtn = required<HTMLButtonElement>('#layout-terminal');
 const layoutBubblesBtn = required<HTMLButtonElement>('#layout-bubbles');
 const missionControl = required<HTMLElement>('.mission-control');
+const systemClock = required<HTMLElement>('#system-clock');
+const commandMenu = required<HTMLElement>('#command-menu');
+const commandMenuPanel = required<HTMLElement>('#command-menu-panel');
+const commandMenuSearch = required<HTMLInputElement>('#command-menu-search');
+const commandMenuList = required<HTMLElement>('#command-menu-list');
+const commandMenuToggle = required<HTMLButtonElement>('#command-menu-toggle');
 const updateBanner = required<HTMLElement>('#update-banner');
 const updateBannerTitle = required<HTMLElement>('#update-banner-title');
 const updateBannerDetail = required<HTMLElement>('#update-banner-detail');
@@ -185,6 +206,7 @@ const releaseAssistant = required<HTMLElement>('#release-assistant');
 const workspaceSwitcher = required<HTMLSelectElement>('#workspace-switcher');
 const saveWorkspace = required<HTMLButtonElement>('#save-workspace');
 const taskHud = new TaskHud(required<HTMLElement>('#task-hud'), cancelTask, renderIcons);
+const shell = new ShellController({ root: app, clock: systemClock });
 const scene = new JarvisScene(canvas, {
   onRendererStatus: (status) => {
     voiceStatus.textContent = status;
@@ -208,6 +230,26 @@ const voiceSession = new VoiceSession({
     scheduleVoiceAutoSend(text);
     void rememberText(text, 'voice');
   }
+});
+
+new CommandPalette({
+  overlay: commandMenu,
+  panel: commandMenuPanel,
+  input: commandMenuSearch,
+  list: commandMenuList,
+  toggle: commandMenuToggle,
+  onNavigate: requestTab,
+  onNewChat: () => void startNewChat(),
+  onFocusPrompt: () => {
+    requestTab('run');
+    taskPrompt.focus();
+    syncTaskPromptHeight();
+    voiceStatus.textContent = 'Command composer ready.';
+  },
+  onVoice: () => void toggleVoiceDictation(),
+  onThink: () => thinkDemo.click(),
+  renderIcons,
+  canOpen: () => !isSetupWizardOpen()
 });
 
 let config: AppConfig | null = null;
@@ -267,6 +309,32 @@ let eventsConnected = false;
 const queuedWatchTimers = new Map<string, number>();
 let savedWorkspaces: string[] = loadSavedWorkspaces();
 
+const missionPlanner = new MissionPlannerController({
+  prompt: taskPrompt,
+  workspace: taskWorkspace,
+  briefRoot: missionBriefRoot,
+  modeRoot: taskModeControl,
+  quickCompatibilityInput: quickTaskMode,
+  onModeChange: () => renderCommandChat(true)
+});
+
+const workspaceIntelligenceView = new WorkspaceIntelligenceView({
+  root: dashboardGrid,
+  onRun: () => setTab('run'),
+  onRelease: () => {
+    setTab('diagnostics');
+    void loadReleaseAssistant();
+  },
+  onOpenChat: (chatId) => {
+    selectChat(chatId);
+    setTab('run');
+  },
+  onOpenTask: openDashboardTask,
+  onCompose: composeMission,
+  onRescan: () => void loadDashboard(true),
+  onRendered: renderIcons
+});
+
 window.addEventListener('error', (event) => {
   reportClientIssue(event.error ?? event.message, 'Unexpected UI error');
 });
@@ -288,7 +356,7 @@ type MissionStarter = {
   label: string;
   detail: string;
   icon: string;
-  quick: boolean;
+  mode: TaskMode;
   prompt: string;
 };
 
@@ -298,7 +366,7 @@ const missionStarterItems: MissionStarter[] = [
     label: 'Health Check',
     detail: 'build, tests, risks',
     icon: 'activity',
-    quick: true,
+    mode: 'quick',
     prompt: 'Run a focused health check for this app: inspect the current git diff, run the relevant build/tests, identify the highest-risk bugs or UI regressions, and fix any small issues you can verify safely.'
   },
   {
@@ -306,7 +374,7 @@ const missionStarterItems: MissionStarter[] = [
     label: 'Polish UI',
     detail: 'layout, spacing, feel',
     icon: 'sparkles',
-    quick: false,
+    mode: 'deep',
     prompt: 'Improve the most important visible UI rough edges in this app. Prioritize smoother layout, fewer overlaps, clearer controls, and a more stable polished feel. Verify with a rendered browser check.'
   },
   {
@@ -314,7 +382,7 @@ const missionStarterItems: MissionStarter[] = [
     label: 'Find Bug',
     detail: 'inspect and fix',
     icon: 'bug',
-    quick: false,
+    mode: 'standard',
     prompt: 'Find one important bug or stability problem in this app, explain why it matters, implement a focused fix, and run the smallest meaningful verification.'
   },
   {
@@ -322,7 +390,7 @@ const missionStarterItems: MissionStarter[] = [
     label: 'Useful Feature',
     detail: 'ship one workflow',
     icon: 'plus-circle',
-    quick: false,
+    mode: 'standard',
     prompt: 'Add one practical feature a real user would use in this app. Keep it consistent with the existing design, wire it end to end, and verify it works.'
   },
   {
@@ -330,7 +398,7 @@ const missionStarterItems: MissionStarter[] = [
     label: 'Explain App',
     detail: 'map the codebase',
     icon: 'map',
-    quick: true,
+    mode: 'quick',
     prompt: 'Explain how this app is structured, where the main UI, server, memory, voice, and Electron pieces live, and what files I should edit for common changes.'
   },
   {
@@ -338,7 +406,7 @@ const missionStarterItems: MissionStarter[] = [
     label: 'Release Prep',
     detail: 'installer readiness',
     icon: 'rocket',
-    quick: false,
+    mode: 'deep',
     prompt: 'Prepare this app for a local release pass: check version/release docs, run build and focused smoke tests, inspect installer readiness, and list anything that should block release.'
   }
 ];
@@ -450,24 +518,7 @@ type WorkspaceSummary = {
   items: Array<{ path: string; label: string; allowed: boolean; exists: boolean; current: boolean }>;
 };
 
-type DashboardReport = {
-  version: string;
-  workspace: string;
-  chats: ChatSessionRecord[];
-  tasks: TaskRecord[];
-  memory: { count: number; embeddings: { ready?: boolean; disabled?: boolean; lastError?: string | null } };
-  queue: QueueStatus;
-  update: {
-    currentVersion: string;
-    latestVersion: string;
-    updateAvailable: boolean;
-    assetName: string | null;
-    assetSize: number | null;
-    error: string | null;
-  };
-  storage: { totalSize: number; updatesSize: number; backupsSize: number; logsSize: number; dataDir: string };
-  workspaces: WorkspaceSummary;
-};
+type DashboardReport = WorkspaceIntelDashboardReport;
 
 type ReleaseStatus = {
   version: string;
@@ -577,11 +628,12 @@ missionStarters.addEventListener('click', (event) => {
     return;
   }
   taskPrompt.value = starter.prompt;
-  quickTaskMode.checked = starter.quick;
+  missionPlanner.setMode(starter.mode, { replan: false });
   syncTaskPromptHeight();
   saveDraftNow();
+  missionPlanner.schedule({ immediate: true });
   renderCommandChat(true);
-  scene.pulseResponse(starter.quick ? 0.55 : 0.75);
+  scene.pulseResponse(starter.mode === 'quick' ? 0.55 : starter.mode === 'deep' ? 0.95 : 0.75);
   voiceStatus.textContent = `${starter.label} mission drafted.`;
   taskPrompt.focus();
 });
@@ -607,10 +659,14 @@ chatSearch.addEventListener('input', () => {
 });
 
 refreshDashboard.addEventListener('click', () => {
-  void loadDashboard();
+  void loadDashboard(true);
 });
 
 document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && missionQueueDrawer.dataset.open === 'true') {
+    setQueueDrawerOpen(false);
+    return;
+  }
   if (event.key === 'Escape' && app.dataset.chatSidebar === 'open') {
     setChatSidebarOpen(false);
     return;
@@ -690,7 +746,7 @@ async function dispatchTask() {
 
   try {
     const chat = await ensureSelectedChat(prompt);
-    const quick = quickTaskMode.checked;
+    const taskMode = missionPlanner.mode;
     taskHud.upsert({
       id: `dispatch-${Date.now()}`,
       chatId: chat.id,
@@ -699,7 +755,7 @@ async function dispatchTask() {
       status: 'queued',
       phase: 'queued',
       output: '',
-      taskMode: quick ? 'quick' : 'standard',
+      taskMode,
       timing: { queuedAt: new Date().toISOString() },
       createdAt: new Date().toISOString(),
       finishedAt: null,
@@ -708,7 +764,7 @@ async function dispatchTask() {
     const response = await fetch('/api/tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, workspace: taskWorkspace.value, chatId: chat.id, quick })
+      body: JSON.stringify({ prompt, workspace: taskWorkspace.value, chatId: chat.id, mode: taskMode, taskMode })
     });
     const data = (await response.json()) as { task?: TaskRecord; error?: string };
     if (!response.ok || !data.task) {
@@ -721,6 +777,7 @@ async function dispatchTask() {
       return;
     }
     taskPrompt.value = '';
+    missionPlanner.schedule();
     syncTaskPromptHeight();
     clearSavedDraft();
     taskPrompt.focus();
@@ -857,6 +914,14 @@ pauseQueue.addEventListener('click', async () => {
 resumeQueue.addEventListener('click', async () => {
   const data = await postJson<{ queue: QueueStatus }>('/api/queue/resume', {});
   renderQueueStatus(data.queue);
+});
+
+queueDrawerToggle.addEventListener('click', () => {
+  setQueueDrawerOpen(missionQueueDrawer.dataset.open !== 'true');
+});
+
+queueDrawerClose.addEventListener('click', () => {
+  setQueueDrawerOpen(false);
 });
 
 layoutCockpitBtn.addEventListener('click', () => applyChatLayout('cockpit'));
@@ -1756,9 +1821,15 @@ function upsertVisibleChat(chat: ChatSessionRecord, select: boolean) {
   renderChatSessions();
 }
 
-async function loadDashboard() {
+async function loadDashboard(forceIntelligence = false) {
   try {
-    const data = await fetchJson<DashboardReport>('/api/dashboard');
+    const [data, refreshed] = await Promise.all([
+      fetchJson<DashboardReport>('/api/dashboard'),
+      forceIntelligence
+        ? fetchJson<{ intelligence: DashboardReport['intelligence'] }>(`/api/workspace/intelligence?workspace=${encodeURIComponent(taskWorkspace.value)}&force=1`)
+        : Promise.resolve(null)
+    ]);
+    if (refreshed?.intelligence) data.intelligence = refreshed.intelligence;
     renderDashboard(data);
     renderWorkspaceSwitcher(data.workspaces);
   } catch (error) {
@@ -1767,62 +1838,28 @@ async function loadDashboard() {
 }
 
 function renderDashboard(data: DashboardReport) {
-  const activeTask = data.tasks.find((task) => task.status === 'running' || task.status === 'queued');
-  const recentTasks = data.tasks.slice(0, 5).map((task) => `
-    <button class="dashboard-list-row" type="button" data-dashboard-task="${escapeHtml(task.id)}">
-      <strong>${escapeHtml(compactSessionTitle(task.prompt))}</strong>
-      <span>${escapeHtml(task.status)} / ${escapeHtml(formatTime(task.createdAt))}</span>
-    </button>
-  `).join('') || '<p class="dashboard-empty">No tasks yet.</p>';
-  const recentChats = data.chats.slice(0, 5).map((chat) => `
-    <button class="dashboard-list-row" type="button" data-dashboard-chat="${escapeHtml(chat.id)}">
-      <strong>${chat.pinned ? 'Pinned / ' : ''}${escapeHtml(compactSessionTitle(chat.title))}</strong>
-      <span>${chat.taskCount ?? 0} tasks / ${escapeHtml(formatTime(chat.lastTaskAt ?? chat.updatedAt))}</span>
-    </button>
-  `).join('') || '<p class="dashboard-empty">No chats yet.</p>';
-  dashboardGrid.innerHTML = `
-    <article class="dashboard-card dashboard-card--wide">
-      <span class="micro-label">Readiness</span>
-      <strong>${escapeHtml(activeTask ? 'Task active' : 'Ready for work')}</strong>
-      <p>${escapeHtml(activeTask ? compactSessionTitle(activeTask.prompt) : `${data.memory.count} memories indexed. ${data.queue.paused ? 'Queue paused.' : 'Queue ready.'}`)}</p>
-      <div class="dashboard-actions">
-        <button class="hud-button hud-button--primary" type="button" data-dashboard-run data-icon="terminal-square"><span>Run Mission</span></button>
-        <button class="hud-button" type="button" data-dashboard-release data-icon="rocket"><span>Release Assistant</span></button>
-      </div>
-    </article>
-    <article class="dashboard-card"><span class="micro-label">Version</span><strong>${escapeHtml(data.version)}</strong><p>${escapeHtml(data.update.updateAvailable ? `Update ${data.update.latestVersion} available` : data.update.error ? `Update check failed: ${data.update.error}` : 'Current release installed')}</p></article>
-    <article class="dashboard-card"><span class="micro-label">Storage</span><strong>${escapeHtml(formatBytes(data.storage.totalSize))}</strong><p>${escapeHtml(`Updates ${formatBytes(data.storage.updatesSize)} / backups ${formatBytes(data.storage.backupsSize)} / logs ${formatBytes(data.storage.logsSize)}`)}</p></article>
-    <article class="dashboard-card"><span class="micro-label">Workspace</span><strong>${escapeHtml(compactPath(data.workspace))}</strong><p>${escapeHtml(`${data.workspaces.items.length} saved or discovered workspace${data.workspaces.items.length === 1 ? '' : 's'}`)}</p></article>
-    <article class="dashboard-card dashboard-card--wide"><span class="micro-label">Recent Chats</span><div class="dashboard-list">${recentChats}</div></article>
-    <article class="dashboard-card dashboard-card--wide"><span class="micro-label">Recent Tasks</span><div class="dashboard-list">${recentTasks}</div></article>
-  `;
-  dashboardGrid.querySelector<HTMLButtonElement>('[data-dashboard-run]')?.addEventListener('click', () => setTab('run'));
-  dashboardGrid.querySelector<HTMLButtonElement>('[data-dashboard-release]')?.addEventListener('click', () => {
-    setTab('diagnostics');
-    void loadReleaseAssistant();
-  });
-  dashboardGrid.querySelectorAll<HTMLButtonElement>('[data-dashboard-chat]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const chatId = button.dataset.dashboardChat;
-      if (chatId) {
-        selectChat(chatId);
-        setTab('run');
-      }
-    });
-  });
-  dashboardGrid.querySelectorAll<HTMLButtonElement>('[data-dashboard-task]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const taskId = button.dataset.dashboardTask;
-      if (!taskId) return;
-      selectedTaskId = taskId;
-      selectedChatId = visibleTasks.find((task) => task.id === taskId)?.chatId ?? selectedChatId;
-      persistSelectedChat();
-      setTab('history');
-      renderTaskHistory();
-      renderCommandChat(true);
-    });
-  });
-  renderIcons();
+  workspaceIntelligenceView.render(data);
+}
+
+function openDashboardTask(taskId: string) {
+  selectedTaskId = taskId;
+  selectedChatId = visibleTasks.find((task) => task.id === taskId)?.chatId ?? selectedChatId;
+  persistSelectedChat();
+  setTab('history');
+  renderTaskHistory();
+  renderCommandChat(true);
+}
+
+function composeMission(prompt: string, mode: TaskMode = 'standard') {
+  taskPrompt.value = prompt;
+  missionPlanner.setMode(mode, { replan: false });
+  syncTaskPromptHeight();
+  saveDraftNow();
+  setTab('run');
+  missionPlanner.schedule({ immediate: true });
+  taskPrompt.focus();
+  scene.pulseResponse(mode === 'deep' ? 1 : 0.65);
+  voiceStatus.textContent = `${mode === 'deep' ? 'Deep' : mode === 'quick' ? 'Quick' : 'Standard'} mission composed.`;
 }
 
 function compareChats(a: ChatSessionRecord, b: ChatSessionRecord) {
@@ -1893,6 +1930,7 @@ function restoreSavedDraft() {
   }
   taskPrompt.value = draft;
   syncTaskPromptHeight();
+  missionPlanner.schedule({ immediate: true });
   voiceStatus.textContent = 'Recovered unsent command draft.';
 }
 
@@ -2148,7 +2186,7 @@ function renderQueueInspector(queue: QueueStatus) {
     : items.map((item) => `
       <article class="queue-row">
         <div>
-          <strong>${escapeHtml(item.taskMode === 'quick' ? 'Quick task' : 'Standard task')}</strong>
+          <strong>${escapeHtml(item.taskMode === 'deep' ? 'Deep task' : item.taskMode === 'quick' ? 'Quick task' : 'Standard task')}</strong>
           <span>${escapeHtml(shortId(item.id))} / ${escapeHtml(formatDateTime(item.createdAt))}</span>
           <p>${escapeHtml(item.prompt)}</p>
         </div>
@@ -3674,6 +3712,7 @@ async function startNewChat() {
   lastMissionSignature = '';
   taskPrompt.value = '';
   restoreSavedDraft();
+  missionPlanner.schedule();
   renderTaskHistory();
   renderChatSessions();
   renderCommandChat(true);
@@ -3703,6 +3742,7 @@ function selectChat(chatId: string) {
   lastMissionSignature = '';
   taskPrompt.value = '';
   restoreSavedDraft();
+  missionPlanner.schedule();
   renderTaskHistory();
   renderChatSessions();
   renderCommandChat(true);
@@ -3884,6 +3924,7 @@ function renderCommandChat(immediate = false) {
   const promptPreview = prompt || draftPrompt || 'Standing by.';
   const provider = providerLabel(localProvider());
   const model = settingsLocalModel.value || providerDefaultModel(localProvider()) || config?.codexModel || 'default';
+  const activeTaskMode = (latestTask?.taskMode === 'quick' || latestTask?.taskMode === 'deep' ? latestTask.taskMode : latestTask?.taskMode === 'standard' ? 'standard' : missionPlanner.mode) as TaskMode;
   const createdMemoryCount = latestTask?.createdMemoryIds?.length ?? 0;
   const rememberedMemoryCount = latestTask?.rememberedMemoryIds?.length ?? 0;
   const artifactCount = artifactCountForTask(latestTask);
@@ -3913,7 +3954,8 @@ function renderCommandChat(immediate = false) {
     promptPreview,
     missionQueueLabel,
     provider,
-    model
+    model,
+    activeTaskMode
   });
 
   if (signature === lastMissionSignature) {
@@ -3932,7 +3974,7 @@ function renderCommandChat(immediate = false) {
     missionVitals.innerHTML = `
       <span><b>${escapeHtml(provider)}</b><em>${escapeHtml(modelDisplayName(model))}</em></span>
       <span><b>${escapeHtml(memoryLine)}</b><em>${escapeHtml(missionQueueLabel)}</em></span>
-      <span><b>${visibleTasks.length} tasks</b><em>${escapeHtml(compactPath(taskWorkspace.value || config?.defaultWorkspace || ''))}</em></span>
+      <span><b>${escapeHtml(titleCase(activeTaskMode))} mode</b><em>${escapeHtml(compactPath(taskWorkspace.value || config?.defaultWorkspace || ''))}</em></span>
     `;
     missionMemorySummary.textContent = rememberedMemoryCount > 0
       ? `${rememberedMemoryCount} recalled / ${createdMemoryCount} saved`
@@ -3964,7 +4006,7 @@ function renderCommandChat(immediate = false) {
   missionVitals.innerHTML = `
     <span><b>${escapeHtml(provider)}</b><em>${escapeHtml(modelDisplayName(model))}</em></span>
     <span><b>${escapeHtml(memoryLine)}</b><em>${escapeHtml(missionQueueLabel)}</em></span>
-    <span><b>${visibleTasks.length} tasks</b><em>${escapeHtml(compactPath(taskWorkspace.value || config?.defaultWorkspace || ''))}</em></span>
+    <span><b>${escapeHtml(titleCase(activeTaskMode))} mode</b><em>${escapeHtml(compactPath(taskWorkspace.value || config?.defaultWorkspace || ''))}</em></span>
   `;
   missionMemorySummary.textContent = rememberedMemoryCount > 0
     ? `${rememberedMemoryCount} recalled / ${createdMemoryCount} saved`
@@ -4255,7 +4297,7 @@ function wireActiveTaskActions() {
 
 function useTaskPrompt(task: TaskRecord) {
   taskPrompt.value = task.prompt;
-  quickTaskMode.checked = task.taskMode === 'quick';
+  missionPlanner.syncTaskMode(task.taskMode);
   selectedTaskId = task.id;
   selectedChatId = task.chatId ?? selectedChatId;
   persistSelectedChat();
@@ -4280,187 +4322,6 @@ function summarizeTaskForCopy(task: TaskRecord) {
     `Status: ${task.status}${task.phase ? ` / ${task.phase}` : ''}`,
     `Summary: ${shortOutput}`
   ].join('\n');
-}
-
-function renderMarkdown(markdown: string): string {
-  if (!markdown) return '';
-
-  const escapeHTMLText = (str: string) => {
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  };
-
-  const lines = markdown.split('\n');
-  let html = '';
-  let inCodeBlock = false;
-  let codeLanguage = '';
-  let codeContent: string[] = [];
-  let inList = false;
-  let listType: 'ul' | 'ol' | null = null;
-  let inBlockquote = false;
-
-  const closeListIfActive = () => {
-    if (inList && listType) {
-      html += `</${listType}>\n`;
-      inList = false;
-      listType = null;
-    }
-  };
-
-  const closeBlockquoteIfActive = () => {
-    if (inBlockquote) {
-      html += `</blockquote>\n`;
-      inBlockquote = false;
-    }
-  };
-
-  const parseInlineMarkdown = (text: string): string => {
-    let escaped = escapeHTMLText(text);
-    
-    // Inline code: `code`
-    escaped = escaped.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
-    
-    // Bold: **text**
-    escaped = escaped.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    
-    // Italic: *text*
-    escaped = escaped.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-    
-    return escaped;
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    // Check code blocks
-    if (line.trim().startsWith('```')) {
-      if (inCodeBlock) {
-        // Close code block
-        const joinedContent = codeContent.join('\n');
-        const escapedCode = escapeHTMLText(joinedContent);
-        html += `
-          <div class="code-block-wrapper">
-            <div class="code-block-header">
-              <span class="code-block-lang">${escapeHTMLText(codeLanguage || 'code')}</span>
-              <button class="code-block-copy" type="button">
-                <span>Copy</span>
-              </button>
-            </div>
-            <pre><code class="language-${escapeHTMLText(codeLanguage || 'plaintext')}">${escapedCode}</code></pre>
-          </div>
-        `;
-        inCodeBlock = false;
-        codeContent = [];
-        codeLanguage = '';
-      } else {
-        // Open code block
-        closeListIfActive();
-        closeBlockquoteIfActive();
-        inCodeBlock = true;
-        codeLanguage = line.trim().slice(3).trim();
-      }
-      continue;
-    }
-
-    if (inCodeBlock) {
-      codeContent.push(line);
-      continue;
-    }
-
-    // Blockquotes
-    if (line.trim().startsWith('&gt;') || line.trim().startsWith('>')) {
-      closeListIfActive();
-      if (!inBlockquote) {
-        html += `<blockquote>\n`;
-        inBlockquote = true;
-      }
-      const blockquoteText = line.trim().replace(/^(&gt;|>)\s?/, '');
-      html += `<p>${parseInlineMarkdown(blockquoteText)}</p>\n`;
-      continue;
-    } else {
-      closeBlockquoteIfActive();
-    }
-
-    // Headings
-    const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
-    if (headingMatch) {
-      closeListIfActive();
-      const level = headingMatch[1].length;
-      const headingText = headingMatch[2].trim();
-      html += `<h${level}>${parseInlineMarkdown(headingText)}</h${level}>\n`;
-      continue;
-    }
-
-    // Horizontal Rules
-    if (line.trim() === '---' || line.trim() === '***' || line.trim() === '___') {
-      closeListIfActive();
-      html += `<hr />\n`;
-      continue;
-    }
-
-    // Unordered Lists
-    const ulMatch = line.match(/^(\*|-|\+)\s+(.*)$/);
-    if (ulMatch) {
-      if (!inList || listType !== 'ul') {
-        closeListIfActive();
-        html += `<ul>\n`;
-        inList = true;
-        listType = 'ul';
-      }
-      const itemText = ulMatch[2].trim();
-      html += `<li>${parseInlineMarkdown(itemText)}</li>\n`;
-      continue;
-    }
-
-    // Ordered Lists
-    const olMatch = line.match(/^(\d+)\.\s+(.*)$/);
-    if (olMatch) {
-      if (!inList || listType !== 'ol') {
-        closeListIfActive();
-        html += `<ol>\n`;
-        inList = true;
-        listType = 'ol';
-      }
-      const itemText = olMatch[2].trim();
-      html += `<li>${parseInlineMarkdown(itemText)}</li>\n`;
-      continue;
-    }
-
-    // Paragraph or Empty Line
-    if (line.trim() === '') {
-      closeListIfActive();
-      continue;
-    }
-
-    // Regular line
-    closeListIfActive();
-    html += `<p>${parseInlineMarkdown(line)}</p>\n`;
-  }
-
-  // Handle open block cleanups (useful for streaming output)
-  if (inCodeBlock) {
-    const joinedContent = codeContent.join('\n');
-    const escapedCode = escapeHTMLText(joinedContent);
-    html += `
-      <div class="code-block-wrapper">
-        <div class="code-block-header">
-          <span class="code-block-lang">${escapeHTMLText(codeLanguage || 'code')} (streaming)</span>
-          <button class="code-block-copy" type="button">
-            <span>Copy</span>
-          </button>
-        </div>
-        <pre><code class="language-${escapeHTMLText(codeLanguage || 'plaintext')}">${escapedCode}</code></pre>
-      </div>
-    `;
-  }
-  closeListIfActive();
-  closeBlockquoteIfActive();
-
-  return html;
 }
 
 function renderConversationMessage(
@@ -4845,6 +4706,7 @@ function statusTitle(status: TaskRecord['status']) {
 
 function setTab(tab: string) {
   currentTab = tab;
+  shell.setView(tab);
   document.querySelectorAll<HTMLButtonElement>('[data-console-tab]').forEach((button) => {
     button.classList.toggle('active', button.dataset.consoleTab === currentTab);
   });
@@ -4942,7 +4804,52 @@ function renderQueueStatus(queue: QueueStatus) {
         : 'Queue ready';
   queueStatus.textContent = missionQueueLabel;
   queueStatus.title = queue.reason ?? '';
+  queueDrawerCount.textContent = String(queue.queuedCount ?? 0);
+  queueDrawerToggle.classList.toggle('has-items', Boolean(queue.runningTaskId || (queue.queuedCount ?? 0) > 0));
+  renderMissionQueue(queue);
   renderCommandChat();
+}
+
+function setQueueDrawerOpen(open: boolean) {
+  missionQueueDrawer.dataset.open = String(open);
+  missionQueueDrawer.setAttribute('aria-hidden', String(!open));
+  queueDrawerToggle.setAttribute('aria-expanded', String(open));
+}
+
+function renderMissionQueue(queue: QueueStatus) {
+  const running = queue.runningTaskId
+    ? `<article class="mission-queue-item mission-queue-item--running"><i></i><div><span class="micro-label">Active channel</span><strong>Running ${escapeHtml(shortId(queue.runningTaskId))}</strong><p>${escapeHtml(queue.reason ?? 'Mission execution in progress.')}</p></div></article>`
+    : '';
+  const items = (queue.items ?? []).map((item, index) => `
+    <article class="mission-queue-item">
+      <span class="mission-queue-item__index">${String(index + 1).padStart(2, '0')}</span>
+      <div>
+        <span class="micro-label">${escapeHtml(item.taskMode === 'deep' ? 'Deep' : item.taskMode === 'quick' ? 'Quick' : 'Standard')} / ${escapeHtml(formatTime(item.createdAt))}</span>
+        <strong>${escapeHtml(compactSessionTitle(item.prompt))}</strong>
+        <p>${escapeHtml(item.phase ?? 'queued')}</p>
+      </div>
+      <button class="hud-button" type="button" data-queue-cancel="${escapeHtml(item.id)}" data-icon="octagon-x"><span>Cancel</span></button>
+    </article>
+  `).join('');
+  missionQueueList.innerHTML = running || items
+    ? `${running}${items}`
+    : '<div class="mission-queue-empty"><i></i><strong>Pipeline clear</strong><p>New missions will appear here with their execution depth and position.</p></div>';
+  missionQueueList.querySelectorAll<HTMLButtonElement>('[data-queue-cancel]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const taskId = button.dataset.queueCancel;
+      if (!taskId) return;
+      button.disabled = true;
+      try {
+        await postJson(`/api/tasks/${encodeURIComponent(taskId)}/cancel`, {});
+        const data = await fetchJson<{ queue: QueueStatus }>('/api/queue');
+        renderQueueStatus(data.queue);
+      } catch (error) {
+        voiceStatus.textContent = error instanceof Error ? error.message : 'Unable to cancel queued mission.';
+        button.disabled = false;
+      }
+    });
+  });
+  renderIcons();
 }
 
 function scheduleQueuedTaskWatch(task: TaskRecord) {
@@ -5037,6 +4944,7 @@ function appendPromptText(text: string) {
   taskPrompt.value = `${taskPrompt.value.trimEnd()}${separator}${trimmed}`;
   syncTaskPromptHeight();
   saveDraftNow();
+  missionPlanner.schedule({ immediate: true });
   renderCommandChat(true);
   taskPrompt.focus();
 }
@@ -5073,47 +4981,6 @@ function scheduleVoiceAutoSend(transcript: string) {
   }, 1000);
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(await readError(response, `${url} returned ${response.status}`));
-  }
-  return response.json() as Promise<T>;
-}
-
-async function postJson<T>(url: string, body: unknown): Promise<T> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  if (!response.ok) {
-    throw new Error(await readError(response, `${url} returned ${response.status}`));
-  }
-  return response.json() as Promise<T>;
-}
-
-async function putJson<T>(url: string, body: unknown): Promise<T> {
-  const response = await fetch(url, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  if (!response.ok) {
-    throw new Error(await readError(response, `${url} returned ${response.status}`));
-  }
-  return response.json() as Promise<T>;
-}
-
-async function readError(response: Response, fallback: string) {
-  try {
-    const data = await response.json() as { error?: string };
-    return data.error ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -5124,59 +4991,4 @@ function required<T extends Element>(selector: string): T {
     throw new Error(`Missing element: ${selector}`);
   }
   return element;
-}
-
-function compactPath(value: string) {
-  return value.replace(/^C:\\Users\\[^\\]+\\/, '~\\');
-}
-
-function formatMemoryCount(count: number) {
-  return `${count} ${count === 1 ? 'memory' : 'memories'}`;
-}
-
-function formatTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function formatDateTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
-}
-
-function formatBytes(value: number) {
-  if (!Number.isFinite(value) || value <= 0) {
-    return '0 B';
-  }
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let size = value;
-  let unit = 0;
-  while (size >= 1024 && unit < units.length - 1) {
-    size /= 1024;
-    unit += 1;
-  }
-  return `${size.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
-}
-
-function shortId(id: string) {
-  return id.split('-')[0] ?? id;
-}
-
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (match) => {
-    const entities: Record<string, string> = {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;'
-    };
-    return entities[match];
-  });
 }

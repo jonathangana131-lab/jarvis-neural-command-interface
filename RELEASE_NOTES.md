@@ -1,3 +1,89 @@
+# v2.0.0 — Cognitive Atlas
+
+Jarvis 2 is a full visual-system and neural-core rewrite. The product is no longer a collection of HUD panels orbiting a small wire sphere; it is one cognitive operating environment centered on a living memory atlas.
+
+## New product concept
+
+- Reframed Jarvis as a **Cognitive Atlas** with seven connected operating spaces: Cognitive Command, Intelligence Map, Mission Archive, Creation Vault, Memory Atlas, Jarvis Settings, and System Health.
+- Replaced duplicated navigation names and shortcuts with a typed central atlas registry shared by the shell and global neural search.
+- Added direct `Alt + 1…7` navigation and view-change events while retaining `Ctrl/Cmd + K`.
+
+## Living memory core
+
+- Rebuilt the visual center as a layered luminous core with additive bloom, aura, geometric shells, and state-aware color.
+- Replaced the old spherical wire cage with a deterministic recursive dendrite generator. Branches curl around the core, split into finer neurons, and use cyan, blue, green, amber, and violet memory language.
+- Pulled real engrams closer to the core, strengthened semantic paths, and preserved clickable nodes, cosine edges, recall flashes, travelling pulses, memory growth, speech reaction, and task-state animation.
+- Added a dedicated Memory Atlas camera composition that moves the 3D graph beside the searchable memory records instead of hiding it behind the page.
+
+## Interface rewrite
+
+- Deleted the accumulated v1 stylesheet and rebuilt the cascade with explicit reset, foundation, shell, component, command, surface, overlay, and responsive layers.
+- Rebuilt the desktop frame, atlas rail, telemetry mast, thought stream, mission preflight, command composer, Intelligence bento grid, archive, creation, memory, settings, health, drawers, setup, updater, and command search.
+- Replaced the flat cyan-only HUD with restrained obsidian glass, stronger typography, clearer spacing, semantic cyan/violet/amber/green accents, and fewer visual borders.
+- Kept all 135 required controls, keyboard focus treatment, local-only fonts, reduced-motion behavior, and compact/mobile layouts.
+
+## Verification
+
+- Added a v2 architecture contract for version identity, the layered design system, living dendrite renderer, Memory Atlas camera, shared seven-space registry, and complete visual workflow.
+- Expanded the macOS visual lane to compare v2 against the complete v1.2 branch across all seven pages at 1440×900.
+- Production build plus UI, v2 architecture, workspace intelligence, mission planner, memory, voice/recovery, artifact, stream parser, provider failure, and reliability suites.
+
+# v1.2.0 — Neural Operating System
+
+Jarvis 1.2 turns the 1.0 command interface into a workspace-aware operating layer. Missions are now planned against real local project signals, execution depth is explicit and persistent, and the Intel view has become a genuine engineering command center.
+
+## Workspace intelligence
+
+- Added a bounded, read-only, local workspace scanner with strict allowlist enforcement and exclusions for dependencies, generated output, caches, and version-control internals.
+- Detects project identity, languages, frameworks, runtimes, build tools, project scripts, test files, TODO/FIXME markers, recent files, Git branch/status/divergence, and readiness risks.
+- Added a 12-column Workspace Intelligence surface with readiness orbit, project telemetry, language spectrum, stack map, runnable commands, Git pulse, recent files, and mission history.
+
+## Neural mission planning
+
+- Added deterministic mission preflight that classifies intent, scores complexity, recommends Quick/Standard/Deep depth, maps execution phases, identifies workspace signals, and defines guardrails before launch.
+- Replaced the old Quick checkbox with persistent Quick, Standard, and Deep execution profiles.
+- Execution depth now changes task persistence, queue/history telemetry, model instructions, verification expectations, and Codex reasoning effort (`low`, configured, or `high`).
+- Added a live Mission Brief beside the neural core and an inspectable Mission Queue drawer with queued-task cancellation.
+
+## Internal architecture
+
+- Added focused `WorkspaceIntelligenceView` and `MissionPlannerController` renderer modules.
+- Added reusable backend `workspaceIntelligence` and `missionPlanner` modules with cache-aware APIs.
+- Added contract, unit, and full lifecycle coverage for workspace scanning, mission planning, deep-mode persistence, provider instructions, and queue behavior.
+- Updated the GitHub macOS lane to compare 1.2 against the verified 1.0 baseline, render a populated Deep mission preflight, run the expanded suite, and package the native app bundle.
+
+## Verification
+
+- TypeScript + Vite production build.
+- UI contract, workspace intelligence, mission planner, memory, voice/recovery, streaming artifact, stream parser, provider failure, and reliability suites.
+- Native macOS application packaging and 1440×900 before/after captures through GitHub Actions.
+
+# v1.0.0 — Neural Command Reborn
+
+Jarvis 1.0 is a full desktop interface and front-end architecture reset. The neural orb, memory engine, provider health, task streaming, voice, recovery, and artifact systems remain intact, but the operator experience has been rebuilt around one clear command hierarchy.
+
+## Interface transformation
+
+- Replaced the fragmented floating HUD with a stable application frame: systems rail, telemetry mast, neural command workspace, context rail, timeline, and composer.
+- Reworked every primary surface—Project Intelligence, Mission Archive, Artifact Vault, Memory Matrix, System Configuration, Diagnostics, setup, updater, chat drawer, and live operation HUD.
+- Added a global `Ctrl/Cmd + K` command menu with keyboard navigation and direct actions for command composition, chat creation, voice, core-state preview, and all seven system views.
+- Made the neural core the visual center of the Run experience while keeping memory context, artifacts, task phase, and streamed output readable at a glance.
+- Preserved Cockpit, Split Pane, and Conversation modes inside the same cohesive design system.
+- Added deliberate responsive behavior, keyboard focus treatment, local-only fonts, and reduced-motion support.
+
+## Internal rebuild
+
+- Reduced the stylesheet from roughly 155 KB / 8,800 lines to about 45 KB / 2,800 intentional lines, removing generations of conflicting “final override” blocks.
+- Extracted typed request handling, shared formatting, safe Markdown rendering, shell telemetry, and command-menu behavior from the main application controller.
+- Added a UI contract test that catches missing controls, duplicate IDs, remote-font regressions, accessibility omissions, and renewed CSS override growth.
+- Added a macOS GitHub verification lane that captures true before/after images, runs the reliability suite, and packages the native Electron app bundle.
+
+## Verification
+
+- TypeScript + Vite production build.
+- UI contract, memory, voice/recovery, streaming artifact, stream parser, provider failure, and reliability control suites.
+- Native macOS package build and 1440×900 before/after captures through GitHub Actions.
+
 # v0.10.0
 
 Voice and workflow polish release. Adds richer local voice controls, speech-reactive orb animation, prompt reuse actions, mission starters, and safer setup navigation while preserving the verified local installer/update handoff.

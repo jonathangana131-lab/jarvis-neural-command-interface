@@ -32,6 +32,7 @@ export function loadConfig() {
     },
     codex: {
       ...config.codex,
+      command: normalizeCodexCommand(config.codex?.command),
       reasoningEffort: config.codex?.reasoningEffort ?? 'low',
       ephemeral: config.codex?.ephemeral ?? true
     },
@@ -79,6 +80,14 @@ export function publicConfig(config) {
     modelApiKeyPresent: Boolean(process.env.OPENCODE_API_KEY),
     openAiApiKeyPresent: Boolean(process.env.OPENAI_API_KEY)
   };
+}
+
+function normalizeCodexCommand(command) {
+  const configured = String(command ?? 'codex').trim() || 'codex';
+  if (process.platform !== 'win32' && configured.toLowerCase().endsWith('.cmd')) {
+    return configured.slice(0, -4);
+  }
+  return configured;
 }
 
 function normalizeProvider(provider) {

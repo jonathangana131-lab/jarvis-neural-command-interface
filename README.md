@@ -1,12 +1,8 @@
-# Jarvis Neural Command Interface
+# Jarvis 2 — Cognitive Atlas
 
-A local Windows desktop interface for neural chat, memory, and Codex-powered workspace tasks.
+A local-first desktop cognitive interface for memory, conversation, and Codex-powered workspace missions.
 
-The centerpiece is a Three.js neural orb that grows a node for every memory the
-assistant has captured. As of v0.2.0 the lines between those nodes are no
-longer decorative — they are real cosine-similarity edges computed from
-on-device sentence embeddings, and the orb visibly reacts when Codex recalls
-context for a task.
+Jarvis 2 is organized around one living Three.js memory atlas. The large luminous core is wrapped in deterministic dendritic branches, while real memories appear as colored engrams and real cosine-similarity edges. Recall, speech, learning, and task execution visibly travel through that same graph.
 
 ## Download
 
@@ -14,27 +10,20 @@ Use the Windows installer from the latest GitHub Release:
 
 - `Jarvis-Neural-Command-Interface-Setup-0.10.0.exe`
 
-The `1.2.0` source is the next major desktop release. The stable installer remains `0.10.0` until the verified 1.x installer is published.
+The `2.0.0` source is the next major desktop release. The stable installer remains `0.10.0` until the verified v2 installer is published.
 
 ## Current Highlights
 
-- **Workspace Intelligence:** a bounded, local-only project scanner maps language distribution, framework/runtime signals, runnable scripts, test surface, Git state, recent files, code markers, and a concrete mission-readiness score.
-- **Neural Mission Preflight:** Jarvis turns a draft into an intent, complexity score, recommended execution depth, phased plan, workspace signals, and safety rails before anything runs.
-- **Quick / Standard / Deep execution:** three persistent operating profiles now affect the model prompt, Codex reasoning effort, verification expectations, task history, and queue telemetry—not just presentation.
-- **Mission Queue drawer:** inspect running and queued work, see each mission's depth and position, and cancel queued work without leaving Command.
-- A rebuilt Workspace Intelligence command center with project identity, readiness orbit, language topology, detected stack, execution commands, Git pulse, recent files, and recent operations.
-- A rebuilt application shell with a focused command workspace, compact systems rail, live telemetry mast, and a calmer cinematic neural-core stage.
-- A global command menu (`Ctrl/Cmd + K`) for navigation, new chats, voice control, and rapid command composition.
-- One coherent design system across Command, Project Intelligence, Mission Archive, Artifact Vault, Memory Matrix, Settings, setup, recovery, and Diagnostics.
-- A responsive command cockpit with Cockpit, Split Pane, and Conversation layouts that share the same visual language.
-- Persistent chat sessions with New Chat, search, pin, rename, clear, archive, and task-linked history.
-- A lighter Run chat console with a compact coding transcript and cleaner composer that keeps the neural orb visible.
-- A Memory Center with graph legend, review queue, recall reasons, sort/filter controls, ignore/archive controls, and duplicate cleanup.
-- A Project Dashboard for readiness, recent chats, recent tasks, storage, workspace, and release status.
-- Run cockpit helpers for saved workspace switching without the extra template button strip.
-- A safer updater/recovery path with verified installer handoff, storage cleanup, backups, logs, release assistant, and Windows shortcut repair.
-- v1.0.0 replaces the accumulated override-heavy UI with an intentional desktop design system and separates HTTP, formatting, Markdown rendering, shell telemetry, and command-menu behavior into focused modules.
-- A tighter neural memory graph that keeps memory nodes wrapped around the core orb.
+- **Living Cognitive Atlas:** the old wire-cage orb is replaced by a layered luminous core, close dendritic branches, colored engrams, semantic edges, and travelling recall pulses.
+- **One coherent v2 shell:** Command, Intelligence Map, Mission Archive, Creation Vault, Memory Atlas, Jarvis Settings, and System Health now feel like seven spaces inside the same brain.
+- **Dedicated Memory Atlas composition:** records remain readable on the left while the live 3D cognitive topology shifts into view on the right for direct orbiting and selection.
+- **Rewritten design system:** the previous stylesheet was replaced by an intentional layered cascade for foundation, shell, components, command, surfaces, overlays, and responsive behavior.
+- **Shared atlas registry:** navigation, titles, shortcuts, and neural search are driven by one typed seven-space definition instead of duplicated labels.
+- **Workspace Intelligence:** a bounded, local-only scanner maps languages, framework/runtime signals, scripts, tests, Git state, recent files, code markers, and mission readiness.
+- **Neural Mission Preflight:** Jarvis turns a draft into intent, complexity, recommended execution depth, a phased plan, workspace signals, and guardrails before execution.
+- **Quick / Standard / Deep execution:** persistent profiles change model instructions, Codex reasoning effort, verification expectations, history, and queue telemetry.
+- **Persistent operations:** chat sessions, mission history, artifacts, semantic memory, queue controls, voice, recovery, updates, and diagnostics remain local and fully connected.
+- **Fast navigation:** use `Ctrl/Cmd + K` for neural search or `Alt + 1…7` to move directly between operating spaces.
 
 ## Requirements
 
@@ -55,13 +44,14 @@ Useful verification commands:
 ```powershell
 npm run build
 npm run test:ui-contract
+npm run test:v2-architecture
 npm run test:memory
 npm run test:voice-settings
 npm run test:workspace-intelligence
 npm run test:mission-planner
 ```
 
-The GitHub macOS visual workflow captures the current `main` UI and the transformed branch at the same 1440×900 viewport, uploads the comparisons, runs the full reliability suite, and builds the unsigned macOS application bundle.
+The GitHub macOS visual workflow captures all seven v1.2 and v2 pages at the same 1440×900 viewport, uploads the comparisons, runs the full reliability suite, and builds the unsigned macOS application bundle.
 
 First run downloads the local embedding model (~25 MB) into
 `<data-dir>/transformers-cache/`. Subsequent runs use the cache.

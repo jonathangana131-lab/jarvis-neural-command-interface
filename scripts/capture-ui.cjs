@@ -5,7 +5,7 @@ const { app, BrowserWindow } = require('electron');
 const targetUrl = process.env.JARVIS_CAPTURE_URL || 'http://127.0.0.1:5173';
 const outputDir = path.resolve(process.env.JARVIS_CAPTURE_DIR || 'visual-evidence');
 const prefix = process.env.JARVIS_CAPTURE_PREFIX || 'capture';
-const views = (process.env.JARVIS_CAPTURE_VIEWS || 'run,dashboard,memory,settings')
+const views = (process.env.JARVIS_CAPTURE_VIEWS || 'run,dashboard,history,artifacts,memory,settings,diagnostics')
   .split(',')
   .map((view) => view.trim())
   .filter(Boolean);

@@ -1,3 +1,33 @@
+# v2.0.0 — Cognitive Atlas
+
+Jarvis 2 is a full visual-system and neural-core rewrite. The product is no longer a collection of HUD panels orbiting a small wire sphere; it is one cognitive operating environment centered on a living memory atlas.
+
+## New product concept
+
+- Reframed Jarvis as a **Cognitive Atlas** with seven connected operating spaces: Cognitive Command, Intelligence Map, Mission Archive, Creation Vault, Memory Atlas, Jarvis Settings, and System Health.
+- Replaced duplicated navigation names and shortcuts with a typed central atlas registry shared by the shell and global neural search.
+- Added direct `Alt + 1…7` navigation and view-change events while retaining `Ctrl/Cmd + K`.
+
+## Living memory core
+
+- Rebuilt the visual center as a layered luminous core with additive bloom, aura, geometric shells, and state-aware color.
+- Replaced the old spherical wire cage with a deterministic recursive dendrite generator. Branches curl around the core, split into finer neurons, and use cyan, blue, green, amber, and violet memory language.
+- Pulled real engrams closer to the core, strengthened semantic paths, and preserved clickable nodes, cosine edges, recall flashes, travelling pulses, memory growth, speech reaction, and task-state animation.
+- Added a dedicated Memory Atlas camera composition that moves the 3D graph beside the searchable memory records instead of hiding it behind the page.
+
+## Interface rewrite
+
+- Deleted the accumulated v1 stylesheet and rebuilt the cascade with explicit reset, foundation, shell, component, command, surface, overlay, and responsive layers.
+- Rebuilt the desktop frame, atlas rail, telemetry mast, thought stream, mission preflight, command composer, Intelligence bento grid, archive, creation, memory, settings, health, drawers, setup, updater, and command search.
+- Replaced the flat cyan-only HUD with restrained obsidian glass, stronger typography, clearer spacing, semantic cyan/violet/amber/green accents, and fewer visual borders.
+- Kept all 135 required controls, keyboard focus treatment, local-only fonts, reduced-motion behavior, and compact/mobile layouts.
+
+## Verification
+
+- Added a v2 architecture contract for version identity, the layered design system, living dendrite renderer, Memory Atlas camera, shared seven-space registry, and complete visual workflow.
+- Expanded the macOS visual lane to compare v2 against the complete v1.2 branch across all seven pages at 1440×900.
+- Production build plus UI, v2 architecture, workspace intelligence, mission planner, memory, voice/recovery, artifact, stream parser, provider failure, and reliability suites.
+
 # v1.2.0 — Neural Operating System
 
 Jarvis 1.2 turns the 1.0 command interface into a workspace-aware operating layer. Missions are now planned against real local project signals, execution depth is explicit and persistent, and the Intel view has become a genuine engineering command center.

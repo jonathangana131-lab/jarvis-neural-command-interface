@@ -30,8 +30,8 @@ export class JarvisScene {
   private targetRotationY = 0;
   private velocityX = 0;
   private velocityY = 0;
-  private targetZoom = 7.2;
-  private zoom = 7.2;
+  private targetZoom = 5.85;
+  private zoom = 5.85;
   private dragging = false;
   private lastPointer = new THREE.Vector2();
   private downPointer = new THREE.Vector2();
@@ -332,7 +332,7 @@ export class JarvisScene {
     canvas.addEventListener('wheel', (event) => {
       event.preventDefault();
       this.lastInteractionAt = performance.now();
-      this.targetZoom = THREE.MathUtils.clamp(this.targetZoom + event.deltaY * 0.005, 5.9, 14.5);
+      this.targetZoom = THREE.MathUtils.clamp(this.targetZoom + event.deltaY * 0.005, 4.9, 12.5);
     }, { passive: false });
     canvas.addEventListener('dblclick', (event) => {
       event.preventDefault();
@@ -341,7 +341,7 @@ export class JarvisScene {
       this.targetRotationY = 0;
       this.velocityX = 0;
       this.velocityY = 0;
-      this.targetZoom = 7.2;
+      this.targetZoom = 5.85;
     });
   }
 
@@ -368,9 +368,11 @@ export class JarvisScene {
 
     const narrow = window.innerWidth <= 620;
     const tablet = window.innerWidth > 620 && window.innerWidth <= 900;
-    const targetOffsetX = narrow ? -0.8 : 0;
+    const activeView = document.querySelector<HTMLElement>('#app')?.dataset.view;
+    const memoryAtlasView = activeView === 'memory' && !narrow;
+    const targetOffsetX = memoryAtlasView ? 1.45 : narrow ? -0.8 : 0;
     const targetOffsetZ = narrow ? -1.35 : tablet ? -0.62 : 0;
-    const targetScale = narrow ? 0.78 : tablet ? 0.9 : 1;
+    const targetScale = memoryAtlasView ? 0.9 : narrow ? 0.78 : tablet ? 0.9 : 1;
     this.responsiveSceneOffset.set(targetOffsetX, 0, targetOffsetZ);
     this.orbitRoot.position.lerp(this.responsiveSceneOffset, 1 - Math.exp(-delta * 8));
     this.orbitRoot.scale.setScalar(THREE.MathUtils.lerp(this.orbitRoot.scale.x, targetScale, 1 - Math.exp(-delta * 8)));

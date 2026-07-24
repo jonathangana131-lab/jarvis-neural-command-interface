@@ -67,24 +67,25 @@ const PATH_SEGMENT_CAPACITY = 9000;
 const PULSE_CAPACITY = 560;
 const CORE_COLOR = new THREE.Color(0x72f7ff);
 const CORE_HOT = new THREE.Color(0xf3feff);
-const MEMORY_SIGNAL = new THREE.Color(0x8ceeff);
-const MEMORY_BLUE = new THREE.Color(0x2f9cff);
-const MEMORY_AMBER = new THREE.Color(0x8ceeff);
+const MEMORY_SIGNAL = new THREE.Color(0x90f4ff);
+const MEMORY_BLUE = new THREE.Color(0x4f9dff);
+const MEMORY_VIOLET = new THREE.Color(0x9d82ff);
+const MEMORY_AMBER = new THREE.Color(0xffbd70);
 const MODE_EXECUTE = new THREE.Color(0xffa64d);
 const MODE_LISTEN = new THREE.Color(0x96c7ff);
 const MODE_LEARN = new THREE.Color(0x76ffd1);
 const MODE_ERROR = new THREE.Color(0xff6174);
-const MEMORY_CORE_CLEARANCE = 1.74;
-const MEMORY_SHELL_MIN = 1.88;
-const MEMORY_SHELL_MAX = 2.14;
+const MEMORY_CORE_CLEARANCE = 0.72;
+const MEMORY_SHELL_MIN = 1.1;
+const MEMORY_SHELL_MAX = 1.86;
 
 const KIND_PALETTE: Record<string, { color: number; accent: number; direction: [number, number, number] }> = {
-  preference: { color: 0x73f3ff, accent: 0xe9fdff, direction: [-0.78, 0.08, -0.22] },
-  constraint: { color: 0x63d8ff, accent: 0xdaf7ff, direction: [0.78, 0.08, -0.18] },
-  project: { color: 0x45a8ff, accent: 0xc8ecff, direction: [-0.56, -0.04, 0.12] },
-  task: { color: 0x7cf2ff, accent: 0xf2feff, direction: [0.58, -0.04, 0.02] },
-  fact: { color: 0x73f3ff, accent: 0xe9fdff, direction: [0.06, 0.08, -0.46] },
-  conversation: { color: 0x82e9ff, accent: 0xe9fdff, direction: [0.0, 0.04, 0.28] }
+  preference: { color: 0x9d82ff, accent: 0xeee8ff, direction: [-0.78, 0.08, -0.22] },
+  constraint: { color: 0xffbd70, accent: 0xffecd3, direction: [0.78, 0.08, -0.18] },
+  project: { color: 0x4f9dff, accent: 0xd7e9ff, direction: [-0.56, -0.04, 0.12] },
+  task: { color: 0x72f7ff, accent: 0xf2feff, direction: [0.58, -0.04, 0.02] },
+  fact: { color: 0x6fffd2, accent: 0xe2fff6, direction: [0.06, 0.08, -0.46] },
+  conversation: { color: 0x90d9ff, accent: 0xe9f7ff, direction: [0.0, 0.04, 0.28] }
 };
 
 function clamp01(value: number): number {
@@ -250,6 +251,8 @@ export class NeuralSphere {
   private readonly coreShell: THREE.Mesh;
   private readonly coreHalo: THREE.Mesh;
   private readonly coreInner: THREE.Mesh;
+  private readonly coreBloom: THREE.Sprite;
+  private readonly coreAura: THREE.Sprite;
   private readonly ringGroup = new THREE.Group();
   private readonly cortexLines: THREE.LineSegments;
   private readonly nodeMesh: THREE.InstancedMesh;
@@ -310,41 +313,62 @@ export class NeuralSphere {
     const coreMaterial = new THREE.MeshBasicMaterial({
       color: CORE_HOT,
       transparent: true,
-      opacity: 0.62,
+      opacity: 0.84,
       blending: THREE.AdditiveBlending,
       depthWrite: false
     });
-    this.coreInner = new THREE.Mesh(new THREE.SphereGeometry(0.16, 48, 24), coreMaterial);
+    this.coreInner = new THREE.Mesh(new THREE.IcosahedronGeometry(0.22, 5), coreMaterial);
     this.coreInner.visible = true;
 
     const shellMaterial = new THREE.MeshBasicMaterial({
       color: CORE_COLOR,
       transparent: true,
-      opacity: 0.025,
+      opacity: 0.14,
       wireframe: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false
     });
-    this.coreShell = new THREE.Mesh(new THREE.SphereGeometry(0.9, 64, 32), shellMaterial);
+    this.coreShell = new THREE.Mesh(new THREE.IcosahedronGeometry(0.56, 3), shellMaterial);
 
     const haloMaterial = new THREE.MeshBasicMaterial({
-      color: 0x0aa9c6,
+      color: 0x4f9dff,
       transparent: true,
-      opacity: 0.044,
+      opacity: 0.055,
+      wireframe: true,
       blending: THREE.AdditiveBlending,
       depthWrite: false
     });
-    this.coreHalo = new THREE.Mesh(new THREE.SphereGeometry(1.45, 48, 24), haloMaterial);
+    this.coreHalo = new THREE.Mesh(new THREE.IcosahedronGeometry(0.82, 2), haloMaterial);
     this.coreHalo.visible = true;
 
-    this.coreGroup.add(this.coreHalo, this.coreShell, this.coreInner);
+    this.coreBloom = new THREE.Sprite(new THREE.SpriteMaterial({
+      color: CORE_COLOR,
+      map: makeSoftDiscTexture(192),
+      transparent: true,
+      opacity: 0.48,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    }));
+    this.coreBloom.scale.set(1.75, 1.75, 1);
+
+    this.coreAura = new THREE.Sprite(new THREE.SpriteMaterial({
+      color: MEMORY_VIOLET,
+      map: makeSoftDiscTexture(192),
+      transparent: true,
+      opacity: 0.14,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    }));
+    this.coreAura.scale.set(3.4, 3.4, 1);
+
+    this.coreGroup.add(this.coreAura, this.coreBloom, this.coreHalo, this.coreShell, this.coreInner);
     this.group.add(this.coreGroup);
 
     this.createCoreRings();
     this.group.add(this.ringGroup);
 
     this.cortexLines = this.createCortexLines();
-    this.cortexLines.visible = false;
+    this.cortexLines.visible = true;
     this.group.add(this.cortexLines);
 
     const nodeMaterial = new THREE.MeshBasicMaterial({
@@ -530,7 +554,7 @@ export class NeuralSphere {
     const importance = THREE.MathUtils.clamp(Number(memory.importance ?? 2), 1, 5);
     const confidence = clamp01(Number(memory.confidence ?? 1));
     const position = this.positionForMemory(memory, cluster, clusterOrder, rng);
-    const radius = 0.092 + importance * 0.024 + (memory.pinned ? 0.02 : 0);
+    const radius = 0.078 + importance * 0.018 + (memory.pinned ? 0.018 : 0);
     const parent = this.nearestClusterNeuron(position, cluster);
 
     const neuron: MemoryNeuron = {
@@ -861,11 +885,11 @@ export class NeuralSphere {
     const ringSlot = order % 18;
     const angle = order * 2.399963 + shell * 0.57 + rng() * 0.42;
     const compactRadius = THREE.MathUtils.clamp(
-      1.86 + importance * 0.035 + shell * 0.028 + (ringSlot % 5) * 0.012 + scopePull + (rng() - 0.5) * 0.026,
+      1.08 + importance * 0.062 + shell * 0.072 + (ringSlot % 5) * 0.025 + scopePull + (rng() - 0.5) * 0.055,
       MEMORY_SHELL_MIN,
       MEMORY_SHELL_MAX
     );
-    const clusterBias = cluster.direction.clone().multiplyScalar(0.34);
+    const clusterBias = cluster.direction.clone().multiplyScalar(0.28);
     const localSpread = cluster.tangent.clone().multiplyScalar(Math.cos(angle) * (0.86 + rng() * 0.08))
       .add(cluster.binormal.clone().multiplyScalar(Math.sin(angle) * (0.82 + rng() * 0.08)))
       .add(cluster.direction.clone().multiplyScalar(((ringSlot % 6) - 2.5) * 0.16 + (rng() - 0.5) * 0.18));
@@ -1005,20 +1029,29 @@ export class NeuralSphere {
     const phaseProfile = this.phaseProfile();
     const active = this.activityLevel + this.responsePulse * 0.5 + this.learningPulse * 0.7 + this.audioLevel * 0.5 + this.phasePulse * 0.22 + this.speechWordPulse * 0.55;
     const breathe = 1 + Math.sin(elapsed * (1.4 + active * 0.4 + phaseProfile.beat)) * (0.035 + this.phasePulse * 0.018);
-    this.coreInner.scale.setScalar((1.18 + active * 0.22) * breathe);
-    this.coreShell.scale.setScalar(1.0 + active * 0.14 + density * 0.08);
-    this.coreHalo.scale.setScalar(1.08 + active * 0.34 + density * 0.14);
-    this.coreShell.rotation.y += 0.01 + active * 0.006;
-    this.coreShell.rotation.x += 0.004;
-    this.coreHalo.rotation.y -= 0.004 + active * 0.002;
+    this.coreInner.scale.setScalar((1.02 + active * 0.2) * breathe);
+    this.coreShell.scale.setScalar(1.06 + active * 0.12 + density * 0.045);
+    this.coreHalo.scale.setScalar(1.1 + active * 0.18 + density * 0.08);
+    this.coreShell.rotation.y += 0.007 + active * 0.005;
+    this.coreShell.rotation.x += 0.003;
+    this.coreHalo.rotation.y -= 0.003 + active * 0.002;
+    this.coreHalo.rotation.z += 0.002;
 
     const shellMat = this.coreShell.material as THREE.MeshBasicMaterial;
     const innerMat = this.coreInner.material as THREE.MeshBasicMaterial;
     const haloMat = this.coreHalo.material as THREE.MeshBasicMaterial;
-    shellMat.opacity = 0.018 + active * 0.012;
-    innerMat.opacity = 0.56 + Math.min(0.16, active * 0.05);
-    haloMat.opacity = 0.044 + active * 0.018 + density * 0.01;
+    const bloomMat = this.coreBloom.material as THREE.SpriteMaterial;
+    const auraMat = this.coreAura.material as THREE.SpriteMaterial;
+    shellMat.opacity = 0.11 + active * 0.028;
+    innerMat.opacity = 0.46 + Math.min(0.2, active * 0.07);
+    haloMat.opacity = 0.046 + active * 0.014 + density * 0.006;
+    bloomMat.opacity = 0.25 + Math.min(0.2, active * 0.075);
+    auraMat.opacity = 0.1 + Math.min(0.12, active * 0.04 + density * 0.015);
+    this.coreBloom.scale.setScalar((1.62 + active * 0.18) * breathe);
+    this.coreAura.scale.setScalar(3.2 + active * 0.35 + density * 0.15);
     innerMat.color.copy(this.modeColor().lerp(phaseProfile.color, 0.26).lerp(CORE_HOT, 0.22));
+    bloomMat.color.copy(this.modeColor().lerp(CORE_HOT, 0.34));
+    auraMat.color.copy(MEMORY_VIOLET).lerp(this.modeColor(), 0.24 + this.learningPulse * 0.18);
   }
 
   private updateRings(delta: number, elapsed: number): void {
@@ -1040,7 +1073,7 @@ export class NeuralSphere {
     this.cortexLines.rotation.x = Math.sin(elapsed * 0.13) * 0.05;
     const material = this.cortexLines.material;
     if (material instanceof THREE.LineBasicMaterial) {
-      material.opacity = 0.16 + this.activityLevel * 0.055 + this.learningPulse * 0.045 + this.responsePulse * 0.04;
+      material.opacity = 0.28 + this.activityLevel * 0.07 + this.learningPulse * 0.06 + this.responsePulse * 0.055;
     }
   }
 
@@ -1134,9 +1167,9 @@ export class NeuralSphere {
     const interval = hasGrowth || focusChanged ? 1 / 30 : 1 / 12;
 
     const material = this.pathMesh.material as THREE.MeshBasicMaterial;
-    material.opacity = 0.07 + this.activityLevel * 0.03 + this.learningPulse * 0.028 + this.responsePulse * 0.03 + this.speechWordPulse * 0.028;
+    material.opacity = 0.15 + this.activityLevel * 0.04 + this.learningPulse * 0.04 + this.responsePulse * 0.04 + this.speechWordPulse * 0.035;
     const lineMaterial = this.pathLineMesh.material as THREE.LineBasicMaterial;
-    lineMaterial.opacity = 0.14 + this.activityLevel * 0.045 + this.learningPulse * 0.035 + this.responsePulse * 0.035 + this.speechWordPulse * 0.04;
+    lineMaterial.opacity = 0.3 + this.activityLevel * 0.06 + this.learningPulse * 0.05 + this.responsePulse * 0.05 + this.speechWordPulse * 0.05;
     const recallTint = this.recallEmphasisMode === 'semantic'
       ? MODE_LEARN
       : this.recallEmphasisMode === 'keyword' ? MEMORY_AMBER : MODE_LISTEN;
@@ -1341,10 +1374,10 @@ export class NeuralSphere {
 
   private createCoreRings(): void {
     const ringSpecs = [
-      { radius: 0.92, tube: 0.006, color: 0x73f3ff, opacity: 0.035, rot: [Math.PI / 2, 0.1, 0] },
-      { radius: 1.12, tube: 0.005, color: 0xe9fdff, opacity: 0.025, rot: [Math.PI / 2.25, -0.22, 0.8] },
-      { radius: 1.38, tube: 0.005, color: 0x63d8ff, opacity: 0.026, rot: [Math.PI / 2.1, 0.32, 1.8] },
-      { radius: 1.66, tube: 0.004, color: 0x2f9cff, opacity: 0.022, rot: [Math.PI / 1.9, -0.48, 2.7] }
+      { radius: 0.7, tube: 0.005, color: 0x72f7ff, opacity: 0.07, rot: [Math.PI / 2, 0.1, 0] },
+      { radius: 0.94, tube: 0.004, color: 0x9d82ff, opacity: 0.045, rot: [Math.PI / 2.25, -0.22, 0.8] },
+      { radius: 1.24, tube: 0.004, color: 0x4f9dff, opacity: 0.038, rot: [Math.PI / 2.1, 0.32, 1.8] },
+      { radius: 1.58, tube: 0.003, color: 0x72f7ff, opacity: 0.026, rot: [Math.PI / 1.9, -0.48, 2.7] }
     ];
 
     for (const spec of ringSpecs) {
@@ -1364,49 +1397,101 @@ export class NeuralSphere {
   private createCortexLines(): THREE.LineSegments {
     const positions: number[] = [];
     const colors: number[] = [];
-    const colorA = new THREE.Color(0x28dfff);
-    const colorB = MEMORY_SIGNAL.clone().multiplyScalar(0.72);
-    const colorC = new THREE.Color(0x147cff).lerp(CORE_COLOR, 0.28);
-    const rng = seededRandom('jarvis-reference-memory-web');
+    const tips: THREE.Vector3[] = [];
+    const rng = seededRandom('jarvis-v2-cognitive-atlas');
+    const palette = [CORE_COLOR, MEMORY_BLUE, MEMORY_VIOLET, MEMORY_SIGNAL, MODE_LEARN];
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5));
 
-    const addCurve = (
-      sampler: (t: number) => THREE.Vector3,
+    const randomDirection = () => {
+      const vector = new THREE.Vector3(rng() * 2 - 1, rng() * 2 - 1, rng() * 2 - 1);
+      return vector.lengthSq() > 0.001 ? vector.normalize() : new THREE.Vector3(0, 1, 0);
+    };
+
+    const addSegment = (from: THREE.Vector3, to: THREE.Vector3, color: THREE.Color, energy: number) => {
+      positions.push(from.x, from.y, from.z, to.x, to.y, to.z);
+      const start = 0.2 + energy * 0.42;
+      const end = 0.16 + energy * 0.34;
+      colors.push(
+        color.r * start, color.g * start, color.b * start,
+        color.r * end, color.g * end, color.b * end
+      );
+    };
+
+    const growBranch = (
+      start: THREE.Vector3,
+      initialDirection: THREE.Vector3,
+      length: number,
+      depth: number,
       color: THREE.Color,
-      segments = 32,
-      fadeEnds = false
+      energy: number
     ) => {
-      let prev: THREE.Vector3 | null = null;
-      for (let i = 0; i <= segments; i += 1) {
-        const t = i / segments;
-        const point = sampler(t);
-        if (prev) {
-          positions.push(prev.x, prev.y, prev.z, point.x, point.y, point.z);
-          const endFade = fadeEnds ? Math.sin(t * Math.PI) : 1;
-          const intensity = 0.2 + endFade * 0.46;
-          colors.push(
-            color.r * intensity, color.g * intensity, color.b * intensity,
-            color.r * intensity, color.g * intensity, color.b * intensity
-          );
-        }
-        prev = point;
+      let current = start.clone();
+      const direction = initialDirection.clone().normalize();
+      const steps = depth >= 3 ? 4 : 3;
+
+      for (let step = 0; step < steps; step += 1) {
+        const radial = radialDirectionFor(current, direction);
+        const wander = randomDirection().multiplyScalar(0.12 + (4 - depth) * 0.035);
+        direction.add(wander).addScaledVector(radial, 0.09).normalize();
+        const next = current.clone().addScaledVector(direction, length / steps);
+        addSegment(current, next, color, energy * (1 - step / (steps * 5)));
+        current = next;
+      }
+
+      if (depth <= 0) {
+        tips.push(current);
+        return;
+      }
+
+      const branchCount = depth >= 2 ? 2 : (rng() > 0.28 ? 2 : 1);
+      for (let child = 0; child < branchCount; child += 1) {
+        const childDirection = direction.clone()
+          .addScaledVector(randomDirection(), 0.34 + (4 - depth) * 0.06)
+          .addScaledVector(radialDirectionFor(current, direction), 0.08)
+          .normalize();
+        const childColor = color.clone().lerp(palette[(depth + child) % palette.length], 0.16);
+        growBranch(
+          current,
+          childDirection,
+          length * (0.63 + rng() * 0.08),
+          depth - 1,
+          childColor,
+          energy * 0.86
+        );
       }
     };
 
-    for (let i = 0; i < 420; i += 1) {
-      const angle = (i / 420) * Math.PI * 2;
-      const petal = i % 5;
-      const twist = rng() * Math.PI * 2;
-      const color = i % 9 === 0 ? colorB : i % 4 === 0 ? colorC : colorA;
-      addCurve((t) => {
-        const ease = Math.sin(t * Math.PI);
-        const curl = angle + Math.sin(t * Math.PI * (1.2 + petal * 0.08) + twist) * (0.34 + petal * 0.035);
-        const radius = 0.14 + ease * (1.18 + petal * 0.06 + rng() * 0.08);
-        return new THREE.Vector3(
-          Math.cos(curl) * radius * (1.05 + Math.sin(twist) * 0.05),
-          Math.sin(curl * 1.08 + twist * 0.2) * radius * 0.86,
-          Math.cos(t * Math.PI + twist) * 0.22 + Math.sin(curl) * radius * 0.48
-        );
-      }, color, 28, true);
+    for (let root = 0; root < 22; root += 1) {
+      const y = 1 - (root / 21) * 2;
+      const radius = Math.sqrt(Math.max(0.02, 1 - y * y));
+      const theta = root * goldenAngle;
+      const direction = new THREE.Vector3(Math.cos(theta) * radius, y, Math.sin(theta) * radius).normalize();
+      const tangentSeed = randomDirection();
+      const tangent = tangentSeed.sub(direction.clone().multiplyScalar(tangentSeed.dot(direction))).normalize();
+      const initialDirection = direction.clone().multiplyScalar(0.64)
+        .addScaledVector(tangent, root % 2 === 0 ? 0.72 : -0.72)
+        .normalize();
+      const start = direction.clone().multiplyScalar(0.4 + rng() * 0.05);
+      const color = palette[root % palette.length].clone().lerp(CORE_HOT, 0.08);
+      growBranch(start, initialDirection, 0.62 + rng() * 0.12, 4, color, 0.92);
+    }
+
+    for (let index = 0; index < tips.length; index += 3) {
+      const from = tips[index];
+      const to = tips[(index * 7 + 11) % tips.length];
+      if (!from || !to || from.distanceTo(to) > 1.2) continue;
+      const midpoint = from.clone().lerp(to, 0.5)
+        .addScaledVector(radialDirectionFor(from.clone().add(to)), 0.12);
+      let previous = from;
+      for (let step = 1; step <= 4; step += 1) {
+        const t = step / 4;
+        const mt = 1 - t;
+        const point = from.clone().multiplyScalar(mt * mt)
+          .add(midpoint.clone().multiplyScalar(2 * mt * t))
+          .add(to.clone().multiplyScalar(t * t));
+        addSegment(previous, point, MEMORY_VIOLET, 0.22);
+        previous = point;
+      }
     }
 
     const geometry = new THREE.BufferGeometry();
@@ -1417,7 +1502,7 @@ export class NeuralSphere {
       new THREE.LineBasicMaterial({
         vertexColors: true,
         transparent: true,
-        opacity: 0.18,
+        opacity: 0.36,
         blending: THREE.AdditiveBlending,
         depthWrite: false
       })

@@ -1,9 +1,9 @@
 {
-  "assistantName": "Jarvis Neural Command Interface",
+  "assistantName": "Jarvis 2 Cognitive Atlas",
   "workspaceAllowlist": [
-    "%USERPROFILE%\\Documents\\Jarvis Workspaces"
+    "~/Documents/Jarvis Workspaces"
   ],
-  "defaultWorkspace": "%USERPROFILE%\\Documents\\Jarvis Workspaces",
+  "defaultWorkspace": "~/Documents/Jarvis Workspaces",
   "memory": {
     "automatic": true,
     "databasePath": "data\\memory.sqlite",

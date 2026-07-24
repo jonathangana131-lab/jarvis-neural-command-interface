@@ -4,31 +4,32 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="data:," />
-    <title>Jarvis Neural Command Interface</title>
+    <meta name="theme-color" content="#05070d" />
+    <title>Jarvis 2 — Cognitive Atlas</title>
   </head>
   <body>
-    <div id="app" class="cockpit-shell" data-mode="idle" data-view="run">
+    <div id="app" class="cockpit-shell cognitive-atlas" data-mode="idle" data-view="run" data-version="2.0">
       <canvas id="core" aria-label="Interactive Jarvis neural orb"></canvas>
 
       <header class="command-mast" aria-label="Assistant telemetry">
         <div class="brand-lockup">
           <span class="brand-mark" aria-hidden="true"><i></i><b>J</b></span>
           <div>
-            <span class="micro-label">J.A.R.V.I.S. // Local Intelligence</span>
-            <strong>Neural Command</strong>
+            <span class="micro-label">J.A.R.V.I.S. 2 // Cognitive OS</span>
+            <strong>Cognitive Atlas</strong>
           </div>
         </div>
         <div class="telemetry-strip">
           <article>
-            <span class="micro-label">State</span>
+            <span class="micro-label">Core state</span>
             <strong id="mode">Idle</strong>
           </article>
           <article>
-            <span class="micro-label">Memory</span>
+            <span class="micro-label">Engrams</span>
             <strong id="memory-count">0 nodes</strong>
           </article>
           <article>
-            <span class="micro-label">Workspace</span>
+            <span class="micro-label">Neural space</span>
             <strong id="workspace">Loading</strong>
           </article>
         </div>
@@ -36,7 +37,7 @@
           <time id="system-clock" class="system-clock">--:--</time>
           <button id="command-menu-toggle" class="command-menu-toggle" type="button" aria-expanded="false" aria-controls="command-menu">
             <span data-icon="terminal-square"></span>
-            <strong>Command menu</strong>
+            <strong>Neural search</strong>
             <kbd>Ctrl K</kbd>
           </button>
         </div>
@@ -49,20 +50,20 @@
         <button id="think-demo" class="hud-button" type="button" data-icon="brain">
           <span>Think</span>
         </button>
-        <span id="voice-status"><i aria-hidden="true"></i> Codex app connected locally</span>
+        <span id="voice-status"><i aria-hidden="true"></i> Local intelligence online</span>
       </section>
 
       <nav class="radial-nav" aria-label="Console views">
-        <span class="nav-rail__label">Systems</span>
+        <span class="nav-rail__label">Atlas</span>
         <button type="button" data-console-tab="run" class="active" data-icon="terminal-square" title="Neural Command"><span>Command</span><small>01</small></button>
-        <button type="button" data-console-tab="dashboard" data-icon="activity" title="Project Intelligence"><span>Intel</span><small>02</small></button>
-        <button type="button" data-console-tab="history" data-icon="history" title="Mission Archive"><span>Archive</span><small>03</small></button>
-        <button type="button" data-console-tab="artifacts" data-icon="save" title="Artifact Vault"><span>Artifacts</span><small>04</small></button>
-        <button type="button" data-console-tab="memory" data-icon="network" title="Memory Matrix"><span>Memory</span><small>05</small></button>
+        <button type="button" data-console-tab="dashboard" data-icon="activity" title="Workspace Intelligence"><span>Intelligence</span><small>02</small></button>
+        <button type="button" data-console-tab="history" data-icon="history" title="Mission Archive"><span>Missions</span><small>03</small></button>
+        <button type="button" data-console-tab="artifacts" data-icon="save" title="Creation Vault"><span>Creations</span><small>04</small></button>
+        <button type="button" data-console-tab="memory" data-icon="network" title="Memory Atlas"><span>Memories</span><small>05</small></button>
         <span class="nav-rail__divider"></span>
         <button type="button" data-console-tab="settings" data-icon="sliders-horizontal" title="System Configuration"><span>Settings</span><small>06</small></button>
         <button type="button" data-console-tab="diagnostics" data-icon="scan-line" title="System Diagnostics"><span>Health</span><small>07</small></button>
-        <div class="nav-rail__status"><i></i><span>Local core</span></div>
+        <div class="nav-rail__status"><i></i><span>V2 local</span></div>
       </nav>
 
       <section id="task-hud" class="operation-channel" aria-label="Codex task status"></section>
@@ -121,8 +122,8 @@
         <section class="dashboard-console console-view" data-view="dashboard" aria-label="Project dashboard">
           <header class="panel-header">
             <div>
-              <span class="micro-label">Neural Workspace Scan</span>
-              <strong>Workspace Intelligence</strong>
+              <span class="micro-label">Workspace Cognition</span>
+              <strong>Intelligence Map</strong>
             </div>
             <button id="refresh-dashboard" class="hud-button" type="button" data-icon="refresh-cw"><span>Refresh</span></button>
           </header>
@@ -132,8 +133,8 @@
         <section class="command-console console-view" data-view="run" aria-label="Codex mission control">
           <div class="mission-control">
             <div class="neural-core-readout" aria-hidden="true">
-              <span>Neural core</span>
-              <strong>Drag to inspect memory topology</strong>
+              <span>Living cognitive atlas</span>
+              <strong>Drag the memory branches · select an engram</strong>
               <i></i>
             </div>
             <button id="chat-sidebar-toggle" class="chat-sidebar-toggle" type="button" data-icon="history" aria-expanded="false" aria-controls="chat-session-rail">
@@ -159,7 +160,7 @@
 
             <header class="mission-header">
               <div class="mission-title">
-                <span class="micro-label">Mission Control</span>
+                <span class="micro-label">Active Thought</span>
                 <strong id="mission-objective">Standing by</strong>
               </div>
               <div class="mission-vitals" id="mission-vitals" aria-label="Mission vitals"></div>
@@ -180,7 +181,7 @@
 
               <article class="mission-card mission-card--phase">
                 <div>
-                  <span class="micro-label">Phase</span>
+                  <span class="micro-label">Execution Pulse</span>
                   <strong id="mission-phase">Ready</strong>
                 </div>
                 <div class="mission-progress" aria-hidden="true"><span id="mission-progress-fill"></span></div>
@@ -189,7 +190,7 @@
 
               <article class="mission-card mission-card--memory">
                 <div>
-                  <span class="micro-label">Memory Context</span>
+                  <span class="micro-label">Recalled Engrams</span>
                   <strong id="mission-memory-summary">No active recall</strong>
                 </div>
                 <div id="mission-memory-context" class="mission-memory-context"></div>
@@ -197,7 +198,7 @@
 
               <article class="mission-card mission-card--artifacts">
                 <div>
-                  <span class="micro-label">Artifacts</span>
+                  <span class="micro-label">Created Outputs</span>
                   <strong id="mission-artifact-summary">No outputs yet</strong>
                 </div>
                 <div id="mission-artifacts" class="mission-artifacts"></div>
@@ -209,7 +210,7 @@
             <div id="mission-starters" class="mission-starters" aria-label="Mission starters"></div>
 
             <div class="command-dock__main">
-              <textarea id="task-prompt" placeholder="Ask Jarvis to build, fix, test, or explain..."></textarea>
+              <textarea id="task-prompt" placeholder="Give Jarvis a thought, mission, or system to transform..."></textarea>
               <div id="task-mode-control" class="execution-mode-control" role="group" aria-label="Execution depth">
                 <input id="quick-task-mode" type="checkbox" hidden aria-hidden="true" tabindex="-1" />
                 <button type="button" data-task-mode="quick" aria-pressed="false"><b>Quick</b><small>Fast patch</small></button>
@@ -217,7 +218,7 @@
                 <button type="button" data-task-mode="deep" aria-pressed="false"><b>Deep</b><small>Full system</small></button>
               </div>
               <button id="run-task" class="ignite-button" type="button" data-icon="rocket">
-                <span>Ignite</span>
+                <span>Execute</span>
               </button>
             </div>
             <label class="workspace-field">
@@ -246,8 +247,8 @@
         <section class="archive-console console-view" data-view="history" aria-label="Task history">
           <header class="panel-header">
             <div>
-              <span class="micro-label">Archive</span>
-              <strong>Task History</strong>
+              <span class="micro-label">Mission Memory</span>
+              <strong>Mission Archive</strong>
             </div>
             <button id="refresh-tasks" class="hud-button" type="button" data-icon="refresh-cw"><span>Refresh</span></button>
           </header>
@@ -261,8 +262,8 @@
         <section class="artifacts-console console-view" data-view="artifacts" aria-label="Generated artifacts">
           <header class="panel-header">
             <div>
-              <span class="micro-label">Generated Output</span>
-              <strong>Artifact Catalog</strong>
+              <span class="micro-label">Generated Matter</span>
+              <strong>Creation Vault</strong>
             </div>
             <button id="refresh-artifacts" class="hud-button" type="button" data-icon="refresh-cw"><span>Refresh</span></button>
           </header>
@@ -272,8 +273,8 @@
         <section class="memory-console console-view" data-view="memory" aria-label="Memories">
           <header class="panel-header">
             <div>
-              <span class="micro-label">Neural Index</span>
-              <strong>Memory Matrix</strong>
+              <span class="micro-label">Cognitive Memory</span>
+              <strong>Memory Atlas</strong>
             </div>
             <div class="panel-actions">
               <button id="remember-current" class="hud-button" type="button" data-icon="save"><span>Remember</span></button>
@@ -314,8 +315,8 @@
         <section class="settings-console console-view" data-view="settings" aria-label="Settings">
           <header class="panel-header">
             <div>
-              <span class="micro-label">Configuration</span>
-              <strong>System Settings</strong>
+              <span class="micro-label">Core Configuration</span>
+              <strong>Jarvis Settings</strong>
             </div>
           </header>
 
@@ -470,8 +471,8 @@
         <section class="diagnostics-console console-view" data-view="diagnostics" aria-label="Diagnostics">
           <header class="panel-header">
             <div>
-              <span class="micro-label">Telemetry</span>
-              <strong>Diagnostics</strong>
+              <span class="micro-label">Core Telemetry</span>
+              <strong>System Health</strong>
             </div>
             <button id="refresh-diagnostics" class="hud-button" type="button" data-icon="scan-line"><span>Refresh</span></button>
           </header>
@@ -488,7 +489,7 @@
             <kbd>Esc</kbd>
           </header>
           <div id="command-menu-list" class="command-menu__list" role="listbox"></div>
-          <footer><span><i></i> Neural command index</span><span>↑↓ Navigate&nbsp;&nbsp;↵ Run</span></footer>
+          <footer><span><i></i> Cognitive action index</span><span>↑↓ Navigate&nbsp;&nbsp;↵ Run</span></footer>
         </div>
       </section>
 

@@ -1,10 +1,10 @@
 {
   "name": "jarvis-neural-command-interface",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "private": false,
   "type": "module",
   "main": "electron/main.cjs",
-  "description": "A local Windows desktop neural command interface for chat, memory, and Codex-powered tasks.",
+  "description": "A local-first cognitive operating interface with a living 3D memory atlas and Codex-powered workspace missions.",
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:client": "vite --host 127.0.0.1",
@@ -15,6 +15,7 @@
     "test:memory": "node --experimental-sqlite scripts/test-memory.mjs",
     "test:voice-settings": "node --experimental-sqlite scripts/test-voice-settings.mjs",
     "test:ui-contract": "node scripts/test-ui-contract.mjs",
+    "test:v2-architecture": "node scripts/test-v2-architecture.mjs",
     "test:workspace-intelligence": "node scripts/test-workspace-intelligence.mjs",
     "test:mission-planner": "node scripts/test-mission-planner.mjs",
     "test:artifacts": "node --experimental-sqlite scripts/test-streaming-artifacts.mjs",

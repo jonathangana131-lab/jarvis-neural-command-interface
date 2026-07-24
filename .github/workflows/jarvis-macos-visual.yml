@@ -30,8 +30,8 @@ jobs:
       - name: Install transformed app
         run: npm ci
 
-      - name: Check out the verified v1.0 baseline
-        run: git worktree add "$RUNNER_TEMP/jarvis-before" origin/agent/jarvis-neural-rebirth
+      - name: Check out the complete v1.2 baseline
+        run: git worktree add "$RUNNER_TEMP/jarvis-before" origin/agent/jarvis-1-2-neural-os
 
       - name: Install before revision
         working-directory: ${{ runner.temp }}/jarvis-before
@@ -77,6 +77,7 @@ jobs:
             JARVIS_CAPTURE_DIR="$GITHUB_WORKSPACE/visual-evidence" \
             JARVIS_CAPTURE_PREFIX="$prefix" \
             JARVIS_CAPTURE_URL="http://127.0.0.1:5173" \
+            JARVIS_CAPTURE_VIEWS="run,dashboard,history,artifacts,memory,settings,diagnostics" \
             "$GITHUB_WORKSPACE/node_modules/.bin/electron" "$GITHUB_WORKSPACE/scripts/capture-ui.cjs"
             cleanup
             trap - RETURN
@@ -90,6 +91,7 @@ jobs:
         run: |
           npm run build
           npm run test:ui-contract
+          npm run test:v2-architecture
           npm run test:memory
           npm run test:voice-settings
           npm run test:artifacts
@@ -105,7 +107,7 @@ jobs:
       - name: Upload visual evidence
         uses: actions/upload-artifact@v4
         with:
-          name: jarvis-before-after
+          name: jarvis-v1.2-v2-all-pages
           path: visual-evidence/*.png
           if-no-files-found: error
           retention-days: 30

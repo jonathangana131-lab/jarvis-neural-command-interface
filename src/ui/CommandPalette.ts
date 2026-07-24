@@ -33,21 +33,13 @@ export class CommandPalette {
       { id: 'new-chat', title: 'Start a new chat', detail: 'Open a clean mission thread', shortcut: 'N', icon: 'message-square', run: options.onNewChat },
       { id: 'voice', title: 'Toggle voice link', detail: 'Start or stop local dictation', shortcut: '⌘ M', icon: 'mic', run: options.onVoice },
       { id: 'think', title: 'Pulse neural core', detail: 'Preview Jarvis thinking state', icon: 'brain', run: options.onThink },
-      ...[
-        ['run', 'Neural Command', 'Operate Jarvis and stream active work', 'terminal-square'],
-        ['dashboard', 'Project Intelligence', 'Review readiness and recent activity', 'activity'],
-        ['history', 'Mission Archive', 'Inspect previous commands and results', 'history'],
-        ['artifacts', 'Artifact Vault', 'Browse generated files and outputs', 'save'],
-        ['memory', 'Memory Matrix', 'Search, review, and manage neural memory', 'network'],
-        ['settings', 'System Configuration', 'Models, voice, and workspace settings', 'sliders-horizontal'],
-        ['diagnostics', 'System Diagnostics', 'Health, recovery, and release controls', 'scan-line']
-      ].map(([id, title, detail, icon], index) => ({
-        id: `view-${id}`,
-        title,
-        detail,
-        shortcut: `⌥ ${index + 1}`,
-        icon,
-        run: () => options.onNavigate(id)
+      ...atlasViews.map((view) => ({
+        id: `view-${view.id}`,
+        title: view.title,
+        detail: view.detail,
+        shortcut: view.shortcut,
+        icon: view.icon,
+        run: () => options.onNavigate(view.id)
       }))
     ];
 
@@ -144,3 +136,4 @@ export class CommandPalette {
     action.run();
   }
 }
+import { atlasViews } from './atlasViews';
